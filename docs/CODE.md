@@ -477,6 +477,20 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
   bloom/ombres, puis le détail par étape (`BT(k)` dans `render`). Référence (MacBook Air, 1372×891) : ~1,9 ms/image.
 - **Bots cachés** (`--hidden`, ceux de « contre des bots ») : aucun rendu ni lightmap, boucle limitée à ~250 Hz.
 
+### 3.13 Réglages graphiques modifiables (`graphismes/`)
+
+- **`graphismes/rendu.ini`** (lu au démarrage par `gfx_load_all`, et à chaque **F5** par `gfx_reload`) : toutes les
+  valeurs d'aspect, déclarées en tête de la section Rendu (`gx*`, `sunCol`, `skyCol`…) avec leur défaut, et listées
+  dans **`gfxKeys`** (nom de clé → variable, nombre de valeurs). Ajouter un réglage = une variable + une ligne de
+  `gfxKeys` + sa ligne commentée dans `rendu.ini`. `gfx_clamp` borne les valeurs ; `gfx_defaults` remet les défauts
+  avant chaque relecture. Les tests (`--test`) n'ouvrent pas ce fichier (valeurs par défaut).
+- **Textures** : `sol.bmp`, `mur.bmp`, `grain.bmp` du même dossier (`tex_override`, `load_bmp_square`) remplacent
+  `texGrid`, `texWall`, `texGrime`.
+- **Recherche du dossier** (`gfx_find_dir`) : macOS `~/Library/Application Support/Velocity/graphismes`, puis à côté
+  de `Velocity.app`, puis `Velocity.app/Contents/Resources/graphismes` (copié par `build_mac.sh`) ; Windows : à côté de
+  l'exe ; enfin `./graphismes`.
+- Purement visuel : rien dans ce dossier ne touche au gameplay ni au réseau.
+
 ## 4. Réseau LAN
 
 ### Principes

@@ -12,6 +12,8 @@ Le propriétaire est francophone : réponses, commentaires et docs **en françai
   et §4 de `docs/CODE.md`. Le lobby est dans **`worker/`** (`node test.js` pour ses tests, `node dev-server.js`
   pour un lobby local ; le déploiement `npx wrangler deploy` est à faire par le propriétaire).
 - Mode équipes 1v1 à 4v4 (implémenté) : **§3.11 de `docs/CODE.md`** ; éclairage, ombres, bloom : **§3.12**
+- Réglages graphiques modifiables sans recompiler : **`graphismes/rendu.ini`** (+ textures `.bmp`, F5 en jeu) ;
+  code : §3.13 de `docs/CODE.md`. Toute nouvelle valeur d'aspect doit y être exposée (`gfxKeys`).
 
 ## Branches
 

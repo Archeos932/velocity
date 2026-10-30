@@ -1573,7 +1573,7 @@ static void shield_rip(int i);                            /* mon grappin arrache
 /* ------------------------------------------------------------------ */
 enum { SC_ESC = 0x01, SC_1 = 0x02, SC_2 = 0x03, SC_W = 0x11, SC_E = 0x12, SC_R = 0x13, SC_LCTRL = 0x1D,
        SC_A = 0x1E, SC_S = 0x1F, SC_D = 0x20, SC_LSHIFT = 0x2A, SC_C = 0x2E, SC_RSHIFT = 0x36,
-       SC_SPACE = 0x39, SC_F2 = 0x3C, SC_F3 = 0x3D, SC_F11 = 0x57, SC_F = 0x21, SC_V = 0x2F, SC_G = 0x22 };
+       SC_SPACE = 0x39, SC_F2 = 0x3C, SC_F3 = 0x3D, SC_F11 = 0x57, SC_F5 = 0x3F, SC_F = 0x21, SC_V = 0x2F, SC_G = 0x22 };
 /* touches physiques (scancodes 0-255) + souris (256+) : etat tenu et appui du tick */
 enum { K_LMB = 256, K_RMB, K_MMB, K_X1, K_X2, K_WHEEL, K_COUNT };
 static unsigned char keys[K_COUNT], latch[K_COUNT];
@@ -8459,6 +8459,179 @@ static float tnoise(unsigned int *s) {
     return (float)(*s >> 8) * (1.0f / 16777216.0f);
 }
 
+/* ---- reglages graphiques modifiables : graphismes/rendu.ini ---------------------------------
+ * Tout ce qui fait l'aspect du jeu (soleil, ombres, brouillard, ciel, ville, bloom, textures) est
+ * ici, avec la valeur par defaut. Le fichier graphismes/rendu.ini les remplace (cle = valeurs) ;
+ * F5 en jeu le relit et reconstruit textures et lightmaps. Une cle absente garde son defaut.
+ * Les textures sol.bmp, mur.bmp, grain.bmp du meme dossier remplacent les textures generees. */
+static float sunCol[3] = { 1.00f, 0.84f, 0.66f }, skyCol[3] = { 0.52f, 0.54f, 0.74f },
+             bounceCol[3] = { 0.16f, 0.13f, 0.12f }, padGlowCol[3] = { 0.25f, 0.85f, 1.0f };
+static float gxSunDir[3] = { 0.55f, 0.66f, -0.82f }, gxSunPow = 1.3f, gxPad[2] = { 0.9f, 9 };
+static float gxLmDens = 3, gxAoRays = 12, gxAoRange = 4.5f, gxAoMin = 0.15f, gxLmBlur = 2;
+static float gxObjAmb[3] = { 0.40f, 0.40f, 0.52f }, gxObjSun[2] = { 0.25f, 0.65f };
+static float gxVmAmb[3] = { 0.42f, 0.42f, 0.52f }, gxVmSun[2] = { 0.30f, 0.45f };
+static float gxShadowCol[3] = { 0.02f, 0.02f, 0.06f }, gxShadowAlpha = 0.5f, gxShadowMaxH = 30;
+static float gxFogCol[3] = { 0.34f, 0.30f, 0.44f }, gxFog[2] = { 50, 240 };
+static float gxSkyZen[3] = { 0.025f, 0.035f, 0.11f }, gxSkyMid[3] = { 0.13f, 0.12f, 0.27f }, gxSkyHor[3] = { 0.36f, 0.30f, 0.45f };
+static float gxSunGlow[3] = { 0.30f, 0.55f, 0.42f }, gxStars = 260, gxSunSize[3] = { 8, 30, 120 };
+static float gxCity[5] = { 70, 260, 120, 30, 85 }, gxCityCol[3] = { 0.16f, 0.14f, 0.26f }, gxCityWin = 0.35f;
+static float gxBloom[4] = { 0.7f, 3, 2, 1.6f };
+static float gxTexScale[3] = { 0.5f, 0.5f, 2.37f }, gxFloorTex[2] = { 64, 0.80f }, gxWallTex[3] = { 128, 64, 0.62f };
+static float gxGrain = 0.22f, gxEdges = 0.25f;
+typedef struct { const char *key; float *v; int n; } GfxKey;
+static const GfxKey gfxKeys[] = {
+    { "soleil_direction", gxSunDir, 3 }, { "soleil_couleur", sunCol, 3 }, { "soleil_force", &gxSunPow, 1 },
+    { "ciel_lumiere", skyCol, 3 }, { "rebond_sol", bounceCol, 3 },
+    { "pads_couleur", padGlowCol, 3 }, { "pads_lueur", gxPad, 2 },
+    { "lightmap_densite", &gxLmDens, 1 }, { "occlusion_rayons", &gxAoRays, 1 }, { "occlusion_portee", &gxAoRange, 1 },
+    { "occlusion_min", &gxAoMin, 1 }, { "lightmap_flou", &gxLmBlur, 1 },
+    { "objets_ambiant", gxObjAmb, 3 }, { "objets_soleil", gxObjSun, 2 },
+    { "arme_ambiant", gxVmAmb, 3 }, { "arme_soleil", gxVmSun, 2 },
+    { "ombre_couleur", gxShadowCol, 3 }, { "ombre_opacite", &gxShadowAlpha, 1 }, { "ombre_hauteur_max", &gxShadowMaxH, 1 },
+    { "brouillard_couleur", gxFogCol, 3 }, { "brouillard_distance", gxFog, 2 },
+    { "ciel_zenith", gxSkyZen, 3 }, { "ciel_milieu", gxSkyMid, 3 }, { "ciel_horizon", gxSkyHor, 3 },
+    { "soleil_halo", gxSunGlow, 3 }, { "etoiles", &gxStars, 1 }, { "soleil_taille", gxSunSize, 3 },
+    { "ville", gxCity, 5 }, { "ville_couleur", gxCityCol, 3 }, { "ville_fenetres", &gxCityWin, 1 },
+    { "bloom", gxBloom, 4 },
+    { "texture_echelle", gxTexScale, 3 }, { "sol_texture", gxFloorTex, 2 }, { "mur_texture", gxWallTex, 3 },
+    { "grain_force", &gxGrain, 1 }, { "aretes_opacite", &gxEdges, 1 },
+};
+#define GFX_NKEYS ((int)(sizeof gfxKeys / sizeof gfxKeys[0]))
+static char gfxDir[512];                                  /* dossier graphismes trouve ("" : aucun, valeurs par defaut) */
+
+/* une ligne "cle = v1 v2 v3" (# commentaire) ; renvoie 1 si la cle est connue */
+static int gfx_parse_line(char *line) {
+    char *h = strchr(line, '#');
+    if (h) *h = 0;
+    char *eq = strchr(line, '=');
+    if (!eq) return 0;
+    *eq = 0;
+    char key[64];
+    if (sscanf(line, " %63s", key) != 1) return 0;
+    for (int k = 0; k < GFX_NKEYS; k++) {
+        if (strcmp(key, gfxKeys[k].key)) continue;
+        char *p = eq + 1;
+        for (int i = 0; i < gfxKeys[k].n; i++) {
+            char *end;
+            float v = strtof(p, &end);
+            if (end == p) break;                          /* moins de valeurs : les suivantes gardent leur valeur */
+            gfxKeys[k].v[i] = v;
+            p = end;
+        }
+        return 1;
+    }
+    return 0;
+}
+
+static void gfx_clamp(void) {                             /* valeurs absurdes ramenees dans des bornes jouables */
+    gxLmDens = clampf(gxLmDens, 0.5f, 8); gxAoRays = clampf(gxAoRays, 0, 48); gxAoRange = clampf(gxAoRange, 0.5f, 12);
+    gxAoMin = clampf(gxAoMin, 0, 1); gxLmBlur = clampf(gxLmBlur, 0, 6);
+    gxBloom[1] = clampf(gxBloom[1], 1, 4); gxBloom[2] = clampf(gxBloom[2], 0, 6); gxStars = clampf(gxStars, 0, 2000);
+    gxCity[0] = clampf(gxCity[0], 0, 400); gxFog[1] = fmaxf(gxFog[1], gxFog[0] + 1);
+    if (vlen(v3(gxSunDir[0], gxSunDir[1], gxSunDir[2])) < 1e-3f || gxSunDir[1] < 0.05f) gxSunDir[1] = 0.05f;   /* soleil au-dessus */
+    int fp = (int)gxFloorTex[0], wx = (int)gxWallTex[0], wy = (int)gxWallTex[1];   /* motifs : diviseurs de 256 */
+    if (fp < 8 || 256 % fp) gxFloorTex[0] = 64;
+    if (wx < 8 || 256 % wx) gxWallTex[0] = 128;
+    if (wy < 8 || 256 % wy) gxWallTex[1] = 64;
+}
+
+static int gfx_load(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    char line[512];
+    while (fgets(line, sizeof line, f)) gfx_parse_line(line);
+    fclose(f);
+    gfx_clamp();
+    return 1;
+}
+
+/* dossier graphismes : celui de l'utilisateur d'abord, puis a cote du jeu, puis le dossier courant */
+static void gfx_find_dir(void) {
+    char cand[4][512];
+    int n = 0;
+#ifdef _WIN32
+    GetModuleFileNameA(NULL, cand[n], sizeof cand[n]);
+    { char *sl = strrchr(cand[n], '\\'); if (sl) { strcpy(sl + 1, "graphismes"); n++; } }
+#else
+    const char *home = getenv("HOME");
+    if (home) snprintf(cand[n++], sizeof cand[0], "%s/Library/Application Support/Velocity/graphismes", home);
+    {
+        char exe[512];
+        uint32_t len = sizeof exe;
+        if (_NSGetExecutablePath(exe, &len) == 0) {      /* .../Velocity.app/Contents/MacOS/velocity */
+            char *sl = strrchr(exe, '/');
+            if (sl) {
+                *sl = 0;
+                snprintf(cand[n++], sizeof cand[0], "%s/../../../graphismes", exe);   /* dossier du projet, a cote du .app */
+                snprintf(cand[n++], sizeof cand[0], "%s/../Resources/graphismes", exe);
+            }
+        }
+    }
+#endif
+    snprintf(cand[n++], sizeof cand[0], "graphismes");
+    gfxDir[0] = 0;
+    for (int i = 0; i < n; i++) {
+        char p[600];
+        snprintf(p, sizeof p, "%s/rendu.ini", cand[i]);
+        FILE *f = fopen(p, "r");
+        if (f) { fclose(f); snprintf(gfxDir, sizeof gfxDir, "%s", cand[i]); return; }
+    }
+}
+
+static float gfxDefaults[160];                            /* valeurs d'origine, pour qu'une cle effacee revienne a son defaut */
+static int gfxDefaultsSaved;
+static void gfx_defaults(int restore) {
+    int o = 0;
+    for (int k = 0; k < GFX_NKEYS; k++)
+        for (int i = 0; i < gfxKeys[k].n && o < 160; i++, o++) {
+            if (restore) gfxKeys[k].v[i] = gfxDefaults[o]; else gfxDefaults[o] = gfxKeys[k].v[i];
+        }
+    gfxDefaultsSaved = 1;
+}
+
+static void gfx_load_all(void) {
+    char p[600];
+    if (!gfxDefaultsSaved) gfx_defaults(0); else gfx_defaults(1);
+    gfx_find_dir();
+    if (!gfxDir[0]) return;
+    snprintf(p, sizeof p, "%s/rendu.ini", gfxDir);
+    gfx_load(p);
+}
+
+/* BMP 24 ou 32 bits non compresse, carre, cote puissance de 2 (16 a 1024) : image RGB de haut en bas, ou NULL */
+static unsigned char *load_bmp_square(const char *path, int *size) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    unsigned char h[54];
+    unsigned char *img = NULL;
+    if (fread(h, 1, 54, f) == 54 && h[0] == 'B' && h[1] == 'M') {
+        int off = h[10] | h[11] << 8 | h[12] << 16 | h[13] << 24;
+        int w = h[18] | h[19] << 8 | h[20] << 16 | h[21] << 24, hh = h[22] | h[23] << 8 | h[24] << 16 | h[25] << 24;
+        int bpp = h[28] | h[29] << 8, comp = h[30] | h[31] << 8 | h[32] << 16 | h[33] << 24;
+        int topDown = hh < 0;
+        if (topDown) hh = -hh;
+        if ((bpp == 24 || bpp == 32) && (comp == 0 || comp == 3) && w == hh && w >= 16 && w <= 1024 && !(w & (w - 1))) {
+            int bytes = bpp / 8, stride = (w * bytes + 3) & ~3;
+            unsigned char *row = (unsigned char *)malloc((size_t)stride);
+            img = (unsigned char *)malloc((size_t)w * w * 3);
+            fseek(f, off, SEEK_SET);
+            for (int y = 0; y < w && img; y++) {
+                if (fread(row, 1, (size_t)stride, f) != (size_t)stride) { free(img); img = NULL; break; }
+                int dy = topDown ? y : w - 1 - y;
+                for (int x = 0; x < w; x++) {
+                    img[((size_t)dy * w + x) * 3 + 0] = row[x * bytes + 2];
+                    img[((size_t)dy * w + x) * 3 + 1] = row[x * bytes + 1];
+                    img[((size_t)dy * w + x) * 3 + 2] = row[x * bytes + 0];
+                }
+            }
+            free(row);
+            *size = w;
+        }
+    }
+    fclose(f);
+    return img;
+}
+
 /* envoie une image RGB a OpenGL avec des mipmaps faits main (filtre boite) ; modifie/consomme img */
 static void upload_rgb_mip(GLuint *tex, unsigned char *img, int N) {
     glGenTextures(1, tex);
@@ -8482,12 +8655,25 @@ static void upload_rgb_mip(GLuint *tex, unsigned char *img, int N) {
     }
 }
 
+/* texture remplacee par une image du dossier graphismes (sol.bmp, mur.bmp, grain.bmp) ? */
+static int tex_override(GLuint *tex, const char *name) {
+    char p[600];
+    int n = 0;
+    if (!gfxDir[0]) return 0;
+    snprintf(p, sizeof p, "%s/%s", gfxDir, name);
+    unsigned char *img = load_bmp_square(p, &n);
+    if (!img) return 0;
+    upload_rgb_mip(tex, img, n);
+    free(img);
+    return 1;
+}
+
 static void make_textures(void) {
     unsigned int s;
 
     /* --- sol/plafond : dalles biseautees, boulons, taches d'usure ---------------------- */
-    {
-        int N = 256, panel = 64;
+    if (!tex_override(&texGrid, "sol.bmp")) {
+        int N = 256, panel = (int)gxFloorTex[0];
         unsigned char *img = (unsigned char *)malloc(N * N * 3);
         float stx[10], sty[10], str[10], stp[10];
         s = 0xA17Eu;
@@ -8499,7 +8685,7 @@ static void make_textures(void) {
             for (int x = 0; x < N; x++) {
                 int px = x % panel, py = y % panel;
                 float dx = (float)(px < panel - px ? px : panel - px), dy = (float)(py < panel - py ? py : panel - py);
-                float v = 0.80f;
+                float v = gxFloorTex[1];
                 v += sinf(x * 0.045f + 1.3f) * cosf(y * 0.037f + 0.7f) * 0.05f;       /* grain large */
                 v += sinf(x * 0.21f + py * 0.3f) * cosf(y * 0.17f) * 0.015f;          /* ondulation fine */
                 v += (tnoise(&s) * 2 - 1) * 0.035f;                                  /* grain fin */
@@ -8529,8 +8715,8 @@ static void make_textures(void) {
     }
 
     /* --- murs : plaques metalliques boulonnees, brossage vertical, haut de plaque eclaire --- */
-    {
-        int N = 256, panelX = 128, panelY = 64;
+    if (!tex_override(&texWall, "mur.bmp")) {
+        int N = 256, panelX = (int)gxWallTex[0], panelY = (int)gxWallTex[1];
         unsigned char *img = (unsigned char *)malloc(N * N * 3);
         float colTint[256];
         s = 0x5EEDu;
@@ -8543,7 +8729,7 @@ static void make_textures(void) {
                 float tint = ((float)(ph >> 8) * (1.0f / 16777216.0f) * 2 - 1) * 0.045f;  /* teinte par plaque */
                 int px = x % panelX, py = y % panelY;
                 float dx = (float)(px < panelX - px ? px : panelX - px), dy = (float)(py < panelY - py ? py : panelY - py);
-                float v = 0.62f + tint + colTint[x];
+                float v = gxWallTex[2] + tint + colTint[x];
                 /* joint en degrade, comme le sol : evite l'effet "trait d'encre" */
                 v -= 0.14f * fmaxf(expf(-dx * dx / 1.3f), expf(-dy * dy / 1.3f));
                 v += 0.09f * fmaxf(expf(-(dx - 2.4f) * (dx - 2.4f) / 1.1f),
@@ -8566,7 +8752,7 @@ static void make_textures(void) {
     }
 
     /* --- grain fin, 2e passe multiplicative pour casser la repetition vue de pres --------- */
-    {
+    if (!tex_override(&texGrime, "grain.bmp")) {
         int N = 64;
         unsigned char *img = (unsigned char *)malloc(N * N * 3);
         s = 0xC0FFEEu;
@@ -8574,7 +8760,7 @@ static void make_textures(void) {
             for (int x = 0; x < N; x++) {
                 float v = 0.92f;
                 v += sinf(x * 0.5f + 2.1f) * cosf(y * 0.41f) * 0.03f;
-                v -= tnoise(&s) * 0.22f;                                             /* poussiere/micro-rayures */
+                v -= tnoise(&s) * gxGrain;                                           /* poussiere/micro-rayures */
                 float sp = tnoise(&s);                                               /* quelques specks, bord adouci */
                 if (sp < 0.04f) v -= 0.14f * (1 - sp / 0.04f);
                 unsigned char c = (unsigned char)(clampf(v, 0.55f, 1) * 255);
@@ -8696,16 +8882,14 @@ static void prism_z(V3 c, float z0, float z1, float r0, float r1, int n, int cap
 #ifndef GL_CLAMP_TO_EDGE
 #define GL_CLAMP_TO_EDGE 0x812F
 #endif
-#define LM_DENS     3.0f      /* texels de lightmap par metre */
 #define LM_MAXT     512       /* cote maximal d'une lightmap */
-#define AO_RAYS     12        /* rayons d'occlusion ambiante par texel */
-#define AO_RANGE    4.5f      /* portee des rayons d'occlusion (m) */
+#define LM_DENS     gxLmDens  /* texels de lightmap par metre (rendu.ini) */
+#define AO_RAYS     ((int)gxAoRays)   /* rayons d'occlusion ambiante par texel */
+#define AO_RANGE    gxAoRange /* portee des rayons d'occlusion (m) */
 #define LMG_CELL    4.0f      /* grille d'acceleration des rayons courts (m) */
 #define LMG_N       44
 #define LMG_MAXB    48
-static V3 sun_dir(void) { return vnorm(v3(0.55f, 0.66f, -0.82f)); }   /* vers le soleil (ombres, lumiere, ciel) */
-static const float sunCol[3] = { 1.00f, 0.84f, 0.66f }, skyCol[3] = { 0.52f, 0.54f, 0.74f },
-                   bounceCol[3] = { 0.16f, 0.13f, 0.12f }, padGlowCol[3] = { 0.25f, 0.85f, 1.0f };
+static V3 sun_dir(void) { return vnorm(v3(gxSunDir[0], gxSunDir[1], gxSunDir[2])); }   /* vers le soleil (ombres, lumiere, ciel) */
 typedef struct { GLuint tex; float su, sv; int on; } LMap;   /* su, sv : coordonnee de texture du bord oppose */
 static LMap lmaps[MAXB][6];
 static unsigned char lmgN[LMG_N][LMG_N], lmgB[LMG_N][LMG_N][LMG_MAXB];
@@ -8791,20 +8975,20 @@ static void lm_light(V3 p, V3 n, unsigned int seed, float out[3]) {
         float t = ray_near(o, d, AO_RANGE);
         if (t < AO_RANGE) occ += 1 - t / AO_RANGE;
     }
-    float ao = 1 - occ / AO_RAYS;
-    ao = ao * ao * 0.85f + 0.15f;
+    float ao = AO_RAYS > 0 ? 1 - occ / AO_RAYS : 1;
+    ao = ao * ao * (1 - gxAoMin) + gxAoMin;
     float sky = (0.78f + 0.22f * n.y) * ao, bounce = (0.5f - 0.5f * n.y) * ao;
-    for (int c = 0; c < 3; c++) out[c] = skyCol[c] * sky + sunCol[c] * sun * 1.3f + bounceCol[c] * bounce;
+    for (int c = 0; c < 3; c++) out[c] = skyCol[c] * sky + sunCol[c] * sun * gxSunPow + bounceCol[c] * bounce;
     for (int i = 0; i < nb; i++) {                        /* jump pads : lueur cyan sur le decor proche */
         if (boxes[i].kind != B_PAD) continue;
         V3 c = vlerp(boxes[i].mn, boxes[i].mx, 0.5f);
         c.y = boxes[i].mx.y + 0.3f;
         V3 dv = vsub(c, o);
         float dist = vlen(dv);
-        if (dist > 9 || dist < 1e-3f) continue;
-        float lam = vdot(n, vmul(dv, 1 / dist)), fall = (1 - dist / 9) * (1 - dist / 9);
+        if (dist > gxPad[1] || dist < 1e-3f) continue;
+        float lam = vdot(n, vmul(dv, 1 / dist)), fall = (1 - dist / gxPad[1]) * (1 - dist / gxPad[1]);
         if (lam <= 0 || ray_near(o, vmul(dv, 1 / dist), dist - 0.4f) < dist - 0.45f) continue;
-        for (int k = 0; k < 3; k++) out[k] += padGlowCol[k] * 0.9f * lam * fall;
+        for (int k = 0; k < 3; k++) out[k] += padGlowCol[k] * gxPad[0] * lam * fall;
     }
 }
 
@@ -8832,13 +9016,14 @@ static void bake_lightmaps(void) {
                     *vc(&p, va) = v0 + (j + 0.5f) / nv * (v1 - v0);
                     lm_light(p, n, (unsigned)(bi * 7919 + f * 104729 + j * 1031 + i), &buf[(j * nu + i) * 3]);
                 }
-            for (int pass = 0; pass < 2; pass++)          /* flou 1-2-1 (s puis t) : adoucit les bords d'ombre et le bruit */
+            for (int pass = 0; pass < 2 * (int)gxLmBlur; pass++)   /* flou 1-2-1 (s puis t) : adoucit les bords d'ombre et le bruit */
                 for (int j = 0; j < nv; j++)
                     for (int i = 0; i < nu; i++)
                         for (int c = 0; c < 3; c++) {
-                            int a0 = pass ? (j > 0 ? j - 1 : j) * nu + i : j * nu + (i > 0 ? i - 1 : i);
-                            int a2 = pass ? (j < nv - 1 ? j + 1 : j) * nu + i : j * nu + (i < nu - 1 ? i + 1 : i);
-                            float *src = pass ? tmp : buf, *dst = pass ? buf : tmp;
+                            int vert = pass & 1;
+                            int a0 = vert ? (j > 0 ? j - 1 : j) * nu + i : j * nu + (i > 0 ? i - 1 : i);
+                            int a2 = vert ? (j < nv - 1 ? j + 1 : j) * nu + i : j * nu + (i < nu - 1 ? i + 1 : i);
+                            float *src = vert ? tmp : buf, *dst = vert ? buf : tmp;
                             dst[(j * nu + i) * 3 + c] = 0.25f * src[a0 * 3 + c] + 0.5f * src[(j * nu + i) * 3 + c] + 0.25f * src[a2 * 3 + c];
                         }
             int tw = pow2up(nu), th = pow2up(nv);
@@ -8883,8 +9068,9 @@ static float sun_vis(V3 p) { return ray_world(p, sun_dir(), 400, 0) >= 399 ? 1.0
 /* eclairage des objets mobiles : soleil (attenue a l'ombre) + ciel, dans le repere courant */
 static void set_dyn_light(float vis) {
     V3 L = sun_dir();
-    GLfloat lp[4] = { L.x, L.y, L.z, 0 }, amb[4] = { 0.40f, 0.40f, 0.52f, 1 };
-    GLfloat dif[4] = { sunCol[0] * (0.25f + 0.65f * vis), sunCol[1] * (0.25f + 0.65f * vis), sunCol[2] * (0.25f + 0.65f * vis), 1 };
+    float k = gxObjSun[0] + gxObjSun[1] * vis;
+    GLfloat lp[4] = { L.x, L.y, L.z, 0 }, amb[4] = { gxObjAmb[0], gxObjAmb[1], gxObjAmb[2], 1 };
+    GLfloat dif[4] = { sunCol[0] * k, sunCol[1] * k, sunCol[2] * k, 1 };
     glLightfv(GL_LIGHT0, GL_POSITION, lp);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, dif);
     glLightModelfv(GL_LIGHT_MODEL_AMBIENT, amb);
@@ -8910,7 +9096,7 @@ static GLuint skylineList;
 static void build_skyline_list(void);
 static void build_world_list(void) {
     bake_lightmaps();
-    GLfloat fogScene[4] = { 0.34f, 0.30f, 0.44f, 1 }, fogGray[4] = { 0.5f, 0.5f, 0.5f, 1 }, fogWhite[4] = { 1, 1, 1, 1 };
+    GLfloat fogScene[4] = { gxFogCol[0], gxFogCol[1], gxFogCol[2], 1 }, fogGray[4] = { 0.5f, 0.5f, 0.5f, 1 }, fogWhite[4] = { 1, 1, 1, 1 };
     worldList = glGenLists(1);
     glNewList(worldList, GL_COMPILE);
     glEnable(GL_CULL_FACE);                                   /* normales sortantes verifiees : la face interieure de
@@ -8921,9 +9107,9 @@ static void build_world_list(void) {
     glDisable(GL_LIGHTING);                                   /* l'eclairage vient des lightmaps (passe 3) */
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, texGrid);                    /* passe 1 : sol/plafond (faces horizontales) */
-    world_faces(FACE_UD, 0.5f);
+    world_faces(FACE_UD, gxTexScale[0]);
     glBindTexture(GL_TEXTURE_2D, texWall);                    /* passe 2 : murs (faces verticales) */
-    world_faces(FACE_SIDES, 0.5f);
+    world_faces(FACE_SIDES, gxTexScale[1]);
     glDepthFunc(GL_LEQUAL);                                   /* passes suivantes : meme profondeur que 1/2 */
     glEnable(GL_BLEND);
     glBlendFunc(GL_DST_COLOR, GL_SRC_COLOR);                  /* passe 3 : lightmaps, x2 (0,5 = inchange) */
@@ -8947,7 +9133,7 @@ static void build_world_list(void) {
             if (!lmaps[i][f].on) continue;
             V3 c[4];
             face_corners(boxes[i].mn, boxes[i].mx, f, c);
-            quad_tex(face_normal(f), c[0], c[1], c[2], c[3], 2.37f);
+            quad_tex(face_normal(f), c[0], c[1], c[2], c[3], gxTexScale[2]);
         }
     glEnd();
     glFogfv(GL_FOG_COLOR, fogScene);
@@ -8960,7 +9146,8 @@ static void build_world_list(void) {
     glLineWidth(1.5f);
     for (int i = 1; i < nb; i++) {
         if (boxes[i].kind == B_PAD) glColor4f(0.6f, 1.0f, 1.0f, 0.9f);
-        else glColor4f(0.05f, 0.05f, 0.1f, 0.25f);
+        else if (gxEdges > 0.001f) glColor4f(0.05f, 0.05f, 0.1f, gxEdges);
+        else continue;
         box_edges(boxes[i].mn, boxes[i].mx);
     }
     glDisable(GL_BLEND);
@@ -9622,8 +9809,8 @@ static void draw_viewmodel(float aspect) {
         V3 L = sun_dir();
         GLfloat lp[4] = { mvMat[0] * L.x + mvMat[4] * L.y + mvMat[8] * L.z, mvMat[1] * L.x + mvMat[5] * L.y + mvMat[9] * L.z,
                           mvMat[2] * L.x + mvMat[6] * L.y + mvMat[10] * L.z, 0 }, lp1[4] = { 0.3f, -0.4f, -0.6f, 0 };
-        float k = 0.3f + 0.45f * viewSun;
-        GLfloat dif[4] = { sunCol[0] * k, sunCol[1] * k, sunCol[2] * k, 1 }, amb[4] = { 0.42f, 0.42f, 0.52f, 1 };
+        float k = gxVmSun[0] + gxVmSun[1] * viewSun;
+        GLfloat dif[4] = { sunCol[0] * k, sunCol[1] * k, sunCol[2] * k, 1 }, amb[4] = { gxVmAmb[0], gxVmAmb[1], gxVmAmb[2], 1 };
         glLightModelfv(GL_LIGHT_MODEL_AMBIENT, amb);
         float lv = lp[0] * lp[0] + lp[1] * lp[1] + lp[2] * lp[2];
         if (lp[1] < 0.2f * sqrtf(lv)) { lp[0] *= 0.5f; lp[1] = 0.6f * sqrtf(lv); lp[2] *= 0.5f; }   /* jamais par en dessous */
@@ -9940,7 +10127,7 @@ static void draw_controls(float x, float y) {
         "epee : degats et portee selon la vitesse RELATIVE ; touche = +1 dash",
         "PARRY (debut du coup d'epee) : roquettes, orbes, kamikazes ET epees",
         "piece + tir dedans au rail = ricochet auto (x1,5) ; vole celles des autres",
-        "F2/F3 sensibilite   F11 plein ecran   ECHAP menu",
+        "F2/F3 sensibilite   F5 recharger graphismes   F11 plein ecran   ECHAP menu",
     };
     char buf[128];
     text(1, x, y, "COMMANDES", 0.5f, 0.9f, 1.0f, 1);
@@ -11341,14 +11528,14 @@ static void draw_slam_marker(void) {
 
 /* couleur du ciel dans la direction d (unitaire) : zenith sombre, horizon violet, lueur autour du soleil */
 static void sky_color(V3 d, float out[3]) {
-    static const float zen[3] = { 0.025f, 0.035f, 0.11f }, mid[3] = { 0.13f, 0.12f, 0.27f }, hor[3] = { 0.36f, 0.30f, 0.45f };
+    const float *zen = gxSkyZen, *mid = gxSkyMid, *hor = gxSkyHor;
     V3 S = sun_dir();
     float e = clampf(d.y, 0, 1), k1 = clampf(e / 0.25f, 0, 1), k2 = clampf((e - 0.25f) / 0.75f, 0, 1);
     for (int c = 0; c < 3; c++) out[c] = e < 0.25f ? hor[c] + (mid[c] - hor[c]) * k1 : mid[c] + (zen[c] - mid[c]) * sqrtf(k2);
     float g = fmaxf(0, vdot(d, S));
     V3 hd = vnorm(v3(d.x, 0, d.z)), hs = vnorm(v3(S.x, 0, S.z));
     float az = fmaxf(0, vdot(hd, hs)), low = powf(1 - fabsf(d.y), 5);
-    float glow = powf(g, 6) * 0.30f + powf(g, 40) * 0.55f, dusk = powf(az, 3) * low * 0.42f;
+    float glow = powf(g, 6) * gxSunGlow[0] + powf(g, 40) * gxSunGlow[1], dusk = powf(az, 3) * low * gxSunGlow[2];
     out[0] += glow * 1.0f + dusk * 1.0f;
     out[1] += glow * 0.72f + dusk * 0.48f;
     out[2] += glow * 0.50f + dusk * 0.30f;
@@ -11378,7 +11565,7 @@ static void draw_sky_dome(V3 eye) {
     unsigned int seed = 99;                               /* etoiles, plus nombreuses loin du soleil */
     glPointSize(2);
     glBegin(GL_POINTS);
-    for (int i = 0; i < 260; i++) {
+    for (int i = 0; i < (int)gxStars; i++) {
         float a, b, c;
         seed = seed * 1664525u + 1013904223u; a = (seed >> 8) / 16777216.0f * 2 - 1;
         seed = seed * 1664525u + 1013904223u; b = (seed >> 8) / 16777216.0f;
@@ -11393,9 +11580,9 @@ static void draw_sky_dome(V3 eye) {
     glBindTexture(GL_TEXTURE_2D, texDot);
     V3 sun = vadd(eye, vmul(sun_dir(), 280));
     glBegin(GL_QUADS);
-    glColor4f(1.0f, 0.55f, 0.38f, 0.16f); billboard(sun, 120);
-    glColor4f(1.0f, 0.75f, 0.55f, 0.35f); billboard(sun, 30);
-    glColor4f(1.0f, 0.95f, 0.85f, 0.95f); billboard(sun, 8);
+    glColor4f(sunCol[0], sunCol[1] * 0.65f, sunCol[2] * 0.58f, 0.16f); billboard(sun, gxSunSize[2]);
+    glColor4f(sunCol[0], sunCol[1] * 0.9f, sunCol[2] * 0.83f, 0.35f); billboard(sun, gxSunSize[1]);
+    glColor4f(1.0f, 0.95f, 0.85f, 0.95f); billboard(sun, gxSunSize[0]);
     glEnd();
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_BLEND);
@@ -11409,10 +11596,10 @@ static void build_skyline_list(void) {
     skylineList = glGenLists(1);
     glNewList(skylineList, GL_COMPILE);
     glDisable(GL_FOG); glDisable(GL_LIGHTING); glDisable(GL_TEXTURE_2D);
-    for (int k = 0; k < 70; k++) {
-        float a = tnoise(&s) * 2 * PI, r = 260 + tnoise(&s) * 120, w = 7 + tnoise(&s) * 12, d = 7 + tnoise(&s) * 12;
-        float h = 30 + tnoise(&s) * tnoise(&s) * 85, cx = cosf(a) * r, cz = sinf(a) * r, t = tnoise(&s);
-        float base[3] = { 0.16f + 0.03f * t, 0.14f + 0.02f * t, 0.26f + 0.04f * t };   /* proches de l'horizon : brume */
+    for (int k = 0; k < (int)gxCity[0]; k++) {           /* ville = nombre, distance, ecart, hauteur min, hauteur en plus */
+        float a = tnoise(&s) * 2 * PI, r = gxCity[1] + tnoise(&s) * gxCity[2], w = 7 + tnoise(&s) * 12, d = 7 + tnoise(&s) * 12;
+        float h = gxCity[3] + tnoise(&s) * tnoise(&s) * gxCity[4], cx = cosf(a) * r, cz = sinf(a) * r, t = tnoise(&s);
+        float base[3] = { gxCityCol[0] + 0.03f * t, gxCityCol[1] + 0.02f * t, gxCityCol[2] + 0.04f * t };   /* brume */
         glBegin(GL_QUADS);                                /* faces : plus claires en bas (brume), sombres en haut */
         V3 a0 = v3(cx - w, -2, cz - d), a1 = v3(cx + w, h, cz + d);
         for (int f = 0; f < 6; f++) {
@@ -11433,7 +11620,7 @@ static void build_skyline_list(void) {
         for (int q = 0; q < (int)(h * 0.35f); q++) {
             float u = tnoise(&s) * 2 - 1, y = 4 + tnoise(&s) * (h - 8), warm = tnoise(&s);
             V3 side = v3(-in.z, 0, in.x), p = vadd(v3(cx, y, cz), vadd(vmul(in, fmaxf(w, d) + 0.3f), vmul(side, u * w * 0.9f)));
-            if (warm < 0.7f) glColor4f(1.0f, 0.78f, 0.45f, 0.35f); else glColor4f(0.45f, 0.85f, 1.0f, 0.4f);
+            if (warm < 0.7f) glColor4f(1.0f, 0.78f, 0.45f, gxCityWin); else glColor4f(0.45f, 0.85f, 1.0f, gxCityWin * 1.15f);
             glVertex3f(p.x, p.y, p.z);
         }
         glColor4f(1, 0.2f, 0.2f, 0.9f); glVertex3f(cx, h + 1, cz);
@@ -11452,13 +11639,13 @@ static void shadow_caster_boxes(V3 pos, float yaw, float h, float r, int round) 
     float t = ray_world(o, vmul(L, -1), 60, 0);
     if (t >= 60 || rayBox < 0 || boxes[rayBox].mx.y > pos.y + 0.2f) return;
     Box *b = &boxes[rayBox];
-    float gh = b->mx.y, alt = pos.y - gh, a = 0.5f * clampf(1 - alt / 30, 0, 1);
+    float gh = b->mx.y, alt = pos.y - gh, a = gxShadowAlpha * clampf(1 - alt / gxShadowMaxH, 0, 1);
     if (a <= 0.02f || sun_vis(vadd(pos, v3(0, h * 0.6f, 0))) < 0.5f) return;
     double cp[4][4] = { { 1, 0, 0, -b->mn.x }, { -1, 0, 0, b->mx.x }, { 0, 0, 1, -b->mn.z }, { 0, 0, -1, b->mx.z } };
     for (int k = 0; k < 4; k++) { glClipPlane(GL_CLIP_PLANE0 + k, cp[k]); glEnable(GL_CLIP_PLANE0 + k); }
     float kx = L.x / L.y, kz = L.z / L.y;                 /* projection sur le plan y = gh, le long de L */
     GLfloat M[16] = { 1, 0, 0, 0, -kx, 0, -kz, 0, 0, 0, 1, 0, kx * gh, gh + 0.03f, kz * gh, 1 };
-    glColor4f(0.02f, 0.02f, 0.06f, a);
+    glColor4f(gxShadowCol[0], gxShadowCol[1], gxShadowCol[2], a);
     glPushMatrix();
     glMultMatrixf(M);
     glTranslatef(pos.x, pos.y, pos.z);
@@ -11531,7 +11718,7 @@ static void bloom_blur(GLuint src, GLuint dst, int horiz, int sw, int sh) {
     glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_ONE);
     glBindTexture(GL_TEXTURE_2D, src);
     for (int k = 0; k < 5; k++) {
-        float o = (k - 2) * 1.6f;
+        float o = (k - 2) * gxBloom[3];
         glColor3f(wgt[k], wgt[k], wgt[k]);
         bloom_quad(horiz ? o : 0, horiz ? 0 : o, (float)sw, (float)sh, s1, t1);
     }
@@ -11561,11 +11748,11 @@ static void bloom_apply(void) {
     bloom_quad(0, 0, (float)sw, (float)sh, ss, st);
     glBindTexture(GL_TEXTURE_2D, bloomA);
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sw, sh);
-    bloom_quad(0, 0, (float)sw, (float)sh, (float)sw / bloomSW, (float)sh / bloomSH);
-    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sw, sh);
-    bloom_quad(0, 0, (float)sw, (float)sh, (float)sw / bloomSW, (float)sh / bloomSH);   /* x^8 : seuls les tons clairs */
-    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sw, sh);
-    for (int it = 0; it < 2; it++) {                      /* 3. flou separable, deux fois */
+    for (int q = 1; q < (int)gxBloom[1]; q++) {          /* seuil : x^2, x^4, x^8... (bloom, 2e valeur) */
+        bloom_quad(0, 0, (float)sw, (float)sh, (float)sw / bloomSW, (float)sh / bloomSH);
+        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sw, sh);
+    }
+    for (int it = 0; it < (int)gxBloom[2]; it++) {       /* 3. flou separable (bloom, 3e valeur) */
         bloom_blur(bloomA, bloomB, 1, sw, sh);
         bloom_blur(bloomB, bloomA, 0, sw, sh);
     }
@@ -11574,12 +11761,28 @@ static void bloom_apply(void) {
     glBindTexture(GL_TEXTURE_2D, bloomScene);
     bloom_quad(0, 0, (float)winW, (float)winH, ss, st);
     glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_ONE);
-    glColor3f(0.7f, 0.7f, 0.7f);
+    glColor3f(gxBloom[0], gxBloom[0], gxBloom[0]);
     glBindTexture(GL_TEXTURE_2D, bloomA);
     bloom_quad(0, 0, (float)winW, (float)winH, (float)sw / bloomSW, (float)sh / bloomSH);
     glDisable(GL_BLEND);
     glDisable(GL_TEXTURE_2D);
     glEnable(GL_DEPTH_TEST);
+}
+
+/* F5 : relit graphismes/rendu.ini et les textures, puis refait textures, lightmaps et ville */
+static void gfx_reload(void) {
+    GLuint t[4] = { texGrid, texWall, texGrime, texDot };
+    gfx_load_all();
+    glDeleteTextures(4, t);
+    make_textures();
+    for (int i = 0; i < MAXB; i++)
+        for (int f = 0; f < 6; f++)
+            if (lmaps[i][f].on) { glDeleteTextures(1, &lmaps[i][f].tex); lmaps[i][f].on = 0; }
+    glDeleteLists(worldList, 1);
+    glDeleteLists(skylineList, 1);
+    build_world_list();
+    snprintf(popText, sizeof popText, gfxDir[0] ? "GRAPHISMES RECHARGES" : "GRAPHISMES : DOSSIER ABSENT");
+    popT = 1.5f;
 }
 
 /* --shot bench_* : chronometre des etapes du rendu (BT(k) : temps depuis l'etape precedente, ajoute a benchT[k]) */
@@ -11625,12 +11828,12 @@ static void render(float alpha, float frameDt) {
     glGetFloatv(GL_MODELVIEW_MATRIX, mvMat);
     glGetFloatv(GL_PROJECTION_MATRIX, prMat);
 
-    GLfloat fogc[4] = { 0.34f, 0.30f, 0.44f, 1 };
+    GLfloat fogc[4] = { gxFogCol[0], gxFogCol[1], gxFogCol[2], 1 };
     glEnable(GL_FOG);
     glFogi(GL_FOG_MODE, GL_LINEAR);
     glFogfv(GL_FOG_COLOR, fogc);
-    glFogf(GL_FOG_START, 50);
-    glFogf(GL_FOG_END, 240);
+    glFogf(GL_FOG_START, gxFog[0]);
+    glFogf(GL_FOG_END, gxFog[1]);
 
     set_dyn_light(1);
     GLfloat lp1[4] = { -0.4f, 0.3f, -0.5f, 0 }, dif1[4] = { 0.16f, 0.18f, 0.24f, 1 };   /* lumiere d'appoint, froide */
@@ -11921,6 +12124,7 @@ static int in_key_down(int sc, int repeat) {
             else set_capture(0);
         }
         if (sc == SC_F11) toggle_fullscreen();
+        if (sc == SC_F5 && !botMode) gfx_reload();       /* graphismes/rendu.ini relu a chaud */
         if (sc == SC_F2) sens = fmaxf(0.0003f, sens - 0.0002f);
         if (sc == SC_F3) sens = fminf(0.01f, sens + 0.0002f);
         if (sc == SC_R && !captured && !uiFocus && appState == APP_GAME && !dmMode) reset_game();
@@ -14592,6 +14796,17 @@ static void run_tests(const char *path) {
         }
         botLevel = lv0;
     }
+    {                                                     /* graphismes/rendu.ini : lecture d'une ligne, cle inconnue, bornes */
+        float d0 = gxSunDir[1], f0 = gxFog[1], b0 = gxBloom[1], a0 = gxAoRays;
+        char l1[] = "  soleil_direction = 0.1 0.9 -0.2   # commentaire", l2[] = "cle_inconnue = 4", l3[] = "bloom = 0.5 9";
+        char l4[] = "occlusion_rayons = 3";
+        int k1 = gfx_parse_line(l1), k2 = gfx_parse_line(l2), k3 = gfx_parse_line(l3);
+        gfx_parse_line(l4);
+        gfx_clamp();
+        fprintf(f, "graphismes : soleil y=%.1f, cle inconnue=%d, bloom seuil borne=%.0f, rayons=%d, lue=%d%d (attendu 0.9, 0, 4, 3, 11)\n",
+                gxSunDir[1], k2, gxBloom[1], AO_RAYS, k1, k3);
+        gxSunDir[0] = 0.55f; gxSunDir[1] = d0; gxSunDir[2] = -0.82f; gxFog[1] = f0; gxBloom[0] = 0.7f; gxBloom[1] = b0; gxAoRays = a0;
+    }
     {                                                     /* eclairage precalcule : ombre portee de la tour, soleil */
         float lit[3], sh[3];
         lm_grid_build();
@@ -14938,6 +15153,7 @@ static int velocity_main(const char *cmd) {
     glHint(GL_FOG_HINT, GL_NICEST);
     make_font(0, 18); make_font(1, 28); make_font(2, 56);
     for (int i = 0; i < 3; i++) make_font_atlas(i);
+    gfx_load_all();                                       /* graphismes/rendu.ini (sinon : valeurs par defaut) */
     make_textures();
     build_level();
     if (!botHidden || botShot[0]) build_world_list();       /* un bot cache ne dessine rien : pas de lightmaps */

@@ -33,6 +33,9 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 </plist>
 EOF
 
+# reglages graphiques modifiables (graphismes/rendu.ini, textures .bmp) : copies dans le .app
+cp -R graphismes "$APP/Contents/Resources/graphismes"
+
 # signature ad hoc (obligatoire sur Apple Silicon ; ne remplace pas une vraie signature pour la distribution)
 codesign --force --deep -s - "$APP"
 
