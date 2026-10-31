@@ -821,10 +821,19 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
 - **Record** : temps, temps intermédiaires (écart vert / rouge à chaque porte) et **fantôme** (position et
   orientation à 30 Hz, `RACE_GMAX`) dans `velocity_course.txt` à côté de `velocity.ini` (jamais en `--bot`,
   `--shot`, `--test`). Le fantôme est dessiné en silhouette additive bleutée (`skinFlat`).
+- **Façon Spider-Man** (seulement en course, `raceOn`) : 31 **points de balancement** (`addswing`, cubes dorés de
+  2 × `SWING_HALF`, contour lumineux) au milieu des avenues, 15 à 20 m au-dessus des portes. **Aimant** : au lancer,
+  le grappin part vers le point de balancement en vue le plus proche du viseur dans un cône de `RACE_MAGNET_COS`
+  (`swing_target`, `swing_box` : cube ≤ 3,2 m avec rien juste dessous) ; un repère tournant montre lequel sera pris.
+  **Balancier** : le grappin rembobine jusqu'à `RACE_ROPE` (18 m, le bas de l'arc tombe à hauteur des portes), puis
+  traction × `RACE_SWING_PULL` et la corde ne s'allonge plus ; avancer pousse de `RACE_SWING_PUMP` le long de l'arc.
+  Portes de 8 m de rayon, aucun passage obligé sous une passerelle.
 - Affichage : anneaux des 3 prochaines portes (la suivante respire, avec une colonne de lumière ; l'arrivée est
   dorée), flèche au bord de l'écran si la porte est hors champ, chrono, PORTE k / n, écran d'ARRIVEE.
 - Captures : `--shot course.bmp`, `course_depart.bmp`, `course_fin.bmp`. Test : portes libres, lignes droites
-  porte à porte dégagées, porte sautée non comptée, chute → retour à la porte, arrivée, record, fantôme.
+  porte à porte dégagées, porte sautée non comptée, chute → retour à la porte, arrivée, record, fantôme ; et une
+  **course jouée par un pilote simple** (regarde la porte, grappin dès que l'aimant trouve un point, lâche dans la
+  remontée) : il doit arriver en moins de 120 s (41 s, 1 chute). `RACEDBG=1` trace son trajet dans le fichier de test.
 
 ## 4. Réseau LAN
 

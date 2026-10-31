@@ -84,7 +84,7 @@ static void nav_build(void) {
         Box *b = &boxes[i];
         V3 s = vsub(b->mx, b->mn);
         if (b->kind == B_PAD) { nav_add(v3((b->mn.x + b->mx.x) * 0.5f, b->mx.y, (b->mn.z + b->mx.z) * 0.5f), NN_PAD, i); continue; }
-        if (s.x < 2.2f && s.y < 2.2f && s.z < 2.2f && b->mn.y > ky + 3) {   /* petit cube : ancre si rien dessous de proche */
+        if (s.x < 2 * SWING_HALF + 0.2f && s.y < 2 * SWING_HALF + 0.2f && s.z < 2 * SWING_HALF + 0.2f && b->mn.y > ky + 3) {   /* petit cube : ancre si rien dessous de proche */
             V3 c = vmul(vadd(b->mn, b->mx), 0.5f);
             if (!nav_ground_below(v3(c.x, b->mn.y - 0.1f, c.z), 2.0f)) { int k = nav_add(c, NN_ANCHOR, i); if (k >= 0) NV[k].aim = c; continue; }
         }

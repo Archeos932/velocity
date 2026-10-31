@@ -139,6 +139,9 @@ static void addspeed(float x0, float z0, float x1, float z1, float y, float dx, 
 static void addanchor(float x, float y, float z) {      /* ancre de grappin : petit cube flottant, couleur dediee */
     addbox(x - 0.6f, y - 0.6f, z - 0.6f, x + 0.6f, y + 0.6f, z + 0.6f, 1.0f, 0.85f, 0.2f);
 }
+static void addswing(float x, float y, float z) {       /* point de balancement (course) : gros cube dore de 3 m, aimante en course */
+    addbox(x - SWING_HALF, y - SWING_HALF, z - SWING_HALF, x + SWING_HALF, y + SWING_HALF, z + SWING_HALF, 1.0f, 0.82f, 0.25f);
+}
 static void addcell(float x, float y, float z, int pts) {   /* addpickup sans l'agrandissement MAP_S */
     if (npu >= MAXPICK) return;
     PU[npu].pos = v3(x, y + 0.9f, z);
@@ -295,7 +298,7 @@ static const float dojoSpawns[][3] = {
 };
 
 /* La Toile : course au grappin. Quatre avenues de gratte-ciel au-dessus du vide (killY -10), en serpentin :
- * nord le long de x = -60, est le long de z = -62, sud par x = 0 (plongee sous une passerelle basse, puis montee),
+ * nord le long de x = -60, est le long de z = -62, sud par x = 0,
  * est par z = 62, nord par x = 60 jusqu'au toit d'arrivee (y 50). Les tours servent d'ancres partout ; quelques
  * cubes flottants au milieu des avenues pour se balancer. Portes de la course : toileGates (MapDef.gates). */
 static void toile_tower(float x, float z, float hw, float hd, float h, int k) {
@@ -333,13 +336,17 @@ static void build_map_toile(void) {
     addbox(54, -12, 66, 68, 24, 78, 0.18f, 0.20f, 0.32f);
     addbox(54, -12, -46, 66, 50, -34, 0.30f, 0.26f, 0.12f);     /* tour d'arrivee */
     addbox(55, 50, -45, 65, 51, -35, 0.95f, 0.8f, 0.25f);       /* toit d'arrivee dore */
-    addbox(-16, 30, -70, -8, 32, -54, 0.35f, 0.32f, 0.5f);      /* passerelle (on passe dessous) */
-    addbox(-10, 26, -8, 10, 28, -4, 0.35f, 0.32f, 0.5f);        /* passerelle basse : plongee obligatoire */
-    static const float an[][3] = {                        /* ancres flottantes au milieu des avenues */
-        { -60, 52, 20 }, { -60, 50, -30 }, { -26, 50, -62 }, { 0, 48, -20 }, { 0, 54, 12 }, { 0, 56, 42 },
-        { 40, 52, 62 }, { 60, 58, 22 }, { 60, 62, -12 },
+    /* points de balancement : au milieu des avenues, tous les 14 m environ, 15 a 20 m au-dessus des portes */
+    static const float sw[][3] = {
+        { -60, 50, 50 }, { -60, 52, 36 }, { -60, 50, 22 }, { -60, 52, 8 }, { -60, 50, -6 }, { -60, 48, -20 },
+        { -60, 50, -34 }, { -60, 50, -48 }, { -54, 50, -62 },                                          /* avenue 1 et virage */
+        { -42, 48, -62 }, { -28, 48, -62 }, { -16, 46, -62 }, { -2, 48, -58 },                           /* avenue 2 */
+        { 0, 46, -46 }, { 0, 44, -32 }, { 0, 42, -18 }, { 0, 42, 4 }, { 0, 50, 16 }, { 0, 52, 30 }, { 0, 50, 44 },   /* avenue 3 */
+        { 6, 48, 60 }, { 18, 48, 62 }, { 32, 48, 62 }, { 46, 50, 60 },                                  /* avenue 4 */
+        { 60, 52, 52 }, { 60, 54, 38 }, { 60, 56, 24 }, { 60, 58, 10 }, { 60, 62, -4 }, { 60, 66, -18 },   /* avenue 5 */
+        { 60, 70, -30 },
     };
-    for (int i = 0; i < (int)(sizeof an / sizeof an[0]); i++) addanchor(an[i][0], an[i][1], an[i][2]);
+    for (int i = 0; i < (int)(sizeof sw / sizeof sw[0]); i++) addswing(sw[i][0], sw[i][1], sw[i][2]);
     addcell(60, 51, -40, PICKUP_BIG);
     addcell(-62, 22, -70, PICKUP_SMALL); addcell(0, 24, -72, PICKUP_SMALL); addcell(1, 20, 72, PICKUP_SMALL); addcell(61, 24, 72, PICKUP_SMALL);
 }
@@ -348,8 +355,8 @@ static const float toileSpawns[][3] = {
 };
 /* portes de la course : centre x, y, z et rayon (la derniere = arrivee) */
 static const float toileGates[][4] = {
-    { -60, 30, 38, 6 }, { -60, 34, 8, 6 }, { -60, 27, -22, 6 }, { -58, 32, -50, 6 }, { -34, 30, -62, 6 }, { -12, 22, -62, 5.5f },
-    { 0, 30, -36, 6 }, { 0, 18, -6, 5 }, { 0, 38, 24, 6 }, { 24, 30, 60, 6 }, { 58, 32, 40, 6 }, { 60, 42, 6, 6 }, { 60, 57, -40, 6 },
+    { -60, 30, 38, 8 }, { -60, 32, 8, 8 }, { -60, 30, -22, 8 }, { -58, 32, -50, 8 }, { -34, 32, -62, 8 }, { -12, 32, -62, 8 },
+    { 0, 32, -36, 8 }, { 0, 30, -6, 8 }, { 0, 36, 24, 8 }, { 24, 34, 60, 8 }, { 58, 36, 40, 8 }, { 60, 42, 6, 8 }, { 60, 56, -40, 8 },
 };
 
 /* Arene : points de depart (anciennement dans pick_spawn, agrandis par MAP_S) */

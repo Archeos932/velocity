@@ -2994,6 +2994,44 @@ static void run_tests(const char *path) {
             raceOn = 0;
             load_map(0); reset_game();
         }
+        {   /* --- Course jouee par un pilote simple : regarde la porte (un peu au-dessus), grappin des que l'aimant trouve un
+             * point de balancement, lache une fois le point depasse, avance tout le temps. Mesure : arrivee, temps, chutes --- */
+            FILE *logSave = botLog; botLog = NULL;
+            race_start(); appState = APP_GAME; hitstop = 0;
+            memset(act, 0, sizeof act); memset(botHeld, 0, sizeof botHeld); memset(botPress, 0, sizeof botPress);
+            raceBest = 0; ghostBestN = 0;
+            int hooks = 0;
+            float t = 0;
+            for (; t < 150 && !raceDone; t += TICK) {
+                memset(botHeld, 0, sizeof botHeld);
+                const MapDef *md = &maps[curMap];
+                V3 g = race_gate(raceGate < md->ngates ? raceGate : md->ngates - 1), e = eye_pos(), d = vsub(g, e);
+                float hd = fmaxf(hlen(d), 0.1f);
+                P.yaw = atan2f(d.x, -d.z);
+                P.pitch = clampf(atan2f(d.y, hd) + 0.45f, -1.2f, 1.2f);
+                botHeld[A_FWD] = 1;
+                if (P.grounded) botPress[A_JUMP] = 1;
+                if (P.hook == HOOK_NONE && P.hookCd <= 0 && raceCount <= 0) {
+                    V3 at;
+                    if (swing_target(e, view_dir(), &at) >= 0) { botPress[A_HOOK] = 1; botHeld[A_HOOK] = 1; hooks++; }
+                } else if (P.hook != HOOK_NONE) {
+                    V3 toA = vsub(P.anchor, P.pos), fwd = vmul(v3(d.x, 0, d.z), 1 / hd);
+                    float past = -vdot(v3(toA.x, 0, toA.z), fwd);   /* metres depuis le passage sous le point */
+                    int passed = P.hook == HOOK_ATTACHED && ((past > 1 && P.vel.y > 2) || past > 9);   /* on lache dans la remontee */
+                    botHeld[A_HOOK] = !passed;
+                }
+                for (int i = 0; i < MAXE; i++) E[i].alive = 0;
+                game_tick(TICK);
+                if (getenv("RACEDBG") && fmodf(t, 0.5f) < TICK)
+                    fprintf(f, "  [%.1f] porte %d pos %.1f %.1f %.1f v %.1f crochet %d ancre %.0f %.0f %.0f sol %d\n", t, raceGate, P.pos.x, P.pos.y,
+                            P.pos.z, vlen(P.vel), P.hook, P.anchor.x, P.anchor.y, P.anchor.z, P.grounded);
+            }
+            botLog = logSave;
+            fprintf(f, "course pilotee (%s) : arrivee %d, portes %d / %d, temps %.1f s, chutes %d, grappins %d (attendu 1, %d / %d, < 120 s)\n",
+                    maps[curMap].name, raceDone, raceGate, maps[curMap].ngates, t, raceFalls, hooks, maps[curMap].ngates, maps[curMap].ngates);
+            raceOn = 0; appState = APP_MENU;
+            load_map(0); reset_game();
+        }
         {   /* --- Jauge de style : kill aerien a pleine vitesse, puis un deuxieme enchaine, un coup recu, et l'oubli --- */
             reset_game(); gameTime = 100;
             P.grounded = 0; P.vel = v3(25, 0, 0);

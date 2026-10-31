@@ -165,6 +165,11 @@ enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_COUNT };
 
 /* Mode COURSE (src/jeu/course.c) */
 #define RACE_COUNTDOWN   3.0f     /* decompte avant le depart */
+#define SWING_HALF       1.5f     /* points de balancement : cubes de 3 m */
+#define RACE_MAGNET_COS  0.70f    /* course : le grappin part vers le point de balancement a moins de ~45 deg du viseur */
+#define RACE_SWING_PULL  0.25f    /* course : une fois la corde a RACE_ROPE, traction x0,25 (on se balance plus qu'on ne file) */
+#define RACE_ROPE        18.0f    /* course : le grappin ramene la corde a 18 m (bas de l'arc ~ hauteur des portes), puis balancier */
+#define RACE_SWING_PUMP  14.0f    /* course : avancer au grappin pousse de 14 m/s2 le long du balancement */
 #define MELEE_PARRIED_CD  1.0f    /* attaquant dont l'epee est paree : epee bloquee */
 #define MELEE_PARRY_GRACE 0.15f   /* tolerance de latence pour l'hote */
 

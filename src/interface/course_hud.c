@@ -93,6 +93,22 @@ static void draw_race_world(void) {
             glEnd();
         }
     }
+    {                                                     /* points de balancement : contour dore qui brille, plus fort sur la cible de l'aimant */
+        V3 at; int tgt = P.hook == HOOK_NONE ? swing_target(eye_pos(), view_dir(), &at) : -1;
+        float pulse = 0.6f + 0.4f * sinf((float)nowT * 4);
+        for (int i = 0; i < nb; i++) {
+            if (!swing_box(i)) continue;
+            V3 c = vmul(vadd(boxes[i].mn, boxes[i].mx), 0.5f);
+            if (vlen(vsub(c, camEye)) > 140) continue;
+            int hot = i == tgt || (P.hook == HOOK_ATTACHED && vlen(vsub(P.anchor, c)) < 2.5f);
+            for (int k = 0; k < 2; k++) {
+                float g = k ? 0.9f + 0.3f * pulse : 0.05f;
+                glLineWidth(k ? 2.5f : (hot ? 5.0f : 3.0f));
+                glColor4f(1, 0.8f, 0.3f, hot ? 0.95f : k ? 0.35f + 0.25f * pulse : 0.5f);
+                box_edges(vsub(boxes[i].mn, v3(g, g, g)), vadd(boxes[i].mx, v3(g, g, g)));
+            }
+        }
+    }
     glLineWidth(1);
     V3 gp; float gy;
     if (raceCount <= 0 && race_ghost_at(raceT, &gp, &gy)) {   /* fantome : silhouette bleutee, additive */
@@ -146,6 +162,24 @@ static void draw_race_hud(void) {
         snprintf(buf, sizeof buf, "[R] recommencer   %s", ghostBestN ? "le fantome bleu = ton record" : "");
         text_c(0, cx, cy + 34, buf, 0.6f, 0.65f, 0.75f, 0.9f);
     } else if (raceT < 0.7f) text_c(2, cx, cy - 60, "GO !", 0.4f, 1, 0.5f, 1 - raceT / 0.7f);
+    if (!raceDone && raceCount <= 0 && P.hook == HOOK_NONE && !P.dead) {   /* aimant : le point que prendra le grappin */
+        V3 at; float sx, sy;
+        if (swing_target(eye_pos(), view_dir(), &at) >= 0 && project(at, &sx, &sy)) {
+            float r = 22 + 4 * sinf((float)nowT * 9), a0 = (float)nowT * 2;
+            glLineWidth(3);
+            glColor4f(1, 0.85f, 0.3f, 0.95f);
+            glBegin(GL_LINES);                            /* quatre crochets qui tournent autour du cube */
+            for (int k = 0; k < 4; k++) {
+                float a = a0 + k * PI / 2;
+                glVertex2f(sx + cosf(a) * r, sy + sinf(a) * r);
+                glVertex2f(sx + cosf(a + 0.5f) * r, sy + sinf(a + 0.5f) * r);
+            }
+            glEnd();
+            glLineWidth(1);
+            snprintf(buf, sizeof buf, "[%s]", bind_text(A_HOOK));
+            text_c(0, sx, sy + r + 18, buf, 1, 0.85f, 0.3f, 0.9f);
+        }
+    }
     if (!raceDone && raceGate < md->ngates) {             /* fleche au bord de l'ecran si la porte est hors champ */
         float sx, sy;
         V3 g = race_gate(raceGate);

@@ -13,7 +13,7 @@
 #define RACE_GATES  24
 #define RACE_GMAX   (30 * 300)                            /* fantome : 5 min a 30 Hz */
 #define RACE_GHZ    30.0f
-static int raceOn, raceGate, raceDone, raceFalls, raceNewBest, raceLoaded;
+static int raceGate, raceDone, raceFalls, raceNewBest, raceLoaded;
 static float raceT, raceCount, raceDeltaT, raceDelta, raceGateFlash, raceGhostAcc;
 static float raceSplit[RACE_GATES], raceBest, raceBestSplit[RACE_GATES];
 static float ghostCur[RACE_GMAX][4], ghostBest[RACE_GMAX][4];   /* x y z yaw */

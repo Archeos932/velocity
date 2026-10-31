@@ -125,6 +125,44 @@ static void grapple_bounce(V3 hit, V3 dir) {
 
 /* Grappin : le crochet vole jusqu'a un mur, puis tire le joueur vers l'ancre.
  * La corde ne se rallonge jamais : on peut se balancer autour du point d'accroche. */
+/* --- Course : aimant du grappin vers les points de balancement (cubes flottants de <= 3 m, rien juste dessous) --- */
+static unsigned char swingIs[MAXB];
+static int swingMap = -1, swingNb = -1;
+static int swing_box(int i) {
+    if (swingMap != curMap || swingNb != nb) {            /* recalcule a chaque carte */
+        swingMap = curMap; swingNb = nb;
+        for (int a = 0; a < nb; a++) {
+            Box *b = &boxes[a];
+            V3 s = vsub(b->mx, b->mn);
+            float m = 2 * SWING_HALF + 0.2f;
+            int ok = b->kind == B_SOLID && s.x <= m && s.y <= m && s.z <= m;
+            for (int j = 0; j < nb && ok; j++) {
+                Box *c = &boxes[j];
+                if (j != a && c->mx.x > b->mn.x && c->mn.x < b->mx.x && c->mx.z > b->mn.z && c->mn.z < b->mx.z &&
+                    c->mx.y <= b->mn.y + 0.01f && c->mx.y > b->mn.y - 2) ok = 0;   /* pose sur quelque chose : pas une ancre */
+            }
+            swingIs[a] = (unsigned char)ok;
+        }
+    }
+    return i >= 0 && i < nb && swingIs[i];
+}
+/* point de balancement le plus proche du viseur, dans le cone de l'aimant, en vue ; -1 si aucun */
+static int swing_target(V3 eye, V3 dir, V3 *at) {
+    int best = -1;
+    float bk = RACE_MAGNET_COS;
+    for (int i = 0; i < nb; i++) {
+        if (!swing_box(i)) continue;
+        V3 c = vmul(vadd(boxes[i].mn, boxes[i].mx), 0.5f), d = vsub(c, eye);
+        float l = vlen(d);
+        if (l < 3 || l > GRAPPLE_RANGE - 1) continue;
+        float k = vdot(d, dir) / l;
+        if (k <= bk) continue;
+        if (ray_world(eye, vmul(d, 1 / l), l, 0) < l - 2 * SWING_HALF - 0.4f) continue;   /* cache par une tour */
+        bk = k; best = i; *at = c;
+    }
+    return best;
+}
+
 static void grapple_tick(float dt, int press, int held) {
     P.hookCd -= dt;
     if (P.dead) { P.hook = HOOK_NONE; return; }
@@ -132,6 +170,10 @@ static void grapple_tick(float dt, int press, int held) {
         P.hook = HOOK_FLYING;
         P.hookPos = eye_pos();
         P.hookDir = view_dir();
+        if (raceOn) {                                     /* course : aimant vers le point de balancement vise */
+            V3 at;
+            if (swing_target(P.hookPos, P.hookDir, &at) >= 0) P.hookDir = vnorm(vsub(at, P.hookPos));
+        }
         P.hookDist = 0;
         P.hookEnemy = 0;
         P.hookPlayer = 0;
@@ -220,6 +262,13 @@ static void grapple_tick(float dt, int press, int held) {
         if (P.hookBlockT > 0.15f) { hook_release(0); return; }
 
         float pull = onTarget ? GRAPPLE_ENEMY_PULL : GRAPPLE_PULL, maxSp = onTarget ? GRAPPLE_ENEMY_MAXSPEED : GRAPPLE_MAXSPEED;
+        if (raceOn && !onTarget) {                        /* course : on se balance (traction douce, elan en avancant) */
+            if (dist <= RACE_ROPE) { pull *= RACE_SWING_PULL; if (P.ropeLen > RACE_ROPE) P.ropeLen = RACE_ROPE; }   /* sinon : on rembobine */
+            if (act[A_FWD]) {
+                V3 f = v3(sinf(P.yaw), 0, -cosf(P.yaw)), t = vsub(f, vmul(dir, vdot(f, dir)));
+                if (vlen(t) > 0.1f) P.vel = vadd(P.vel, vmul(vnorm(t), RACE_SWING_PUMP * dt));
+            }
+        }
         if (vdot(P.vel, dir) < maxSp) P.vel = vadd(P.vel, vmul(dir, pull * dt));
         if (dist < P.ropeLen) P.ropeLen = dist;
         float out = -vdot(P.vel, dir);                    /* vitesse qui s'eloigne de l'ancre */

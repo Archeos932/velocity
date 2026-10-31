@@ -221,6 +221,10 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
 - **Mode COURSE** (bouton à côté de SOLO) : course au grappin façon Spider-Man sur la nouvelle carte **LA TOILE**,
   quatre avenues de gratte-ciel au-dessus du vide, 13 portes, chrono, écart au record à chaque porte, **fantôme** de
   ton meilleur temps, chute = retour à la dernière porte, R pour recommencer. Record dans `velocity_course.txt`.
+  Rendue plus facile : 31 gros **points de balancement** dorés et lumineux, un **aimant** qui envoie le grappin
+  vers celui que tu vises à peu près (repère tournant dessus), une corde ramenée à 18 m pour un vrai balancier à
+  hauteur des portes, de l'élan en avançant pendant le balancement, des portes plus grandes et plus de passage
+  obligé sous une passerelle. Un pilote de test très simple finit le parcours en 41 s.
 - **5 nouvelles musiques**, une par carte : Le Puits (dub techno sombre, cloches FM), Le Canyon (breakbeat du désert
   avec swing), La Boucle (synthwave, arpèges), Le Dojo (drum and bass, gamme japonaise), La Toile (trance qui monte
   avec les portes). Le moteur gère maintenant une gamme, un timbre de lead et un swing par morceau ; l'Arène est

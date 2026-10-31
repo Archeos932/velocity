@@ -469,6 +469,9 @@ static int velocity_main(const char *cmd) {
             P.hook = HOOK_ATTACHED; P.anchor = P.hookPos = v3(-46 - 4, 50, -6); P.ropeLen = 30;
             style = 250; styleRank = ST_A;
         } else raceCount = 2.4f;
+        if (strstr(shotPath, "aimant")) {                 /* course_aimant : en l'air, le repere sur le point que prendra le grappin */
+            P.hook = HOOK_NONE; P.pos = P.prevPos = v3(-60, 30, 30); P.yaw = 0; P.pitch = 0.35f;
+        }
         if (strstr(shotPath, "fin")) { raceDone = 1; raceT = 58.94f; raceNewBest = 2; raceFalls = 1; styleTopRank = ST_S; P.hook = HOOK_NONE; }
         gameTime = 3;
         render(1, TICK);

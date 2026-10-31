@@ -127,3 +127,4 @@ static float waveDelay, spawnT, gameTime, hitMarker, comboT, msgT, popT, shake;
 static int shotStreak;                                    /* touches successives au tir */
 static float hitstop, parryFlash, streakLostT;
 static char msg[64], popText[32];
+static int raceOn;                                        /* mode COURSE en cours (src/jeu/course.c) : grappin aimante */
