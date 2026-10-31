@@ -243,6 +243,20 @@ static void draw_radar(float x, float y, float sz) {
     }
 }
 
+/* trainee de la barre de vie : apres un coup, la partie perdue reste HP_GHOST_HOLD s puis se vide */
+static float hpGhost = 100, hpLast = 100;
+static double hpHitAt = -10, hpHealAt = -10;
+static void hp_ghost_tick(float hp, double t) {
+    static double lastT;
+    float dt = clampf((float)(t - lastT), 0, 0.1f);
+    lastT = t;
+    if (hp < hpLast) hpHitAt = t;
+    if (hp > hpLast + 0.5f && hpLast > 0) hpHealAt = t;   /* soin (pas le respawn depuis 0) */
+    hpLast = hp;
+    if (hp >= hpGhost) hpGhost = hp;
+    else if (t - hpHitAt > HP_GHOST_HOLD) hpGhost = fmaxf(hp, hpGhost - HP_GHOST_RATE * dt);
+}
+
 static void draw_hud(void) {
     glMatrixMode(GL_PROJECTION); glLoadIdentity();
     glOrtho(0, winW, winH, 0, -1, 1);
@@ -513,10 +527,22 @@ static void draw_hud(void) {
     else if (P.wallrun) text_c(0, cx, winH - 110.0f, "WALL-RUN", 1, 0.6f, 0.9f, 0.9f);
     else if (P.sliding) text_c(0, cx, winH - 110.0f, "SLIDE", 1, 0.8f, 0.4f, 0.9f);
 
-    /* vie */
-    float hpk = P.hp / 100.0f;
-    rect(30, winH - 50.0f, 300, 20, 0.1f, 0.1f, 0.15f, 0.7f);
-    rect(30, winH - 50.0f, 300 * hpk, 20, 1 - hpk * 0.7f, 0.25f + hpk * 0.6f, 0.35f, 0.95f);
+    /* vie : barre, trainee des degats qui se vide, eclat au soin, graduations tous les 25 PV */
+    hp_ghost_tick(P.hp, nowT);
+    float hpk = clampf(P.hp / 100.0f, 0, 1), ghk = clampf(hpGhost / 100.0f, 0, 1), hx = 30, hy = winH - 50.0f;
+    rect(hx - 3, hy - 3, 306, 26, 0.02f, 0.02f, 0.05f, 0.55f);
+    rect(hx, hy, 300, 20, 0.1f, 0.1f, 0.15f, 0.7f);
+    if (ghk > hpk) {
+        float fresh = clampf(1 - (float)(nowT - hpHitAt) / HP_GHOST_HOLD, 0, 1);   /* blanc juste apres le coup, puis rouge */
+        rect(hx + 300 * hpk, hy, 300 * (ghk - hpk), 20, 1, 0.3f + 0.7f * fresh, 0.25f + 0.75f * fresh, 0.85f);
+    }
+    rect(hx, hy, 300 * hpk, 20, 1 - hpk * 0.7f, 0.25f + hpk * 0.6f, 0.35f, 0.95f);
+    rect_vgrad(hx, hy, 300 * hpk, 9, 1, 1, 1, 0.28f, 0.0f);   /* reflet en haut de la barre */
+    {
+        float heal = clampf(1 - (float)(nowT - hpHealAt) / 0.5f, 0, 1);
+        if (heal > 0) rect(hx - 3, hy - 3, 306, 26, 0.35f, 1, 0.5f, 0.35f * heal);
+    }
+    for (int i = 1; i < 4; i++) rect(hx + 75.0f * i - 1, hy, 2, 20, 0.02f, 0.02f, 0.05f, 0.6f);
     snprintf(buf, sizeof buf, "%d", (int)ceilf(P.hp));
     text(1, 30, winH - 60.0f, buf, 1, 1, 1, 1);
 

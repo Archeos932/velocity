@@ -212,6 +212,19 @@ static void run_tests(const char *path) {
         nowT = 0; wpFlashAt = -10;
     }
 
+    {                                                     /* barre de vie : la trainee attend puis rattrape les PV */
+        hp_ghost_tick(100, 10.0); hp_ghost_tick(40, 10.016);
+        float held = hpGhost;
+        for (int i = 2; i <= 20; i++) hp_ghost_tick(40, 10.0 + i * 0.016);      /* 0,32 s : encore tenue */
+        float stillHeld = hpGhost;
+        for (int i = 21; i <= 120; i++) hp_ghost_tick(40, 10.0 + i * 0.016);    /* 1,9 s : videe */
+        float drained = hpGhost;
+        hp_ghost_tick(70, 12.0);
+        fprintf(f, "trainee de vie : apres le coup=%.0f a 0,3 s=%.0f a 1,9 s=%.0f, soin=%d (attendu 100, 100, 40, 1)\n",
+                held, stillHeld, drained, hpHealAt == 12.0);
+        hpGhost = hpLast = 100; hpHitAt = hpHealAt = -10;
+    }
+
     reset_game();                                         /* escalier -> plateforme centrale */
     P.pos = P.prevPos = v3(0, 0, ms(14) + 0.6f); P.yaw = 0;
     act[A_FWD] = 1;
