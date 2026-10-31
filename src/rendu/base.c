@@ -4,7 +4,7 @@
 /* ------------------------------------------------------------------ */
 /* Rendu                                                               */
 /* ------------------------------------------------------------------ */
-static GLuint texGrid, texWall, texGrime, texDot, worldList, fontBase[3];
+static GLuint texGrid, texWall, texGrime, texDot, texStone, texPlaster, worldList, fontBase[3];
 static int fontW[3], fontH[3];
 static V3 camR, camU, camEye;
 static GLfloat mvMat[16], prMat[16];                      /* matrices de la camera (projections a l'ecran, soleil de l'arme) */

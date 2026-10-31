@@ -13,7 +13,7 @@
 /* Le bot suit le chemin quand sa cible est cachee ou de l'autre cote  */
 /* d'un vide ; en vue directe sur le meme sol, il se bat comme avant.  */
 /* ------------------------------------------------------------------ */
-#define NAV_MAX      480
+#define NAV_MAX      900
 #define NAV_EMAX     16        /* aretes sortantes par noeud */
 #define NAV_GRID     8.0f      /* pas de la grille sur les grands sols */
 #define NAV_WALK     11.0f     /* longueur max d'une arete MARCHE */

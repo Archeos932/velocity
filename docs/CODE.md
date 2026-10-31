@@ -96,7 +96,8 @@ velocity/
 │   ├── noyau/        entete.c (includes), maths.c (V3, aleatoire)
 │   ├── reglages/     equilibrage.c : TOUS les #define (mouvement, armes, parry, PvP, points)
 │   ├── son/          audio.c (mixeur, sons synthetises), music.h (morceaux et sequenceur)
-│   ├── monde/        carte.c (boites AABB, les 5 cartes MapDef, collisions, rayons), entites.c (Player P, Enemy, Proj...)
+│   ├── monde/        carte.c (boites AABB, cartes MapDef, collisions, rayons), decor.c (decor maille),
+│   │                 citadelle.c (LA CITADELLE), entites.c (Player P, Enemy, Proj...)
 │   ├── entrees/      actions.c (touches, A_*, bindDefault)
 │   ├── effets/       combat_fx.c (impact frames, input_poll), particules.c, camera_mort.c, monde_fx.c (neons, meteo)
 │   ├── joueur/       mouvement.c (player_tick, grappin)
@@ -162,6 +163,8 @@ velocity/
 | `interface/menus.c` | menus et paramètres | `button`, `slider`, `draw_settings`, `draw_loadout`, `draw_skin_menu`, `draw_main_menu`, `draw_pause` |
 | `interface/scores.c` | scores, killfeed, pseudos | `draw_scoreboard`, `draw_killfeed`, `project`, `draw_name_tags` |
 | `rendu/joueurs.c` | joueurs distants | `np_anim`, `draw_trails`, `draw_outlines`, `draw_remote_players` |
+| `monde/decor.c` | décor maillé (§3.22) | `dc_tri`, `dc_quad`, `dc_cone`, `dc_sphere`, `dc_bevel`, `dc_arch`, `dc_arch_fill`, `dc_roof`, `dc_window`, `dc_awning`, `dc_cypress`, `dc_palm`, `dc_railing`, `dc_lantern`, `dc_column`, `DV`, `ndv` |
+| `monde/citadelle.c` | LA CITADELLE (§3.22) | `build_map_citadelle`, `ct_house`, `ct_arcade`, `ct_belltower`, `ct_fountain`, `ct_rampart`, `ct_landscape` |
 | `jeu/style.c` | jauge de style (§3.20) | `style_add`, `style_kill`, `style_parry`, `style_tick`, `style_mult` |
 | `jeu/course.c` | mode COURSE (§3.21) | `race_start`, `race_tick`, `race_respawn`, `race_ghost_at` |
 | `interface/hud.c` | HUD | `melee_preview`, `draw_radar`, `draw_style_hud`, `draw_hud` |
@@ -834,6 +837,39 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
   porte à porte dégagées, porte sautée non comptée, chute → retour à la porte, arrivée, record, fantôme ; et une
   **course jouée par un pilote simple** (regarde la porte, grappin dès que l'aimant trouve un point, lâche dans la
   remontée) : il doit arriver en moins de 120 s (41 s, 1 chute). `RACEDBG=1` trace son trajet dans le fichier de test.
+
+### 3.22 Décor maillé et LA CITADELLE (`src/monde/decor.c`, `src/monde/citadelle.c`)
+
+- **Principe** : le monde jouable reste en boîtes (collisions, rayons, lightmaps) ; le **décor maillé** ajoute des
+  triangles par-dessus (≈ 180 000 sur LA CITADELLE, limite `DEC_MAXV`). Chaque sommet a sa couleur de base ; au
+  chargement, `decor_bake` (dans `rendu/eclairage.c`) lui donne la même lumière qu'un texel de lightmap (`lm_light` :
+  soleil et ombres portées par les boîtes, ciel et occlusion, rebond, néons ; `decor_occlusion` rayons au lieu de
+  `AO_RAYS`), puis les triangles sont ajoutés à la liste d'affichage du monde (aucun coût de rendu en plus d'un
+  `glCallList`). Primitives : tronc de cône / cylindre, sphère et coupole, boîte chanfreinée, arche (et arche aux
+  écoinçons remplis), toit à deux pans en rangées de tuiles avec faîtière et pignons, fenêtre (verre en retrait,
+  demi-lune, cadre, appui, volets à lames), auvent rayé qui fait le creux, cyprès, palmier, rambarde à balustres,
+  lanterne, colonne à base et chapiteau.
+- **`B_HIDDEN`** : boîte de collision invisible (jamais dessinée, pas de lightmap, pas de liseré) qui porte la
+  collision et l'ombre d'un élément de décor (colonne, caisse, fontaine, gradins sous les pans de toit pour pouvoir
+  y marcher). Le reste du code la traite comme un obstacle ordinaire (`ray_world`, `pos_free`, navigation).
+- **`MAXB` 768** (au lieu de 256) ; la grille des rayons courts stocke des indices sur 16 bits (`lmgB`), 96 boîtes
+  par case. `load_map` libère maintenant les lightmaps de la carte précédente (elles fuyaient).
+- **Par carte** (`MapDef`) : `style` 1 = textures **pierre** (pavés en appareil décalé) et **enduit** (`texStone`,
+  `texPlaster`, réglages `pierre`, `enduit` dans `rendu.ini`, ou `pierre.bmp` / `enduit.bmp`) au lieu du métal, sans
+  liserés sombres ; `light` = éclairage propre (`MAPL_*` : direction et couleur du soleil, force, ciel, rebond,
+  ambiance des objets), appliqué par `map_light_apply` (dans `load_map` et après chaque relecture de `rendu.ini`) et
+  retiré en revenant sur une autre carte.
+- **LA CITADELLE** (carte 6, solo et multi, musique « Citadelle ») : ville fortifiée au soleil, nord = −z. Spawns
+  au sud (porte de la ville) et au nord ; couloir A à l'ouest (rue longue), centre (place du clocher : horloges,
+  beffroi à arches, cloche, coupole turquoise à nervures dorées, bannières), couloir B à l'est. **Site A** : cour de
+  la fontaine (bassin, vasque, filets d'eau) bordée d'une arcade à 5 arches sous un toit de tuiles. **Site B** :
+  marché couvert à 12 colonnes, poutres, grand toit, étals de fruits. 16 maisons en enduit (fenêtres à volets,
+  portes sous arc, lanternes, corniches) avec toits de tuiles ou terrasses (rambardes, amphores, cheminées) ; pads
+  de la place vers deux terrasses ; remparts crénelés avec chemin de ronde à 10 m et escaliers ; 4 tours rondes à
+  toit conique ; muret, caisses, bacs à fleurs, palmiers, cyprès. Hors les murs (décor seul) : collines, mer au
+  sud, oliviers et cyprès, montagnes. Ce n'est la copie d'aucune carte existante.
+- Captures : `--shot X.bmp --map 6 --pos x,y,z[,inclinaison] --yaw A` (`--pos` marche sur toutes les cartes autres
+  que l'Arène). Test : « decor (LA CITADELLE) : N triangles ».
 
 ## 4. Réseau LAN
 

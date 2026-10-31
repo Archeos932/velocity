@@ -164,7 +164,9 @@ static int velocity_main(const char *cmd) {
     if (cmd && strncmp(cmd, "--test ", 7) == 0) { run_tests(cmd + 7); return 0; }
     const char *shotPath = NULL;
     static char shotBuf[512];
-    float shotYaw = 0;
+    float shotYaw = 0, shotPitch = -1000;
+    V3 shotPos = v3(0, 0, 0);
+    int shotPosSet = 0;                                   /* --pos x,y,z[,inclinaison] : point de vue d'une capture */
     if (cmd && strncmp(cmd, "--shot ", 7) == 0) {
         shotMode = 1;
         snprintf(shotBuf, sizeof shotBuf, "%s", cmd + 7);
@@ -203,6 +205,7 @@ static int velocity_main(const char *cmd) {
             else if (!strcmp(t, "--level") && (t = strtok(NULL, " "))) botLevel = atoi(t) < 0 ? 0 : atoi(t) > 2 ? 2 : atoi(t);
             else if (!strcmp(t, "--map") && (t = strtok(NULL, " "))) menuMap = atoi(t) >= 0 && atoi(t) < NMAPS ? atoi(t) : 0;
             else if (!strcmp(t, "--yaw") && (t = strtok(NULL, " "))) shotYaw = (float)atof(t);
+            else if (!strcmp(t, "--pos") && (t = strtok(NULL, " "))) shotPosSet = sscanf(t, "%f,%f,%f,%f", &shotPos.x, &shotPos.y, &shotPos.z, &shotPitch) >= 3;
             else if (!strcmp(t, "--loadout") && (t = strtok(NULL, " "))) {   /* --loadout arme1,arme2[,melee[,competence]] (WP_*, WP_*, MK_*, SK_*) */
                 int l0, l1, mk, sk, n = sscanf(t, "%d,%d,%d,%d", &l0, &l1, &mk, &sk);
                 if (n >= 2) { wantLoadout[0] = l0; wantLoadout[1] = l1; }
@@ -484,6 +487,7 @@ static int velocity_main(const char *cmd) {
         P.pos = md->menuCam; P.pitch = md->menuPitch; P.yaw = shotYaw;
         if (strstr(shotPath, "spawn")) { P.pos = v3(md->spawns[0][0], md->spawns[0][1], md->spawns[0][2]); P.pitch = -0.05f; }
         if (strstr(shotPath, "chute")) { P.pos = v3(md->menuCam.x + 2, md->killY + 3, md->menuCam.z + 2); P.vel = v3(0, -20, 0); P.pitch = -0.7f; }
+        if (shotPosSet) { P.pos = shotPos; if (shotPitch > -999) P.pitch = shotPitch; }
         P.prevPos = P.pos;
         if (md->solo && strstr(shotPath, "solo")) { wave = 3; for (int i = 0; i < 8; i++) spawn_enemy(); }
         gameTime = 1.3f;

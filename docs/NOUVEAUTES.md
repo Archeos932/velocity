@@ -231,6 +231,21 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
   identique à l'échantillon près.
 - Docs : §3.19 à §3.21 de `docs/CODE.md`. Tests : navigation, style, course, musiques.
 
+## 20. LA CITADELLE et le décor maillé
+
+- **Nouvelle carte LA CITADELLE**, dans l'esprit des shooters tactiques à l'architecture soignée (carte originale) :
+  ville fortifiée en plein soleil, pierre, enduit, tuiles et coupoles turquoise. Deux spawns, trois couloirs, site A
+  (cour de la fontaine sous une arcade), site B (marché couvert à colonnes), place du clocher au centre, remparts à
+  chemin de ronde, terrasses accessibles par pads, paysage hors les murs (collines, mer, montagnes).
+- **Beaucoup plus de polygones** : ~180 000 triangles de décor (avant : quelques centaines de boîtes). Nouveau
+  système de **décor maillé** (colonnes, arches, coupoles, toits de tuiles en rangées, fenêtres à volets, auvents,
+  arbres, rambardes, lanternes, amphores, fontaine...) éclairé par sommet avec la même lumière que les lightmaps
+  (soleil, ombres, occlusion), et boîtes de collision invisibles derrière.
+- **Éclairage et textures par carte** : plein soleil sur la Citadelle (le reste garde `rendu.ini`), textures de
+  pierre et d'enduit, nouveau morceau « Citadelle » (groove à mi-tempo, sol dorien, lead façon guitare).
+- Moteur : jusqu'à 768 boîtes par carte, lightmaps libérées au changement de carte, `--pos` pour les captures.
+- Vérifié : tous les tests (aucune régression), match de bots sur la carte (4 kills, navigation, 0 chute).
+
 ---
 
 ## Vérifications faites

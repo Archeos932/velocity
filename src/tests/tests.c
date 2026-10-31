@@ -3032,6 +3032,16 @@ static void run_tests(const char *path) {
             raceOn = 0; appState = APP_MENU;
             load_map(0); reset_game();
         }
+        {   /* --- Decor maille : LA CITADELLE construit bien son decor (et reste sous la limite de sommets) --- */
+            int cm = -1;
+            for (int m = 0; m < NMAPS; m++) if (!strcmp(maps[m].name, "LA CITADELLE")) cm = m;
+            load_map(cm);
+            int hid = 0;
+            for (int i = 0; i < nb; i++) hid += boxes[i].kind == B_HIDDEN;
+            fprintf(f, "decor (%s) : %d triangles (max %d), %d boites dont %d collisions de decor (attendu > 20000, < max)\n",
+                    maps[cm].name, ndv / 3, DEC_MAXV / 3, nb, hid);
+            load_map(0); reset_game();
+        }
         {   /* --- Jauge de style : kill aerien a pleine vitesse, puis un deuxieme enchaine, un coup recu, et l'oubli --- */
             reset_game(); gameTime = 100;
             P.grounded = 0; P.vel = v3(25, 0, 0);

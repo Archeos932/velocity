@@ -4,9 +4,10 @@
 /* ------------------------------------------------------------------ */
 /* Monde : une liste d'AABB                                            */
 /* ------------------------------------------------------------------ */
-enum { B_SOLID, B_PAD, B_SPEED };                        /* B_SPEED : bande d'acceleration (launch = sens x vitesse max) */
+enum { B_SOLID, B_PAD, B_SPEED, B_HIDDEN };              /* B_SPEED : bande d'acceleration (launch = sens x vitesse max) ;
+                                                            B_HIDDEN : collision et ombre d'un decor maille, jamais dessinee */
 typedef struct { V3 mn, mx, col, launch; int kind; } Box;
-#define MAXB 256
+#define MAXB 768
 static Box boxes[MAXB];
 static int nb;
 
@@ -381,8 +382,21 @@ typedef struct {
     float sky[3], fog[3];                                 /* haut du ciel ; horizon et brouillard */
     const float (*gates)[4]; int ngates;                  /* course (mode COURSE) : portes x y z rayon, la derniere = arrivee */
     float startYaw;                                       /* orientation au depart de la course */
+    int style;                                            /* textures : 0 = metal (sol a dalles boulonnees), 1 = pierre et enduit */
+    const float *light;                                   /* eclairage propre (MAPL_*) ; NULL = graphismes/rendu.ini */
 } MapDef;
 #define NSP(a) (int)(sizeof a / sizeof a[0])
+/* eclairage propre a une carte : direction du soleil (3), couleur (3), force (1), lumiere du ciel (3), rebond (3),
+ * ambiance des objets (3) ; remplace ces valeurs de rendu.ini tant que la carte est chargee */
+enum { MAPL_SUNDIR = 0, MAPL_SUNCOL = 3, MAPL_SUNPOW = 6, MAPL_SKY = 7, MAPL_BOUNCE = 10, MAPL_OBJAMB = 13, MAPL_N = 16 };
+static void build_map_citadelle(void);                    /* src/monde/citadelle.c */
+static const float citadelleSpawns[][3] = {
+    { -10, 0, 62 }, { 10, 0, 62 }, { 0, 0, 56 }, { -20, 0, 60 }, { 20, 0, 60 },
+    { -10, 0, -60 }, { 10, 0, -60 }, { 0, 0, -55 }, { -4, 0, -66 }, { 4, 0, -66 },
+    { -60, 0, 10 }, { 60, 0, 10 }, { -6, 0, 20 }, { 6, 0, 20 },
+};
+static const float citadelleLight[MAPL_N] = { 0.5f, 0.78f, 0.38f,  1.0f, 0.9f, 0.74f,  1.25f,  0.5f, 0.6f, 0.82f,
+                                              0.3f, 0.24f, 0.17f,  0.55f, 0.56f, 0.62f };
 static const MapDef maps[] = {
     { "ARENE", build_map_arene, areneSpawns, NSP(areneSpawns), { 0, 0, 24 }, -1000,
       9, 18, MS(28), MS(48), 1.0f, { 0, 7, MS(36) }, -0.12f, 5, 1, 0, { 0.04f, 0.05f, 0.12f }, { 0.34f, 0.30f, 0.44f } },
@@ -397,6 +411,9 @@ static const MapDef maps[] = {
     { "LA TOILE", build_map_toile, toileSpawns, NSP(toileSpawns), { -60, 30, 64 }, -10,
       30, 50, 20, 60, 5, { -60, 40, 78 }, -0.12f, 6, 0, 5, { 0.02f, 0.02f, 0.09f }, { 0.28f, 0.13f, 0.36f },
       toileGates, NSP(toileGates), 0 },
+    { "LA CITADELLE", build_map_citadelle, citadelleSpawns, NSP(citadelleSpawns), { 0, 0, 56 }, -1000,
+      9, 16, 20, 55, 1.0f, { 0, 14, 66 }, -0.18f, 6, 1, 6, { 0.22f, 0.45f, 0.86f }, { 0.86f, 0.84f, 0.8f },
+      NULL, 0, 0, 1, citadelleLight },
 };
 #define NMAPS NSP(maps)
 static int curMap;                                        /* carte chargee */
@@ -406,8 +423,10 @@ static float map_lost_y(void) { return maps[curMap].killY > -999 ? maps[curMap].
 /* emprise de la carte (vue de dessus) : boite englobante horizontale ; mapFirst = 1 si boxes[0] est le sol qui la couvre */
 static Box mapBox;
 static int mapFirst;
+static void decor_reset(void);                            /* src/monde/decor.c */
 static void build_level(int m) {
     nb = 0; npu = 0;
+    decor_reset();
     maps[m >= 0 && m < NMAPS ? m : 0].build();
     mapBox.mn = boxes[0].mn; mapBox.mx = boxes[0].mx;
     for (int i = 1; i < nb; i++) {

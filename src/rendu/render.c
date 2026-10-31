@@ -3,9 +3,9 @@
 
 /* F5 : relit graphismes/rendu.ini et les textures, puis refait textures, lightmaps et ville */
 static void gfx_reload(void) {
-    GLuint t[4] = { texGrid, texWall, texGrime, texDot };
+    GLuint t[6] = { texGrid, texWall, texGrime, texDot, texStone, texPlaster };
     gfx_load_all();
-    glDeleteTextures(4, t);
+    glDeleteTextures(6, t);
     make_textures();
     for (int i = 0; i < MAXB; i++)
         for (int f = 0; f < 6; f++)

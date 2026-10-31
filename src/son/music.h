@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------ */
 /* music.h : DESIGN DE LA MUSIQUE de VELOCITY (hard techno)            */
 /*                                                                     */
-/* Sequenceur synthetise, un morceau par carte (Arene, Puits, Canyon, Boucle, Dojo, Toile). Ce fichier contient    */
+/* Sequenceur synthetise, un morceau par carte (Arene, Puits, Canyon, Boucle, Dojo, Toile, Citadelle). Ce fichier contient    */
 /* les morceaux (tracks[]) ET le moteur ; main.c l'inclut, et          */
 /* musique.c (musique.exe) permet de l'ecouter sans lancer le jeu.     */
 /*                                                                     */
@@ -288,6 +288,37 @@ static const Track tracks[] = {
           { RS,RS,0,0, RS,RS,0,0, RS,RS,0,0, RS,RS,0,0 }, { 24,RS,24,28, RS,26,RS,24, 21,RS,24,RS, 19,RS,16,RS }, FX_CRASH },
       },
       { 0, 2, 4, 7, 9, 12, 14, 16, 19 }, MUS_SAW, 0.0f },
+
+    /* LA CITADELLE : groove a mi-tempo sous le soleil, en sol dorien, 98 BPM. Kick sur 1 et 3, caisse claire sur le 3e
+     * temps (demi-tempo), hats serres qui roulent, basse longue et ronde, lead pince facon guitare qui repond. */
+    { "Citadelle", 98.0f, 3.0f, 98.0f,                    /* sol (sol2) */
+      32,
+      { 0,0,1,1, 2,2,3,4,   2,3,2,4, 5,5,6,7,   3,4,3,7, 2,3,4,7,   5,5,6,7, 3,4,7,4 },
+      { 3,4,3,7, 2,3,4,7,   3,4,3,4, 5,5,6,7,   3,7,3,4, 3,4,7,7,   5,5,6,7, 3,4,7,4 },
+      { 0, 0, -2, -2,  3, 3, -4, 0 },
+      {
+        /* 0 intro : hats et lead seul */
+        { 0x0000, 0, 0x5555, 0, { R16 }, { 12,RS,RS,15, RS,RS,17,RS, RS,RS,19,RS, 17,RS,15,RS }, 0 },
+        /* 1 + kick et basse longue */
+        { 0x0101, 0, 0x5555, 0, { 0,RS,RS,RS, RS,RS,RS,RS, 0,RS,RS,RS, RS,RS,-2,RS }, { R16 }, 0 },
+        /* 2 groove complet */
+        { 0x0101, 0x1000, 0xFFFF, 0x0040,
+          { 0,RS,RS,RS, RS,RS,RS,0, RS,RS,3,RS, RS,RS,-2,RS }, { R16 }, 0 },
+        /* 3 phrase A */
+        { 0x0121, 0x1000, 0xFFFF, 0x0040,
+          { 0,RS,RS,RS, RS,RS,RS,0, RS,RS,3,RS, RS,RS,-2,RS }, { 12,RS,15,RS, 17,RS,19,17, RS,15,RS,12, RS,RS,10,RS }, 0 },
+        /* 4 phrase B (reponse) */
+        { 0x0121, 0x1000, 0xFFFF, 0x0040,
+          { 5,RS,RS,RS, RS,RS,RS,5, RS,RS,3,RS, RS,RS,2,RS }, { 17,RS,RS,19, RS,21,RS,19, 17,RS,15,RS, 14,RS,12,RS }, 0 },
+        /* 5 break : lead seul, longues notes */
+        { 0x0000, 0, 0x1111, 0, { R16 }, { 24,RS,RS,RS, RS,RS,RS,RS, 22,RS,RS,RS, 21,RS,RS,RS }, FX_CRASH },
+        /* 6 montee : roulement de hats et de caisse */
+        { 0x0101, 0xF000, 0xFFFF, 0, { 0,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, { 12,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, FX_RISER },
+        /* 7 refrain */
+        { 0x0125, 0x1000, 0xFFFF, 0x4040,
+          { 0,RS,0,RS, RS,RS,RS,0, RS,RS,3,RS, 5,RS,-2,RS }, { 24,RS,22,21, RS,19,RS,17, 19,RS,RS,15, 17,RS,12,RS }, FX_CRASH },
+      },
+      { 0, 2, 3, 5, 7, 9, 10, 12, 14 }, MUS_PLUCK, 0.10f },
 };
 #define NTRACKS ((int)(sizeof tracks / sizeof tracks[0]))
 

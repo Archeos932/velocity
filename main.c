@@ -20,6 +20,8 @@
 #include "src/son/audio.c"                       /* mixeur waveOut / AudioQueue, sons synthetises, musique */
 
 #include "src/monde/carte.c"                     /* carte en boites (AABB), recharges, collisions, rayons */
+#include "src/monde/decor.c"                     /* decor maille : colonnes, arches, coupoles, toits, arbres... */
+#include "src/monde/citadelle.c"                 /* LA CITADELLE : carte detaillee, pierre et enduit au soleil */
 #include "src/monde/entites.c"                   /* structures du jeu : joueur P, ennemis, pieces, projectiles, particules */
 
 #include "src/reseau/etat_partage.c"             /* ce que le jeu doit savoir du reseau avant le reseau : joueurs NP, equipes, declarations */
