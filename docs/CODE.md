@@ -388,6 +388,7 @@ vitesse **relative** : foncer sur quelqu'un qui fonce sur vous frappe très fort
 | Textes | `popText`/`popT` (centre), `msg`/`msgT` (gros titre), `streakLostT` | `snprintf` + durée | `game_tick` | `draw_hud` |
 | Effets d'écran | vignette, lignes de vitesse | — | — | `draw_hud`, si `screenFx` |
 | Changement d'arme | `wpFlashAt` (temps réel `nowT`), `P.switchT` | `weapon_select` | — (`WP_FLASH_T` 0,9 s) | `draw_hud` : nom de l'arme sous le viseur + emplacement surligné ; `draw_viewmodel` : l'arme remonte en pivotant. Capture : `--shot changearme.bmp` |
+| Fonds du HUD | `gxHudPanel` (`hud_fonds` dans `rendu.ini`, 0 = aucun) | — | — | `hud_panel` (`interface/texte.c`) sous les infos de partie, la mêlée, la vitesse, la chaîne de tir, le panneau d'arme ; un fond par ligne de killfeed |
 | Barre de vie | `hpGhost`, `hpHitAt`, `hpHealAt` | — | `hp_ghost_tick` (appelé par `draw_hud`, temps réel) : la partie perdue reste `HP_GHOST_HOLD` 0,4 s puis se vide à `HP_GHOST_RATE` 80 PV/s | `draw_hud` : traînée blanche puis rouge, éclat vert au soin, graduations tous les 25 PV. Capture : `--shot vie.bmp` |
 
 ### 3.7 Audio synthétisé

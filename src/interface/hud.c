@@ -371,6 +371,7 @@ static void draw_hud(void) {
     }
 
     /* vitesse */
+    hud_panel(cx - 92, winH - 120.0f, 184, 108);
     float hs = hlen(P.vel), k = clampf((hs - RUN_SPEED) / 20, 0, 1);
     snprintf(buf, sizeof buf, "%.1f", hs);
     text_c(2, cx, winH - 70.0f, buf, 1 - k * 0.6f, 1 - k * 0.2f, 1, 1);
@@ -425,6 +426,7 @@ static void draw_hud(void) {
         else if (P.meleeKind == MK_FIST)                  /* Poings : points du combo deja gagnes */
             snprintf(mt, sizeof mt, "%s  +%d pts (%d/%d)", meleeNames[MK_FIST], meleePts[MK_FIST], P.fistPts, PTS_FIST_COMBO_MAX);
         else snprintf(mt, sizeof mt, "%s%s  +%d pts", meleeNames[P.meleeKind], aimed ? " (vs cible)" : "", meleePts[P.meleeKind]);
+        hud_panel(mx - 12, by - 104.0f, fmaxf(204, fontW[0] * (float)strlen(mt) + 24), 78);
         text(0, mx, by - 78.0f, mt, blink ? 1.0f : 0.75f, blink ? 0.6f : 0.75f, blink ? 0.2f : 0.85f, 0.9f);
     }
     float pvp = dmMode ? PVP_SCALE : 1.0f, mcd = MELEE_CD;
@@ -507,6 +509,7 @@ static void draw_hud(void) {
 
     /* axe tir : chaine de touches successives */
     float sx = compact ? winW - 214.0f : cx + 130;
+    hud_panel(sx - 12, by - 104.0f, STREAK_MAX * 23.0f + 20, 78);
     text(0, sx, by - 78.0f, "CHAINE DE TIR", 0.75f, 0.75f, 0.85f, 0.9f);
     float sk = clampf(shotStreak / (float)STREAK_MAX, 0, 1);
     snprintf(buf, sizeof buf, "x%.2f", streak_mult());
@@ -556,6 +559,10 @@ static void draw_hud(void) {
     const char *wn = wnBuf;
     int dryW = !wp_has_ammo(P.weapon);
     if (P.weapon == WP_SAW) dryW = saw_mine() && saw_mine()->sawState == SAW_PLANTED;   /* elle ne reviendra pas seule */
+    {                                                     /* fond du panneau d'arme (pieces, nom, emplacements) */
+        float pw = fmaxf(fontW[1] * (float)strlen(wn), fontW[0] * 40.0f) + 24;
+        hud_panel(winW - 18.0f - pw, winH - 122.0f, pw, 116);
+    }
     text(1, winW - 30.0f - fontW[1] * (float)strlen(wn), winH - 60.0f, wn, dryW ? 1.0f : ad->r, dryW ? 0.3f : ad->g,
          dryW ? 0.3f : ad->b, 1);
     rect(winW - 230.0f, winH - 40.0f, 200, 8, 0.1f, 0.1f, 0.15f, 0.7f);
@@ -695,6 +702,7 @@ static void draw_hud(void) {
     }
 
     /* infos de partie */
+    hud_panel(16, 14, fontW[0] * (dmMode ? 40.0f : 26.0f) + 28, dmMode && teamSize > 0 ? 64 : 100);
     if (dmMode) {
         int count = 0, rank = 1;
         for (int i = 0; i < MAXP; i++) {

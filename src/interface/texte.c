@@ -119,3 +119,10 @@ static void rect_vgrad(float x, float y, float w, float h, float r, float g, flo
     glColor4f(r, g, b, aBot); glVertex2f(x + w, y + h); glVertex2f(x, y + h);
     glEnd();
 }
+
+/* fond du HUD : plaque sombre (opacite gxHudPanel, rendu.ini) et liseré clair en haut, pour lire sur un ciel clair */
+static void hud_panel(float x, float y, float w, float h) {
+    if (gxHudPanel <= 0) return;
+    rect(x, y, w, h, 0.02f, 0.025f, 0.06f, gxHudPanel);
+    rect(x, y, w, 2, 0.6f, 0.75f, 1, gxHudPanel * 0.8f);
+}

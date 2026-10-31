@@ -78,7 +78,9 @@ static void draw_killfeed(void) {
             const float *c = teamCol[NP[f->killer].team & 1];
             r = 0.55f + 0.45f * c[0]; g = 0.55f + 0.45f * c[1]; b = 0.55f + 0.45f * c[2];
         }
-        text(0, winW - 30.0f - fontW[0] * (float)strlen(buf), 64 + k * 26.0f, buf, r, g, b, clampf(f->t, 0, 1));
+        float tw = fontW[0] * (float)strlen(buf);
+        if (gxHudPanel > 0) rect(winW - 40.0f - tw, 64 + k * 26.0f - 19, tw + 20, 25, 0.02f, 0.025f, 0.06f, gxHudPanel * clampf(f->t, 0, 1));
+        text(0, winW - 30.0f - tw, 64 + k * 26.0f, buf, r, g, b, clampf(f->t, 0, 1));
     }
 }
 
