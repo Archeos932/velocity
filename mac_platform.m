@@ -286,6 +286,7 @@ static void handle_event(NSEvent *e) {
         return;
     case NSEventTypeScrollWheel: {
         float d = (float)[e scrollingDeltaY];
+        if ([e momentumPhase] != NSEventPhaseNone) return;   /* inertie apres le geste : ignoree */
         if ([e hasPreciseScrollingDeltas]) {              /* pave tactile : un cran tous les 12 points */
             scrollAcc += d;
             if (fabsf(scrollAcc) >= 12) { scrollAcc = 0; plat_wheel(); }

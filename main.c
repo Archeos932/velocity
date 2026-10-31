@@ -447,6 +447,8 @@ enum { AP_HIT, AP_KILL, AP_PARRY, AP_CELL, AP_LOST, AP_COUNT };   /* origine des
 #define PICKUP_BIG         150     /* grande cellule (endroits exposes) */
 #define REFUND_UNDO_T      0.5f    /* coup declare pare par l'hote : on rend ses points s'il a moins de 0,5 s */
 #define SWITCH_TIME        0.22f   /* changement d'arme */
+#define WHEEL_QUIET        0.15    /* molette : repos (s) qui separe deux gestes ; une rafale = un seul changement */
+#define WHEEL_COOLDOWN     0.30    /* molette : delai minimal (s) entre deux changements */
 #define DRYFIRE_CD         0.35f   /* delai entre deux clics a sec */
 #define ST_MASK            0xF0    /* NetPState.pad : bits 4-7 = etats d'arme, bits 0-3 = meleeKind */
 
@@ -12965,7 +12967,20 @@ static void in_button_up(int code) {
     if (code == K_LMB) { uiDown = 0; uiDrag = 0; }
 }
 
+/* Molette : un geste (une rafale d'evenements, inertie comprise) = un seul appui. Un evenement n'est garde que
+   si la molette etait au repos depuis WHEEL_QUIET et que le dernier appui date d'au moins WHEEL_COOLDOWN. */
+static double wheelLastEv = -1e9, wheelLastOk = -1e9;
+static int wheel_accept(double t) {
+    int ok = t - wheelLastEv >= WHEEL_QUIET && t - wheelLastOk >= WHEEL_COOLDOWN;
+    wheelLastEv = t;
+    if (ok) wheelLastOk = t;
+    return ok;
+}
+
 static void in_wheel(void) {
+    LARGE_INTEGER n, fq;
+    QueryPerformanceCounter(&n); QueryPerformanceFrequency(&fq);
+    if (!wheel_accept((double)n.QuadPart / (double)fq.QuadPart)) return;
     if (waitAct >= 0) assign_bind(K_WHEEL);
     else if (captured) latch[K_WHEEL] = 1;
 }
@@ -13225,6 +13240,16 @@ static void run_tests(const char *path) {
     FILE *f = fopen(path, "w");
     if (!f) return;
     build_level();
+
+    {                                                     /* molette : une rafale (inertie) = un seul changement */
+        int burst = 0, two = 0;
+        for (int i = 0; i < 120; i++) burst += wheel_accept(100.0 + i * 0.016);   /* 2 s d'evenements toutes les 16 ms */
+        two += wheel_accept(200.0); two += wheel_accept(200.6);                      /* deux crans espaces */
+        int quick = wheel_accept(300.0) + wheel_accept(300.2 + WHEEL_QUIET);        /* second cran trop tot */
+        fprintf(f, "molette : rafale de 2 s=%d, deux crans a 0,6 s=%d, deux crans a 0,35 s=%d (attendu 1, 2, 2)\n",
+                burst, two, quick);
+        wheelLastEv = wheelLastOk = -1e9;
+    }
 
     reset_game();                                         /* escalier -> plateforme centrale */
     P.pos = P.prevPos = v3(0, 0, ms(14) + 0.6f); P.yaw = 0;

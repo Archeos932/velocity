@@ -361,7 +361,9 @@ Deux couches :
 1. **Touches physiques** — `wndproc` remplit `keys[code]` (tenu) et `latch[code]` (appuyé depuis le
    dernier tick). Les codes 0 à 255 sont des **scancodes** (`(lp >> 16) & 0xFF` dans `wndproc`, donc indépendants
    de la disposition AZERTY/QWERTY), 256 et plus sont la souris : `K_LMB`, `K_RMB`, `K_MMB`, `K_X1`,
-   `K_X2`, `K_WHEEL` (la molette n'existe qu'en « appui », jamais « tenue »).
+   `K_X2`, `K_WHEEL` (la molette n'existe qu'en « appui », jamais « tenue »). `wheel_accept` filtre la molette :
+   une rafale d'événements (roue libre, inertie) ne compte qu'une fois — repos `WHEEL_QUIET` 0,15 s entre deux
+   gestes, `WHEEL_COOLDOWN` 0,3 s entre deux changements ; sur macOS la phase d'inertie (`momentumPhase`) est ignorée.
 2. **Actions** — le jeu ne lit **que** `act[A_*]` (tenu ce tick) et `actP[A_*]` (appuyé ce tick).
    `input_poll`, appelé au début de `game_tick`, construit ces tableaux à partir de `binds[a][0..1]`
    (deux touches par action, 0 = aucune) **et** de `botHeld`/`botPress`, puis vide `latch` et
