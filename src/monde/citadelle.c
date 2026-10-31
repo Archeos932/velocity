@@ -371,7 +371,7 @@ static void build_map_citadelle(void) {
     dc_roof(v3(20, 6.8f, -48), v3(56, 6.8f, -20), 4.0f, 0, 0.8f, ctTile, ctWhite);
     for (int k = 1; k <= 3; k++) ct_hidden(20, 6.8f, -48 + 14 * k / 4.0f, 56, 6.8f + 4 * k / 4.0f, -20 - 14 * k / 4.0f);
     for (int s = 0; s < 4; s++) {                         /* etals : table, cagettes de fruits */
-        float sx = 28 + 9.0f * (s % 3), sz = s < 3 ? -39 : -29;
+        float sx = 28 + 9.0f * (s % 3), sz = s < 3 ? -39.0f : -29.0f;
         dc_bevel(v3(sx - 1.6f, 0.9f, sz - 0.7f), v3(sx + 1.6f, 1.05f, sz + 0.7f), 0.03f, ctWood);
         for (int l = 0; l < 4; l++) dc_bevel(v3(sx - 1.5f + (l & 1) * 2.8f, 0, sz - 0.6f + (l >> 1) * 1.0f), v3(sx - 1.3f + (l & 1) * 2.8f, 0.9f, sz - 0.4f + (l >> 1) * 1.0f), 0.02f, ctWood);
         for (int c = 0; c < 3; c++) {
