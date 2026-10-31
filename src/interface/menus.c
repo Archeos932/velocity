@@ -84,8 +84,10 @@ static void draw_settings(float cx, float cy) {
     snprintf(buf, sizeof buf, "Impact frames (flashs) : %s", impactFrames ? "OUI" : "NON");
     if (button(lx, y, lw, 44, buf)) impactFrames = !impactFrames;
     y += 50;
-    snprintf(buf, sizeof buf, "Effets d'ecran : %s", screenFx ? "OUI" : "NON");
-    if (button(lx, y, lw, 44, buf)) screenFx = !screenFx;
+    snprintf(buf, sizeof buf, "EFFETS : %s", screenFx ? "OUI" : "NON");
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) screenFx = !screenFx;
+    snprintf(buf, sizeof buf, "2e ECRAN:%s", secondScreen ? "CARTE" : "NON");   /* carte de la partie sur l'autre ecran */
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) secondScreen = !secondScreen;
     y += 50;
     snprintf(buf, sizeof buf, "OMBRES : %s", gfxShadows ? "OUI" : "NON");   /* graphismes : deux demi-boutons */
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) gfxShadows = !gfxShadows;

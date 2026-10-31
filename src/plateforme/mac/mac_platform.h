@@ -18,6 +18,9 @@ void mac_quit(void);
 void mac_shutdown(void);
 void mac_key_name(int sc, char *out, int n);                            /* nom d'un scancode Windows selon le clavier */
 int  mac_make_font(unsigned base, int px, int *cw, int *ch);            /* 224 listes d'affichage (CP1252 32..255) */
+int  mac_map_update(int want);                                          /* second ecran : ouvre/deplace/ferme ; 1 si ouvert */
+int  mac_map_begin(int *w, int *h);                                     /* rend son contexte courant ; 0 si ferme */
+void mac_map_end(void);                                                 /* affiche, puis revient au contexte du jeu */
 
 /* --- audio : n tampons mono 16 bits, remplis par le fil principal --- */
 int  mac_audio_open(int rate, int nbuf, int buflen);

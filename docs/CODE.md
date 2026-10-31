@@ -110,8 +110,8 @@ velocity/
 │   ├── perso/        skins.c (modeles et animation des personnages)
 │   ├── rendu/        base, textures, eclairage (lightmaps), modeles, armes_rendu, viewmodel, joueurs,
 │   │                 ciel_ombres_bloom, render.c (l'image complete)
-│   ├── interface/    texte.c, config.c (velocity.ini), menus.c, scores.c, hud.c
-│   ├── plateforme/   fenetre.c (Win32 + gestionnaires d'entrees communs), demarrage.c (WinMain, boucle)
+│   ├── interface/    texte.c, config.c (velocity.ini), menus.c, scores.c, hud.c, carte_ecran.c (2e ecran)
+│   ├── plateforme/   fenetre.c (Win32 + entrees communes), second_ecran.c, demarrage.c (WinMain, boucle)
 │   │   └── mac/      mac_platform.m / .h, mac_compat.h (port macOS, voir §8)
 │   └── tests/        tests.c (--shot, --test)
 ├── graphismes/       rendu.ini, ambiances, textures .bmp : modifiables sans recompiler (F5)
@@ -159,7 +159,9 @@ velocity/
 | `interface/hud.c` | HUD | `melee_preview`, `draw_radar`, `draw_hud` |
 | `rendu/ciel_ombres_bloom.c` | ciel, ombres, bloom (voir §3.12) | `draw_sky_dome`, `draw_dyn_shadows`, `bloom_apply` |
 | `effets/monde_fx.c` | effets du monde | `draw_world_marks`, `draw_world_glow`, `draw_weather`, `storm_tick`, `draw_flare` |
+| `interface/carte_ecran.c` | second écran : carte et stats (§3.15) | `draw_map_screen`, `maps_draw_map`, `maps_draw_panel` |
 | `rendu/render.c` | image complète | `gfx_reload`, `render` |
+| `plateforme/second_ecran.c` | fenêtre du second écran | `map_update`, `map_begin`, `map_end`, `second_screen_frame` |
 | `plateforme/fenetre.c` | fenêtre et entrées | `in_key_down`, `in_wheel`, `wheel_accept`, `wndproc`, `plat_*` |
 | `tests/tests.c` | outils de test (§6) | `save_bmp`, `*_test_*`, `run_tests` |
 | `plateforme/demarrage.c` | point d'entrée | `music_follow_game`, `do_action`, `WinMain` / `velocity_main` |
@@ -587,6 +589,23 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
 - **Radar des alliés** (`draw_radar`) : mode équipes, en haut à gauche.
 - **Anticrénelage** : macOS demande un format 4x MSAA (`src/plateforme/mac/mac_platform.m`), sinon le format simple. Pas encore sous
   Windows (il faudrait `wglChoosePixelFormatARB`).
+
+### 3.15 Second écran : carte de la partie
+
+Si un deuxième écran est branché, une fenêtre sans bordure le couvre et affiche **la carte vue de dessus en direct**
+(blocs ombrés selon leur hauteur, jump pads, recharges, pièces, roquettes, ennemis en solo ; joueurs en flèches à leur
+couleur avec nom, PV et traînée de 2 s ; mon cône de vision) et **les statistiques** (mode, chrono, scores d'équipe,
+classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, arme, derniers kills).
+
+- Dessin : `src/interface/carte_ecran.c` (`draw_map_screen(w, h)`, ne dépend d'aucun état laissé par `render`).
+- Fenêtre : `src/plateforme/second_ecran.c`. `second_screen_frame(dt)` est appelé après chaque image : toutes les
+  `SCREEN_POLL_T` (1 s) `map_update` recompte les écrans (branché, débranché, fenêtre du jeu déplacée), puis la carte
+  est redessinée à `SCREEN_MAP_FPS` (30). Elle a son propre contexte OpenGL **partagé** avec celui du jeu (police,
+  textures) — Windows : `wglShareLists`, fenêtre `WS_EX_NOACTIVATE` ; macOS : `mac_map_update/begin/end`,
+  `NSOpenGLContext ... shareContext:gCtx`, fenêtre qui ignore la souris. Pas de synchro verticale sur ce contexte
+  (sinon deux attentes par image).
+- Réglage : PARAMETRES > « 2e ECRAN : CARTE / NON », `second_ecran=` dans `velocity.ini`. Jamais en `--bot`/`--shot`.
+- Capture : `--shot carte.bmp` (solo), `carte_dm.bmp`, `carte_dm_equipes.bmp` dessinent cet écran dans la fenêtre du jeu.
 
 ## 4. Réseau LAN
 

@@ -64,6 +64,7 @@ static int sc_of_vk(int vk) {
 static NSWindow *gWin;
 static VView *gView;
 static NSOpenGLContext *gCtx;
+static NSOpenGLPixelFormat *gPf;                         /* garde pour le second ecran (contexte partage) */
 static VDelegate *gDel;
 static int gQuit, gCaptured, gCursorHidden, gFull;
 static NSRect gPrevFrame;
@@ -136,6 +137,7 @@ int mac_window_create(int w, int h, const char *title, int visible) {
         NSOpenGLPixelFormat *pf = visible ? [[NSOpenGLPixelFormat alloc] initWithAttributes:ms] : nil;
         if (!pf) pf = [[NSOpenGLPixelFormat alloc] initWithAttributes:at];
         if (!pf) return 0;
+        gPf = pf;
         gCtx = [[NSOpenGLContext alloc] initWithFormat:pf shareContext:nil];
         if (!gCtx) return 0;
 
@@ -200,7 +202,67 @@ void mac_set_capture(int on) {
     }
 }
 
+/* --- second ecran : fenetre sans bordure sur un autre moniteur, contexte partage avec le jeu --- */
+static NSWindow *gMapWin;
+static VView *gMapView;
+static NSOpenGLContext *gMapCtx;
+
+static void map_close(void) {
+    if (!gMapWin) return;
+    [gMapCtx clearDrawable];
+    [gMapWin orderOut:nil];
+    gMapCtx = nil; gMapView = nil; gMapWin = nil;
+    [gCtx makeCurrentContext];
+}
+
+int mac_map_update(int want) {
+    @autoreleasepool {
+        NSScreen *mine = [gWin screen] ? [gWin screen] : [NSScreen mainScreen], *other = nil;
+        if (want)
+            for (NSScreen *s in [NSScreen screens])
+                if (s != mine) { other = s; break; }
+        if (!other) { map_close(); return 0; }
+        NSRect fr = [other frame];
+        if (gMapWin) {
+            if (!NSEqualRects([gMapWin frame], fr)) { [gMapWin setFrame:fr display:YES]; [gMapCtx update]; }
+            return 1;
+        }
+        gMapWin = [[NSWindow alloc] initWithContentRect:fr styleMask:NSWindowStyleMaskBorderless
+                                                backing:NSBackingStoreBuffered defer:NO];
+        [gMapWin setReleasedWhenClosed:NO];
+        [gMapWin setIgnoresMouseEvents:YES];              /* ne prend ni la souris ni le clavier du jeu */
+        [gMapWin setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorStationary];
+        [gMapWin setBackgroundColor:[NSColor blackColor]];
+        gMapView = [[VView alloc] initWithFrame:NSMakeRect(0, 0, fr.size.width, fr.size.height)];
+        [gMapView setWantsBestResolutionOpenGLSurface:NO];
+        [gMapWin setContentView:gMapView];
+        [gMapWin setFrame:fr display:NO];
+        gMapCtx = [[NSOpenGLContext alloc] initWithFormat:gPf shareContext:gCtx];
+        if (!gMapCtx) { [gMapWin orderOut:nil]; gMapWin = nil; gMapView = nil; return 0; }
+        [gMapWin orderFront:nil];
+        [gMapCtx setView:gMapView];
+        GLint zero = 0;                                   /* pas de synchro verticale : elle ralentirait le jeu */
+        [gMapCtx setValues:&zero forParameter:NSOpenGLContextParameterSwapInterval];
+        [gCtx makeCurrentContext];
+        return 1;
+    }
+}
+
+int mac_map_begin(int *w, int *h) {
+    if (!gMapCtx) return 0;
+    NSSize sz = [gMapView bounds].size;
+    *w = (int)sz.width; *h = (int)sz.height;
+    [gMapCtx makeCurrentContext];
+    return 1;
+}
+
+void mac_map_end(void) {
+    [gMapCtx flushBuffer];
+    [gCtx makeCurrentContext];
+}
+
 void mac_shutdown(void) {
+    map_close();
     mac_set_capture(0);
     if (gFull) mac_set_fullscreen(0);
     [NSOpenGLContext clearCurrentContext];

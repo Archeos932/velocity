@@ -147,7 +147,7 @@ static int velocity_main(const char *cmd) {
     memcpy(binds, bindDefault, sizeof binds);
     if (cmd && strncmp(cmd, "--test ", 7) == 0) { run_tests(cmd + 7); return 0; }
     const char *shotPath = NULL;
-    if (cmd && strncmp(cmd, "--shot ", 7) == 0) { shotMode = 1; shotPath = cmd + 7; }
+    if (cmd && strncmp(cmd, "--shot ", 7) == 0) { shotMode = 1; shotPath = cmd + 7; shotMap = strstr(shotPath, "carte") != NULL; }
 
     /* mode bot : velocity.exe --bot host|join [--name N] [--time S] [--log fichier] [--botshot fichier.bmp] [--loadout a,b[,m]] */
     {
@@ -597,6 +597,7 @@ static int velocity_main(const char *cmd) {
 #else
             mac_swap();
 #endif
+            second_screen_frame(dt);                      /* carte sur le deuxieme ecran, s'il y en a un */
         }
         tesla_audio();                                    /* Tesla : boucles sonores des arcs */
         music_follow_game();
@@ -694,6 +695,7 @@ done:
     set_capture(0);
 #ifdef _WIN32
     if (audio_ok) { waveOutReset(wout); waveOutClose(wout); }
+    map_update(0);                                        /* ferme la fenetre du second ecran */
     wglMakeCurrent(NULL, NULL);
     wglDeleteContext(rc);
 #else

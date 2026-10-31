@@ -30,6 +30,7 @@ static void BT(int k) {
     last = n;
 }
 static void render(float alpha, float frameDt) {
+    if (shotMap) { draw_map_screen(winW, winH); return; }   /* --shot carte*.bmp : capture du second ecran */
     BT(0);
     glViewport(0, 0, winW, winH);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);

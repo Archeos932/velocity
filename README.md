@@ -19,7 +19,7 @@ src/
   graphismes/          lecture de graphismes/rendu.ini (ambiances, qualite)
   rendu/               textures, eclairage, ciel, ombres, bloom, arme en main, image finale
   effets/              particules, impacts, neons, meteo
-  interface/           menus, HUD, scores, police, velocity.ini
+  interface/           menus, HUD, scores, police, velocity.ini, carte du 2e ecran
   son/                 sons synthetises et musique
   monde/               carte et collisions
   solo/                ennemis et vagues

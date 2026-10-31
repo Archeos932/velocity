@@ -225,6 +225,15 @@ static void run_tests(const char *path) {
         hpGhost = hpLast = 100; hpHitAt = hpHealAt = -10;
     }
 
+    {                                                     /* second ecran : trainee de la carte, coupee au respawn */
+        MapsPl pl = { v3(0, 0, 0), 0, 100, 1, 0, 0, NULL, "t" };
+        for (int i = 0; i < 40; i++) { pl.pos = v3(i * 0.5f, 0, 0); nowT = 300 + i * 0.1; maps_trail_tick(&pl, 1); }
+        int full = mapsTrailN[0];
+        pl.pos = v3(-60, 0, 0); nowT = 305; maps_trail_tick(&pl, 1);   /* teleporte (respawn) */
+        fprintf(f, "carte 2e ecran : points de trainee=%d, apres un respawn=%d (attendu %d, 1)\n", full, mapsTrailN[0], MAPS_TRAIL);
+        mapsTrailN[0] = 0; nowT = 0; mapsTrailT = 0;
+    }
+
     reset_game();                                         /* escalier -> plateforme centrale */
     P.pos = P.prevPos = v3(0, 0, ms(14) + 0.6f); P.yaw = 0;
     act[A_FWD] = 1;

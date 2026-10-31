@@ -95,9 +95,11 @@
 
 #include "src/effets/monde_fx.c"                 /* effets du monde : neons, lumieres, marques, fumee, meteo */
 
+#include "src/interface/carte_ecran.c"           /* second ecran : carte vue de dessus et statistiques de la partie */
 #include "src/rendu/render.c"                    /* rechargement F5 et render() : l'image complete */
 
 #include "src/plateforme/fenetre.c"              /* fenetre, entrees clavier/souris (Windows et macOS) */
+#include "src/plateforme/second_ecran.c"         /* second ecran : fenetre sur l'autre moniteur (Windows et macOS) */
 
 #include "src/tests/tests.c"                     /* captures --shot et tests automatiques --test */
 
