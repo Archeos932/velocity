@@ -344,6 +344,69 @@ static void maps_draw_3d(float x0, float y0, float S, int scrW, int scrH, const 
     }
 }
 
+/* ---- courbe de vitesse : un point toutes les MAPS_SPD_DT s par joueur, toute la partie ---- */
+#define MAPS_SPD_DT 0.5
+#define MAPS_SPD_N  1300                                  /* 650 s : un match (MATCH_TIME) et sa fin */
+static unsigned char mapsSpd[MAXP + 1][MAPS_SPD_N];       /* vitesse horizontale x 4 (0 a 63 m/s) ; MAXP : moi en solo */
+static unsigned char mapsSpdOn[MAXP + 1][MAPS_SPD_N];     /* le joueur etait-il la (et vivant) a ce moment ? */
+static int mapsSpdN;
+static double mapsSpdT;
+
+static void maps_speed_reset(void) { mapsSpdN = 0; mapsSpdT = nowT; }
+
+static void maps_speed_tick(void) {
+    if (nowT - mapsSpdT < MAPS_SPD_DT || mapsSpdN >= MAPS_SPD_N || matchOver) return;
+    mapsSpdT = nowT;
+    for (int i = 0; i <= MAXP; i++) {
+        float v = 0; int on = 0;
+        if (!dmMode) { if (i == MAXP) { v = hlen(P.vel); on = !P.dead; } }
+        else if (i < MAXP && NP[i].active) {
+            int me = i == myId && !spectating;
+            v = me ? hlen(P.vel) : hlen(np_vel(i));
+            on = me ? !P.dead : NP[i].alive;
+        }
+        mapsSpd[i][mapsSpdN] = (unsigned char)clampf(v * 4, 0, 255);
+        mapsSpdOn[i][mapsSpdN] = (unsigned char)on;
+    }
+    mapsSpdN++;
+}
+
+/* courbes des joueurs visibles : 60 dernieres secondes pendant la partie, toute la partie a la fin */
+static void maps_draw_speed(float x, float y, float w, float h) {
+    char buf[32];
+    int n1 = mapsSpdN, n0 = matchOver ? 0 : (int)fmaxf(0, mapsSpdN - 60 / MAPS_SPD_DT);
+    float vmax = 30;
+    for (int i = 0; i <= MAXP; i++)
+        for (int k = n0; k < n1; k++) vmax = fmaxf(vmax, mapsSpd[i][k] / 4.0f);
+    vmax = ceilf(vmax / 10) * 10;
+    rect(x, y, w, h, 0.05f, 0.06f, 0.1f, 1);
+    for (float g = 10; g < vmax; g += 10) {               /* graduations tous les 10 m/s */
+        float gy = y + h - h * g / vmax;
+        rect(x, gy, w, 1, 0.4f, 0.5f, 0.7f, 0.18f);
+        snprintf(buf, sizeof buf, "%.0f", g);
+        text(0, x + 4, gy - 2, buf, 0.5f, 0.6f, 0.75f, 0.7f);
+    }
+    if (n1 - n0 < 2) return;
+    float span = matchOver ? (float)(n1 - 1) : (float)(60 / MAPS_SPD_DT);
+    glLineWidth(2);
+    for (int i = 0; i <= MAXP; i++) {
+        if (dmMode ? (i == MAXP || !NP[i].active || !maps_sees(i)) : i != MAXP) continue;
+        const float *c = dmMode ? pcolor(i) : NULL;
+        int self = dmMode ? i == myId : 1;
+        float al = self ? 1.0f : 0.75f;
+        if (self) glLineWidth(3);
+        glColor4f(c ? c[0] : 0.6f, c ? c[1] : 0.95f, c ? c[2] : 1, al);
+        glBegin(GL_LINE_STRIP);
+        for (int k = n0; k < n1; k++) {
+            if (!mapsSpdOn[i][k]) { glEnd(); glBegin(GL_LINE_STRIP); continue; }   /* mort : la courbe s'interrompt */
+            glVertex2f(x + w * (k - n0) / fmaxf(span, 1), y + h - h * (mapsSpd[i][k] / 4.0f) / vmax);
+        }
+        glEnd();
+        glLineWidth(2);
+    }
+    glLineWidth(1);
+}
+
 static float maps_title(float x, float y, const char *s) {   /* intitule de rubrique, renvoie la ligne suivante */
     text(0, x, y, s, 0.5f, 0.75f, 1, 0.9f);
     rect(x, y + 8, 60, 2, 0.5f, 0.75f, 1, 0.6f);
@@ -373,12 +436,12 @@ static void maps_draw_panel(float x, float y, float w, float h) {
             for (int t = 0; t < 2; t++) {
                 const float *c = teamCol[t];
                 float bx = x + t * (w * 0.5f + 6), bw = w * 0.5f - 6;
-                rect(bx, y, bw, 70, c[0] * 0.25f, c[1] * 0.25f, c[2] * 0.25f, 1);
+                rect(bx, y, bw, 58, c[0] * 0.25f, c[1] * 0.25f, c[2] * 0.25f, 1);
                 rect(bx, y, bw * clampf(team_score(t) / (float)team_frag_limit(teamSize), 0, 1), 6, c[0], c[1], c[2], 1);
                 snprintf(buf, sizeof buf, "%s  %d", teamNames[t], team_score(t));
-                text(1, bx + 14, y + 48, buf, c[0], c[1], c[2], 1);
+                text(1, bx + 14, y + 42, buf, c[0], c[1], c[2], 1);
             }
-            y += 96;
+            y += 80;
         }
         y = maps_title(x, y, "CLASSEMENT");
         int order[MAXP], n = 0;
@@ -394,7 +457,7 @@ static void maps_draw_panel(float x, float y, float w, float h) {
             int i = order[k];
             const float *c = pcolor(i);
             float al = NP[i].alive ? 1.0f : 0.5f;
-            if (i == myId) rect(x - 8, y - 26, w + 16, 36, 1, 1, 1, 0.07f);
+            if (i == myId) rect(x - 8, y - 25, w + 16, 32, 1, 1, 1, 0.07f);
             rect(x - 8, y + 6, (w + 16) * clampf(NP[i].kills / (float)(lim > 0 ? lim : 1), 0, 1), 3, c[0], c[1], c[2], 0.7f);
             snprintf(buf, sizeof buf, "%d. %s", k + 1, NP[i].name);
             text(1, x, y, buf, c[0], c[1], c[2], al);
@@ -402,7 +465,7 @@ static void maps_draw_panel(float x, float y, float w, float h) {
             snprintf(buf, sizeof buf, "%d", NP[i].deaths); text(1, x + w * 0.68f, y, buf, 0.8f, 0.8f, 0.85f, al);
             snprintf(buf, sizeof buf, "%.1f", NP[i].kills / (float)(NP[i].deaths > 0 ? NP[i].deaths : 1));
             text(1, x + w * 0.84f, y, buf, 0.8f, 0.8f, 0.85f, al);
-            y += 40;
+            y += 34;
         }
         y += 16;
     } else {                                              /* solo : vague, score */
@@ -429,18 +492,24 @@ static void maps_draw_panel(float x, float y, float w, float h) {
         y += 18;
         rect(x, y, w, 6, 0.1f, 0.1f, 0.15f, 1);
         rect(x, y, w * clampf(sp / 40, 0, 1), 6, 0.4f, 0.9f, 1, 1);
-        y += 40;
+        y += 30;
         const AmmoDef *ad = &ammoDef[P.weapon];
         snprintf(buf, sizeof buf, "%s  %d/%d", ad->name, P.ammo[P.weapon], ad->max);
         text(1, x, y, buf, ad->r, ad->g, ad->b, 1);
         snprintf(buf, sizeof buf, "%d PV", (int)ceilf(P.hp));
         text(1, x + w - fontW[1] * (float)strlen(buf), y, buf, P.hp < 35 ? 1.0f : 0.8f, P.hp < 35 ? 0.35f : 1.0f, 0.5f, 1);
-        y += 56;
+        y += 46;
     }
 
-    if (dmMode) {                                         /* derniers evenements */
+    if (yMax - y > 140) {                                 /* courbe de vitesse */
+        y = maps_title(x, y, matchOver ? "VITESSE (m/s) - TOUTE LA PARTIE" : "VITESSE (m/s) - 60 DERNIERES s");
+        maps_draw_speed(x, y - 18, w, 100);
+        y += 110;
+    }
+
+    if (dmMode && yMax - y > 60) {                        /* derniers evenements */
         y = maps_title(x, y, "DERNIERS KILLS");
-        for (int k = 0; k < 6; k++) {
+        for (int k = 0; k < 6 && y < yMax; k++) {
             KillFeed *f = &kfeed[k];
             if (f->t <= 0) continue;
             if (f->info) snprintf(buf, sizeof buf, "%s %s", pname(f->victim), f->info == 1 ? "a rejoint" : "a quitte");
@@ -452,6 +521,16 @@ static void maps_draw_panel(float x, float y, float w, float h) {
             y += 28;
         }
     }
+}
+
+static void maps_shot_fill(void) {                       /* --shot carte*.bmp : une minute de vitesses inventees */
+    mapsSpdN = 120; mapsSpdT = nowT + 1e6;
+    for (int i = 0; i <= MAXP; i++)
+        for (int k = 0; k < mapsSpdN; k++) {
+            float v = 14 + 9 * sinf(k * 0.11f + i * 1.7f) + 6 * sinf(k * 0.37f + i) + (k % 40 > 34 ? 18 : 0);
+            mapsSpd[i][k] = (unsigned char)clampf(v * 4, 0, 255);
+            mapsSpdOn[i][k] = !(i == 1 && k > 70 && k < 82);   /* une mort au milieu */
+        }
 }
 
 static void draw_map_screen(int w, int h) {
@@ -467,11 +546,18 @@ static void draw_map_screen(int w, int h) {
     if (appState != APP_GAME || nb < 1) {                 /* hors partie : ecran d'attente */
         mapsMaxSpeed = 0;
         for (int i = 0; i <= MAXP; i++) mapsTrailN[i] = 0;
+        maps_speed_reset();
         text_c(2, w * 0.5f, h * 0.5f, "VELOCITY", 1, 1, 1, 1);
         text_c(0, w * 0.5f, h * 0.5f + 50, "la carte de la partie s'affichera ici", 0.6f, 0.7f, 0.85f, 0.6f + 0.4f * sinf((float)nowT * 2));
         return;
     }
+    {                                                     /* nouveau match : chrono revenu en arriere */
+        static float lastMatchT;
+        if (dmMode && matchT + 1 < lastMatchT) { maps_speed_reset(); mapsMaxSpeed = 0; }
+        lastMatchT = matchT;
+    }
     if (!P.dead) mapsMaxSpeed = fmaxf(mapsMaxSpeed, hlen(P.vel));
+    maps_speed_tick();
 
     MapsPl pl[MAXP + 1];
     int n = maps_players(pl);

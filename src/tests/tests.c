@@ -251,6 +251,17 @@ static void run_tests(const char *path) {
         dmMode = sDm; teamSize = sTs; myId = sId; matchOver = sOver;
     }
 
+    {                                                     /* second ecran : courbe de vitesse, un point toutes les 0,5 s */
+        reset_game();
+        int sDm = dmMode; dmMode = 0;
+        nowT = 400; maps_speed_reset();
+        P.vel = v3(20, 0, 0);
+        for (int i = 1; i <= 120; i++) { nowT = 400 + i * (1.0 / 60); maps_speed_tick(); }   /* 2 s a 60 images/s */
+        int pts = mapsSpdN; float v = mapsSpd[MAXP][0] / 4.0f;
+        fprintf(f, "courbe de vitesse : points en 2 s=%d, vitesse notee=%.0f (attendu 4, 20)\n", pts, v);
+        maps_speed_reset(); dmMode = sDm; nowT = 0; P.vel = v3(0, 0, 0);
+    }
+
     reset_game();                                         /* escalier -> plateforme centrale */
     P.pos = P.prevPos = v3(0, 0, ms(14) + 0.6f); P.yaw = 0;
     act[A_FWD] = 1;

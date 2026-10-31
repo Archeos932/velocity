@@ -609,6 +609,9 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
 - **Deux vues** : de dessus (`maps_draw_map`) ou **en 3D inclinée** (`maps_draw_3d` : blocs ombrés par face, pions à
   la couleur des joueurs avec flèche du regard, ombre au sol et poteau pointillé quand ils sont en l'air, traînées en
   3D ; noms projetés par `maps_proj3`). Angle, recul et champ : `carte_3d` dans `graphismes/rendu.ini` (`gxMap3d`).
+- **Courbe de vitesse** (`maps_speed_tick`, `maps_draw_speed`) : un point toutes les 0,5 s par joueur (`mapsSpd`,
+  vitesse ×4 sur un octet), interrompue pendant les morts ; 60 dernières secondes en partie, toute la partie à la fin.
+  Seulement les joueurs visibles (`maps_sees`). Remise à zéro hors partie et quand le chrono du match repart.
 - Réglage : PARAMETRES > « 2e ECRAN : NON / HAUT / 3D » (`second_ecran=`, `carte_vue=` dans `velocity.ini`).
   Jamais en `--bot`/`--shot`. Capture de la vue 3D : `--shot carte3d.bmp`, `carte3d_dm.bmp`…
 - Capture : `--shot carte.bmp` (solo), `carte_dm.bmp`, `carte_dm_equipes.bmp` dessinent cet écran dans la fenêtre du jeu.
