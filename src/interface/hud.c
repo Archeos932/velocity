@@ -320,6 +320,7 @@ static void draw_style_hud(void) {
     }
 }
 
+static void draw_race_hud(void);                          /* course_hud.c */
 static void draw_hud(void) {
     glMatrixMode(GL_PROJECTION); glLoadIdentity();
     glOrtho(0, winW, winH, 0, -1, 1);
@@ -810,7 +811,7 @@ static void draw_hud(void) {
     }
 
     /* infos de partie */
-    hud_panel(16, 14, fontW[0] * (dmMode ? 40.0f : 26.0f) + 28, dmMode && teamSize > 0 ? 64.0f : 100.0f);
+    if (!raceOn) hud_panel(16, 14, fontW[0] * (dmMode ? 40.0f : 26.0f) + 28, dmMode && teamSize > 0 ? 64.0f : 100.0f);
     if (dmMode) {
         int count = 0, rank = 1;
         for (int i = 0; i < MAXP; i++) {
@@ -848,7 +849,7 @@ static void draw_hud(void) {
             text(0, 30, 104, buf, 0.7f, 0.7f, 0.8f, 0.9f);
         }
         draw_killfeed();
-    } else {
+    } else if (!raceOn) {                                 /* (course : son propre chrono, course_hud.c) */
         int remaining = enemies_alive() + toSpawn;
         snprintf(buf, sizeof buf, "VAGUE %d   ennemis %d", wave, remaining);
         text(0, 30, 40, buf, 0.85f, 0.85f, 0.95f, 1);
@@ -866,6 +867,7 @@ static void draw_hud(void) {
 
     if (popT > 0) text_c(1, cx, cy - 40 - (1.2f - popT) * 30, popText, 1, 0.85f, 0.3f, clampf(popT, 0, 1));
     draw_style_hud();                                     /* jauge de style */
+    draw_race_hud();                                      /* course : chrono, decompte, arrivee */
     if (msgT > 0) text_c(2, cx, cy - 120, msg, 1, 1, 1, clampf(msgT, 0, 1));
 
     if (dmMode && matchOver) {

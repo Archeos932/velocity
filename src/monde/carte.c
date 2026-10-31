@@ -294,6 +294,64 @@ static const float dojoSpawns[][3] = {
     { 16, 0, 0 }, { -16, 0, 0 }, { 0, 0, 16 }, { 0, 0, -16 }, { 16, 0, 16 }, { -16, 0, -16 }, { -16, 0, 16 }, { 16, 0, -16 },
 };
 
+/* La Toile : course au grappin. Quatre avenues de gratte-ciel au-dessus du vide (killY -10), en serpentin :
+ * nord le long de x = -60, est le long de z = -62, sud par x = 0 (plongee sous une passerelle basse, puis montee),
+ * est par z = 62, nord par x = 60 jusqu'au toit d'arrivee (y 50). Les tours servent d'ancres partout ; quelques
+ * cubes flottants au milieu des avenues pour se balancer. Portes de la course : toileGates (MapDef.gates). */
+static void toile_tower(float x, float z, float hw, float hd, float h, int k) {
+    static const float tc[4][3] = { { 0.13f, 0.15f, 0.28f }, { 0.17f, 0.14f, 0.30f }, { 0.11f, 0.19f, 0.27f }, { 0.20f, 0.17f, 0.34f } };
+    const float *c = tc[k & 3];
+    addbox(x - hw, -12, z - hd, x + hw, h, z + hd, c[0], c[1], c[2]);
+    if (k % 3 == 0) {                                     /* enseigne neon sur une face (magenta : lueur des neons) */
+        float y = h * 0.55f + 4;
+        addbox(x - hw - 0.3f, y, z - 1.5f, x - hw, y + 6, z + 1.5f, 0.85f, 0.3f, 0.75f);
+    }
+    addbox(x - hw + 0.5f, h, z - hd + 0.5f, x + hw - 0.5f, h + 1.2f, z + hd - 0.5f, c[0] * 1.3f, c[1] * 1.3f, c[2] * 1.3f);   /* toit */
+}
+static void build_map_toile(void) {
+    static const float tw[][4] = {                        /* centre x, z, hauteur, teinte : tours 8 x 8 */
+        /* avenue 1 (x = -60, vers le nord) */
+        { -74, 44, 46, 0 }, { -74, 24, 54, 1 }, { -74, 4, 42, 2 }, { -74, -16, 58, 3 }, { -74, -36, 48, 0 },
+        { -46, 34, 50, 1 }, { -46, 14, 40, 2 }, { -46, -6, 56, 3 }, { -46, -26, 44, 0 },
+        /* avenue 2 (z = -62, vers l'est) */
+        { -48, -74, 52, 1 }, { -28, -74, 46, 2 }, { -8, -74, 56, 3 }, { -38, -50, 40, 0 }, { -20, -50, 48, 1 },
+        /* avenue 3 (x = 0, vers le sud) */
+        { -14, -36, 50, 2 }, { -14, -16, 38, 3 }, { -14, 4, 44, 0 }, { -14, 24, 58, 1 }, { -14, 44, 46, 2 },
+        { 14, -46, 44, 3 }, { 14, -26, 54, 0 }, { 14, -6, 36, 1 }, { 14, 14, 50, 2 }, { 14, 34, 42, 3 },
+        /* avenue 4 (z = 62, vers l'est) */
+        { 10, 74, 44, 0 }, { 30, 74, 52, 1 }, { 50, 74, 46, 2 }, { 28, 48, 40, 3 }, { 42, 48, 50, 0 },
+        /* avenue 5 (x = 60, vers le nord) */
+        { 74, 44, 50, 1 }, { 74, 24, 58, 2 }, { 74, 4, 48, 3 }, { 74, -16, 62, 0 }, { 74, -36, 54, 1 },
+        { 46, 30, 44, 2 }, { 46, 10, 52, 3 }, { 46, -10, 46, 0 }, { 46, -28, 56, 1 },
+    };
+    for (int i = 0; i < (int)(sizeof tw / sizeof tw[0]); i++) toile_tower(tw[i][0], tw[i][1], 4, 4, tw[i][2], (int)tw[i][3]);
+    addbox(-66, -12, 58, -54, 30, 72, 0.22f, 0.24f, 0.36f);     /* toit de depart */
+    addbox(-64, 30, 71, -56, 33, 72, 0.9f, 0.75f, 0.2f);        /* bandeau de depart */
+    addbox(-70, -12, -78, -54, 22, -64, 0.18f, 0.20f, 0.32f);   /* toits de repos aux virages */
+    addbox(-6, -12, -78, 6, 24, -68, 0.18f, 0.20f, 0.32f);
+    addbox(-6, -12, 66, 8, 20, 78, 0.18f, 0.20f, 0.32f);
+    addbox(54, -12, 66, 68, 24, 78, 0.18f, 0.20f, 0.32f);
+    addbox(54, -12, -46, 66, 50, -34, 0.30f, 0.26f, 0.12f);     /* tour d'arrivee */
+    addbox(55, 50, -45, 65, 51, -35, 0.95f, 0.8f, 0.25f);       /* toit d'arrivee dore */
+    addbox(-16, 30, -70, -8, 32, -54, 0.35f, 0.32f, 0.5f);      /* passerelle (on passe dessous) */
+    addbox(-10, 26, -8, 10, 28, -4, 0.35f, 0.32f, 0.5f);        /* passerelle basse : plongee obligatoire */
+    static const float an[][3] = {                        /* ancres flottantes au milieu des avenues */
+        { -60, 52, 20 }, { -60, 50, -30 }, { -26, 50, -62 }, { 0, 48, -20 }, { 0, 54, 12 }, { 0, 56, 42 },
+        { 40, 52, 62 }, { 60, 58, 22 }, { 60, 62, -12 },
+    };
+    for (int i = 0; i < (int)(sizeof an / sizeof an[0]); i++) addanchor(an[i][0], an[i][1], an[i][2]);
+    addcell(60, 51, -40, PICKUP_BIG);
+    addcell(-62, 22, -70, PICKUP_SMALL); addcell(0, 24, -72, PICKUP_SMALL); addcell(1, 20, 72, PICKUP_SMALL); addcell(61, 24, 72, PICKUP_SMALL);
+}
+static const float toileSpawns[][3] = {
+    { -60, 30, 64 }, { -62, 22, -70 }, { 0, 24, -72 }, { 1, 20, 72 }, { 61, 24, 72 }, { 60, 51, -40 }, { -74, 59.2f, -16 }, { 74, 63.2f, -16 },
+};
+/* portes de la course : centre x, y, z et rayon (la derniere = arrivee) */
+static const float toileGates[][4] = {
+    { -60, 30, 38, 6 }, { -60, 34, 8, 6 }, { -60, 27, -22, 6 }, { -58, 32, -50, 6 }, { -34, 30, -62, 6 }, { -12, 22, -62, 5.5f },
+    { 0, 30, -36, 6 }, { 0, 18, -6, 5 }, { 0, 38, 24, 6 }, { 24, 30, 60, 6 }, { 58, 32, 40, 6 }, { 60, 42, 6, 6 }, { 60, 57, -40, 6 },
+};
+
 /* Arene : points de depart (anciennement dans pick_spawn, agrandis par MAP_S) */
 #define MS(v) ((v) * MAP_S)
 static const float areneSpawns[][3] = {
@@ -314,19 +372,24 @@ typedef struct {
     V3 menuCam; float menuPitch, specUp;                  /* camera du menu ; spectateur : specUp plus haut */
     int solo, music;
     float sky[3], fog[3];                                 /* haut du ciel ; horizon et brouillard */
+    const float (*gates)[4]; int ngates;                  /* course (mode COURSE) : portes x y z rayon, la derniere = arrivee */
+    float startYaw;                                       /* orientation au depart de la course */
 } MapDef;
 #define NSP(a) (int)(sizeof a / sizeof a[0])
 static const MapDef maps[] = {
     { "ARENE", build_map_arene, areneSpawns, NSP(areneSpawns), { 0, 0, 24 }, -1000,
       9, 18, MS(28), MS(48), 1.0f, { 0, 7, MS(36) }, -0.12f, 5, 1, 0, { 0.04f, 0.05f, 0.12f }, { 0.34f, 0.30f, 0.44f } },
     { "LE PUITS", build_map_puits, puitsSpawns, NSP(puitsSpawns), { 17.8f, 0, 17.8f }, -30,
-      10, 40, 4, 14, -8, { 0, 25, 0 }, -0.3f, 5, 0, 0, { 0.01f, 0.02f, 0.07f }, { 0.07f, 0.11f, 0.24f } },
+      10, 40, 4, 14, -8, { 0, 25, 0 }, -0.3f, 5, 0, 1, { 0.01f, 0.02f, 0.07f }, { 0.07f, 0.11f, 0.24f } },
     { "LE CANYON", build_map_canyon, canyonSpawns, NSP(canyonSpawns), { -60, 20, 10 }, -15,
-      24, 34, 10, 50, 18, { 0, 30, 0 }, -0.25f, 5, 0, 0, { 0.18f, 0.11f, 0.09f }, { 0.72f, 0.46f, 0.30f } },
+      24, 34, 10, 50, 18, { 0, 30, 0 }, -0.25f, 5, 0, 2, { 0.18f, 0.11f, 0.09f }, { 0.72f, 0.46f, 0.30f } },
     { "LA BOUCLE", build_map_boucle, boucleSpawns, NSP(boucleSpawns), { 10, 0, 26 }, -1000,
-      12, 18, 20, 50, 1.0f, { 0, 24, 0 }, -0.5f, 4, 1, 0, { 0.03f, 0.0f, 0.08f }, { 0.30f, 0.08f, 0.40f } },
+      12, 18, 20, 50, 1.0f, { 0, 24, 0 }, -0.5f, 4, 1, 3, { 0.03f, 0.0f, 0.08f }, { 0.30f, 0.08f, 0.40f } },
     { "LE DOJO", build_map_dojo, dojoSpawns, NSP(dojoSpawns), { 0, 0.5f, 4 }, -1000,
-      2.5f, 5.5f, 6, 15, 1.0f, { 0, 5, 15 }, -0.15f, 0, 1, 0, { 0.10f, 0.07f, 0.05f }, { 0.24f, 0.17f, 0.11f } },
+      2.5f, 5.5f, 6, 15, 1.0f, { 0, 5, 15 }, -0.15f, 0, 1, 4, { 0.10f, 0.07f, 0.05f }, { 0.24f, 0.17f, 0.11f } },
+    { "LA TOILE", build_map_toile, toileSpawns, NSP(toileSpawns), { -60, 30, 64 }, -10,
+      30, 50, 20, 60, 5, { -60, 40, 78 }, -0.12f, 6, 0, 5, { 0.02f, 0.02f, 0.09f }, { 0.28f, 0.13f, 0.36f },
+      toileGates, NSP(toileGates), 0 },
 };
 #define NMAPS NSP(maps)
 static int curMap;                                        /* carte chargee */

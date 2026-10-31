@@ -5,7 +5,7 @@
 /* Interface : menus, tableau des scores, joueurs distants             */
 /* ------------------------------------------------------------------ */
 enum { ACT_NONE, ACT_SOLO, ACT_HOST, ACT_BROWSE, ACT_QUIT, ACT_BACK, ACT_JOIN_FOUND, ACT_JOIN_IP, ACT_RESUME,
-       ACT_RESTART, ACT_LEAVE, ACT_FULLSCREEN, ACT_QUICK, ACT_SPEC_FOUND, ACT_VSBOT };
+       ACT_RESTART, ACT_LEAVE, ACT_FULLSCREEN, ACT_QUICK, ACT_SPEC_FOUND, ACT_VSBOT, ACT_RACE };
 static int settingsOpen, waitAct = -1, waitSlot, uiDown, uiDrag;
 static int fullscreen;
 static char cfgPath[MAX_PATH];

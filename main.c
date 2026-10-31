@@ -70,6 +70,7 @@
 #include "src/bots/bot.c"                        /* bots : visee, decisions */
 
 #include "src/combat/competences.c"              /* competences : MARQUE, CHARGE, RICOCHET, ALL IN ONE, MIRAGE (la piece en est une) */
+#include "src/jeu/course.c"                     /* mode COURSE : portes, chrono, fantome du record */
 #include "src/jeu/kill_zone.c"                  /* kill zone : chute dans le vide (killY de la carte), bots prudents au bord */
 
 #include "src/jeu/boucle.c"                      /* ramassage, game_tick (un pas de simulation), fx_tick */
@@ -97,7 +98,8 @@
 
 #include "src/rendu/joueurs.c"                   /* joueurs distants, scies et mines en monde, trainees, contours */
 
-#include "src/interface/hud.c"                   /* HUD : viseur, vie, munitions, radar */
+#include "src/interface/hud.c"
+#include "src/interface/course_hud.c"              /* mode COURSE : chrono, portes en 3D, fantome, record */                   /* HUD : viseur, vie, munitions, radar */
 
 #include "src/rendu/ciel_ombres_bloom.c"         /* ciel, ombres dynamiques, bloom */
 

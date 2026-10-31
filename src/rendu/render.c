@@ -330,6 +330,7 @@ static void render(float alpha, float frameDt) {
     glEnd();
     glDisable(GL_TEXTURE_2D);
     draw_map_fx();                                        /* bandes d'acceleration, plan de mort */
+    draw_race_world();                                    /* course : portes et fantome */
     draw_slam_marker();
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);

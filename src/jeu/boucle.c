@@ -94,6 +94,7 @@ static void game_tick(float dt) {
     if (spectating) { spec_tick(dt); return; }
 
     int rp = latch[SC_R];                                 /* R : recommencer (solo), non reaffectable */
+    if (raceOn && rp) { latch[SC_R] = 0; race_start(); return; }   /* course : R repart du depart */
     input_poll();
     int jp = actP[A_JUMP], dp = actP[A_DASH];
     int w1 = actP[A_WEAP1], w2 = actP[A_WEAP2];
@@ -120,6 +121,7 @@ static void game_tick(float dt) {
     }
 
     player_tick(dt, jp, dp);
+    race_tick(dt);                                        /* course : decompte, portes, chrono */
     style_tick(dt);
     if (maps[curMap].killY < -999) {                      /* carte fermee : sortie de la carte = chute (sinon void_check) */
         if (!P.dead && !fellOut && P.pos.y < FALL_DEATH_Y) {  /* sorti de la carte et tombe dans le vide : mort */
@@ -185,10 +187,10 @@ static void game_tick(float dt) {
     if (!P.dead && !wp_has_ammo(P.loadout[0]) && !wp_has_ammo(P.loadout[1])) dryT += dt;
     ammoGainT -= dt; dryHintT -= dt;
 
-    if (!dmMode) enemy_tick(dt);
+    if (!dmMode && !raceOn) enemy_tick(dt);
     proj_tick(dt);
     pickup_tick(dt);
-    if (!dmMode) wave_tick(dt);
+    if (!dmMode && !raceOn) wave_tick(dt);
     if (matchOver) matchEndT -= dt;
     if (netMode == NET_HOST) host_tick(dt);
     fx_tick(dt);

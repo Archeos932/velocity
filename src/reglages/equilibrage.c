@@ -162,6 +162,9 @@ enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_COUNT };
 #define STYLE_HURT_K     1.8f     /* points perdus par PV perdu */
 #define STYLE_DECAY      10.0f    /* baisse par seconde (rang D) ... */
 #define STYLE_DECAY_RANK 6.0f     /* ... plus 6 par rang au-dessus */
+
+/* Mode COURSE (src/jeu/course.c) */
+#define RACE_COUNTDOWN   3.0f     /* decompte avant le depart */
 #define MELEE_PARRIED_CD  1.0f    /* attaquant dont l'epee est paree : epee bloquee */
 #define MELEE_PARRY_GRACE 0.15f   /* tolerance de latence pour l'hote */
 

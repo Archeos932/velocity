@@ -8,7 +8,7 @@ static void music_follow_game(void) {
     if (appState != APP_GAME) { if (mus.track >= 0) music_set(-1, 0); return; }   /* menus : silence */
     if (mus.track < 0) {                                  /* entree en partie : depart avec fondu, variations differentes a chaque partie */
         musSeed = (unsigned)(nowT * 1000.0) * 2654435761u + 1u;
-        music_set(maps[curMap].music, 0);
+        music_set(maps[curMap].music < NTRACKS ? maps[curMap].music : 0, 0);
     }
     if (appState == APP_GAME && dmMode) {
         int lead = 0, second = 0;
@@ -35,7 +35,12 @@ static void do_action(void) {
     pendingAction = ACT_NONE;
     if (!myName[0]) snprintf(myName, sizeof myName, "joueur");
     if (a == ACT_SOLO || a == ACT_HOST || a == ACT_BROWSE || a == ACT_QUICK || a == ACT_VSBOT) cfg_save();
+    if (a != ACT_NONE && a != ACT_RESUME && a != ACT_RESTART && a != ACT_FULLSCREEN) raceOn = 0;   /* toute autre action quitte la course */
     switch (a) {
+    case ACT_RACE:                                        /* course au grappin (LA TOILE) */
+        net_shutdown();
+        race_start(); appState = APP_GAME; set_capture(1);
+        break;
     case ACT_SOLO:
         net_shutdown();
         if (curMap != (maps[menuMap].solo ? menuMap : 0)) load_map(maps[menuMap].solo ? menuMap : 0);
@@ -106,7 +111,8 @@ static void do_action(void) {
         set_capture(1);
         break;
     case ACT_RESTART:
-        reset_game(); set_capture(1);
+        if (raceOn) race_start(); else reset_game();
+        set_capture(1);
         break;
     case ACT_LEAVE:
         net_shutdown(); set_capture(0); appState = APP_MENU; menu_backdrop();
@@ -435,6 +441,34 @@ static int velocity_main(const char *cmd) {
         }
         matchT = 95;
         if (strstr(shotPath, "bench")) { bench_render(shotPath); return 0; }
+        render(1, TICK);
+        save_bmp(shotPath);
+        return 0;
+    }
+    if (shotMode && strstr(shotPath, "course")) {         /* mode COURSE : course.bmp (en route, fantome devant), course_depart, course_fin */
+        race_start(); appState = APP_GAME;
+        const MapDef *md = &maps[curMap];
+        raceBest = 61.37f;
+        for (int i = 0; i < md->ngates; i++) raceBestSplit[i] = 4.5f * (i + 1);
+        ghostBestN = 0;                                   /* fantome : tout droit de porte en porte, 4,5 s par porte */
+        for (int i = 0; i < md->ngates && ghostBestN < RACE_GMAX - 200; i++) {
+            V3 a = i ? race_gate(i - 1) : md->start, b = race_gate(i);
+            for (int k = 0; k < 135; k++) {
+                V3 p = vlerp(a, b, k / 135.0f);
+                ghostBest[ghostBestN][0] = p.x; ghostBest[ghostBestN][1] = p.y - 1.2f; ghostBest[ghostBestN][2] = p.z;
+                ghostBest[ghostBestN][3] = atan2f(b.x - a.x, -(b.z - a.z)); ghostBestN++;
+            }
+        }
+        if (!strstr(shotPath, "depart")) {
+            raceCount = 0; raceGate = 2; raceT = 11.2f; raceDelta = -0.42f; raceDeltaT = 1.5f;
+            V3 g = race_gate(2);
+            P.pos = P.prevPos = v3(-62, 31, 2 + 18); P.vel = v3(0, -2, -24); P.grounded = 0;
+            race_face(P.pos, 2); P.pitch = asinf(clampf((g.y - P.pos.y - 1.6f) / vlen(vsub(g, P.pos)), -1, 1));
+            P.hook = HOOK_ATTACHED; P.anchor = P.hookPos = v3(-46 - 4, 50, -6); P.ropeLen = 30;
+            style = 250; styleRank = ST_A;
+        } else raceCount = 2.4f;
+        if (strstr(shotPath, "fin")) { raceDone = 1; raceT = 58.94f; raceNewBest = 2; raceFalls = 1; styleTopRank = ST_S; P.hook = HOOK_NONE; }
+        gameTime = 3;
         render(1, TICK);
         save_bmp(shotPath);
         return 0;

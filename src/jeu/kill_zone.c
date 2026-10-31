@@ -7,6 +7,7 @@ static double voidSentT;
 static int voidPending, voidFalls;                        /* demande en cours ; mes chutes (journal du bot) */
 static void void_check(void) {
     float ky = maps[curMap].killY;
+    if (raceOn) { if (ky > -999 && P.pos.y < ky) race_respawn(); return; }   /* course : retour a la derniere porte */
     if (ky < -999 || spectating) return;
     if (P.dead) {                                         /* le corps s'arrete sous le plan : la camera ne tombe pas sans fin */
         if (P.pos.y < ky - 6) { P.pos.y = ky - 6; P.prevPos = P.pos; P.vel = v3(0, 0, 0); }

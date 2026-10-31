@@ -2936,6 +2936,44 @@ static void run_tests(const char *path) {
                     bot_lands(s, v3(0, JUMP_V, 0), maps[1].killY), bot_lands(s, v3(-15, JUMP_V, 0), maps[1].killY));
         }
 
+        {   /* --- Course (LA TOILE) : portes libres, passage dans l'ordre, chute = retour a la porte, arrivee, record --- */
+            int rm = race_map(), freeN = 0, outN = 0;
+            race_start();
+            const MapDef *md = &maps[curMap];
+            for (int i = 0; i < md->ngates; i++) {        /* chaque porte : le centre et 8 points a mi-rayon sont libres */
+                V3 c = race_gate(i);
+                int ok = pos_free(v3(c.x, c.y - 0.9f, c.z), 1.8f);
+                for (int s = 0; s < 8 && ok; s++) {
+                    float a = s * PI / 4, r = md->gates[i][3] * 0.5f;
+                    ok = pos_free(v3(c.x + cosf(a) * r, c.y - 0.9f + sinf(a) * r, c.z), 1.8f) || pos_free(v3(c.x, c.y - 0.9f + sinf(a) * r, c.z + cosf(a) * r), 1.8f);
+                }
+                freeN += ok;
+                outN += fabsf(c.x) > 78 || fabsf(c.z) > 78;
+            }
+            raceCount = 0; raceBest = 0; ghostBestN = 0;
+            float skipped = 0;
+            P.prevPos = P.pos = vsub(race_gate(1), v3(0, 0.9f, 0));   /* la porte 2 avant la 1 : ne compte pas */
+            race_tick(0.5f);
+            skipped = (float)raceGate;
+            for (int i = 0; i < md->ngates; i++) {
+                V3 c = vsub(race_gate(i), v3(0, 0.9f, 0)), prev = i ? vsub(race_gate(i - 1), v3(0, 0.9f, 0)) : md->start;
+                V3 d = vnorm(vsub(c, prev));
+                P.prevPos = vsub(c, vmul(d, 3)); P.pos = vadd(c, vmul(d, 0.5f));
+                race_tick(0.5f);
+                if (i == 4) {                             /* chute apres la 5e porte : retour a la porte 5 */
+                    P.pos = P.prevPos = v3(0, md->killY - 1, 0);
+                    void_check();
+                }
+            }
+            V3 back = P.pos;
+            fprintf(f, "course (%s) : %d portes, libres %d, hors carte %d, porte sautee comptee %.0f, arrivee %d en %.1f s, "
+                       "chutes %d, record %.1f, fantome %d positions (attendu %d, %d, 0, 0, 1, %.1f, 1, %.1f, > 0)\n",
+                    maps[rm].name, md->ngates, freeN, outN, skipped, raceDone, raceT, raceFalls, raceBest, ghostCurN,
+                    md->ngates, md->ngates, 0.5f * (md->ngates + 1), 0.5f * (md->ngates + 1));
+            (void)back;
+            raceOn = 0;
+            load_map(0); reset_game();
+        }
         {   /* --- Jauge de style : kill aerien a pleine vitesse, puis un deuxieme enchaine, un coup recu, et l'oubli --- */
             reset_game(); gameTime = 100;
             P.grounded = 0; P.vel = v3(25, 0, 0);
