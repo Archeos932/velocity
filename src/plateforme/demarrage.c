@@ -22,6 +22,8 @@ static void music_follow_game(void) {
             lead = a > b ? a : b; second = a > b ? b : a;
         }
         lvl = music_pvp_level(lead, second, fragLimit);
+    } else if (appState == APP_GAME && raceOn) {         /* course : la musique monte avec les portes */
+        lvl = raceCount > 0 ? 1 : 2 + raceGate * 6 / (maps[curMap].ngates > 0 ? maps[curMap].ngates : 1);
     } else if (appState == APP_GAME) {
         lvl = wave - 1;
     }

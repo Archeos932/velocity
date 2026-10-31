@@ -2757,6 +2757,24 @@ static void run_tests(const char *path) {
         netMode = nm0; dmMode = dm0; myId = id0;
     }
 
+    {                                                     /* un morceau par carte : chacun joue, en stereo, sans silence ni NaN */
+        char mb[512]; int n = 0, okN = 0;
+        for (int t = 0; t < NTRACKS; t++) {
+            double sum = 0, side = 0; int bad = 0;
+            float l, r;
+            musSeed = 3; music_set(t, 4);
+            for (int i = 0; i < 8 * SR; i++) { music_frame(&l, &r); if (l != l || r != r) bad = 1; sum += l * l + r * r; side += fabsf(l - r); }
+            float rms = (float)sqrt(sum / (16.0 * SR)), st = (float)(side / (8.0 * SR));
+            int ok = !bad && rms > 0.15f && rms < 0.8f && st > 0.005f;
+            okN += ok;
+            n += snprintf(mb + n, sizeof mb - n, "%s%s %.2f", t ? ", " : "", tracks[t].name, rms);
+        }
+        music_set(-1, 0);
+        int mapsOk = 1;
+        for (int m = 0; m < NMAPS; m++) mapsOk &= maps[m].music >= 0 && maps[m].music < NTRACKS;
+        fprintf(f, "musiques : %d morceaux (%s), corrects %d, chaque carte a le sien %d (attendu %d, rms 0,15 a 0,8, %d, 1)\n",
+                NTRACKS, mb, okN, mapsOk, NMAPS, NTRACKS);
+    }
     {                                                     /* stereo : le lead et les hats ne sont pas identiques a gauche et a droite */
         float l, r, diff = 0, tot = 0;
         musSeed = 1; music_set(0, 5);

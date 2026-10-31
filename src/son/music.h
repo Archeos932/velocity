@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------ */
 /* music.h : DESIGN DE LA MUSIQUE de VELOCITY (hard techno)            */
 /*                                                                     */
-/* Sequenceur synthetise, un morceau par carte. Ce fichier contient    */
+/* Sequenceur synthetise, un morceau par carte (Arene, Puits, Canyon, Boucle, Dojo, Toile). Ce fichier contient    */
 /* les morceaux (tracks[]) ET le moteur ; main.c l'inclut, et          */
 /* musique.c (musique.exe) permet de l'ecouter sans lancer le jeu.     */
 /*                                                                     */
@@ -58,7 +58,11 @@ typedef struct {
     const char *name; float bpm, bpmStep, root;
     int nsong; unsigned char song[MUS_SONG], songHi[MUS_SONG]; signed char prog[8];
     MusBar cells[MUS_CELLS];
+    signed char scale[9];                                 /* gamme des variations (tout a 0 : do re fa la, celle de l'Arene) */
+    unsigned char lead;                                   /* timbre du lead : MUS_SAW (supersaw), MUS_PLUCK (carre pince), MUS_BELL (cloche FM) */
+    float swing;                                          /* 0 = carre ; 0,1 a 0,2 = shuffle (les pas pairs durent plus) */
 } Track;
+enum { MUS_SAW, MUS_PLUCK, MUS_BELL };
 
 static const Track tracks[] = {
     /* Inspire de "Blood Rave" (Blade) : analyse du mp3 = 136 BPM, tonique do sans tierce (do re fa la, avec un do# de tension),
@@ -109,6 +113,181 @@ static const Track tracks[] = {
         { 0x1111, 0x1010, 0xAAAA, 0x4444,
           { 0,RS,0,RS, RS,RS,0,RS, 0,RS,0,RS, RS,RS,-5,RS }, { 12,RS,RS,RS, 12,RS,RS,RS, 12,RS,RS,RS, 12,RS,14,RS }, FX_CRASH },
       } },
+
+    /* LE PUITS : dub techno sombre en la phrygien, 124 BPM. Kick feutre, hats ouverts sur les contretemps, stabs de
+     * cloche FM qui resonnent dans l'echo, une basse qui respire ; le break laisse la cloche seule au fond du puits. */
+    { "Puits", 124.0f, 3.0f, 55.0f,                       /* la (la1), 124 BPM au niveau 0, 148 au niveau 8 */
+      32,
+      { 0,0,1,1, 2,2,3,3,   2,4,3,4, 5,5,6,7,   7,4,7,3, 2,4,3,4,   5,5,6,7, 7,4,7,3 },
+      { 7,4,7,3, 2,4,3,4,   7,4,7,4, 5,5,6,7,   7,4,7,3, 7,3,7,4,   5,5,6,7, 7,4,7,3 },
+      { 0, 0, 1, 0,  0, -2, 1, 0 },
+      {
+        /* 0 intro : kick seul et une note de basse */
+        { 0x1111, 0, 0, 0,
+          { 0,RS,RS,RS, RS,RS,RS,RS, RS,RS,0,RS, RS,RS,RS,RS }, { R16 }, 0 },
+        /* 1 + contretemps ouverts */
+        { 0x1111, 0, 0x2222, 0x4444,
+          { 0,RS,RS,RS, RS,RS,RS,RS, RS,RS,0,RS, RS,RS,-5,RS }, { R16 }, 0 },
+        /* 2 + rimshot */
+        { 0x1111, 0x1010, 0x2222, 0x4444,
+          { 0,RS,RS,0, RS,RS,RS,RS, RS,RS,0,RS, RS,RS,-4,RS }, { R16 }, 0 },
+        /* 3 cloches A */
+        { 0x1111, 0x1010, 0x2222, 0x4444,
+          { 0,RS,RS,0, RS,RS,RS,RS, RS,RS,0,RS, RS,RS,-5,RS }, { 12,RS,RS,RS, RS,RS,15,RS, RS,RS,RS,RS, 19,RS,RS,RS }, 0 },
+        /* 4 cloches B */
+        { 0x1111, 0x1010, 0xA2A2, 0x4444,
+          { 0,RS,RS,0, RS,RS,RS,RS, RS,RS,3,RS, RS,RS,-4,RS }, { 12,RS,RS,RS, RS,RS,13,RS, RS,RS,8,RS, RS,RS,RS,RS }, 0 },
+        /* 5 break : plus de kick, la cloche seule et les hats */
+        { 0x0000, 0, 0xAAAA, 0x0000,
+          { R16 }, { 24,RS,RS,RS, RS,RS,RS,RS, 20,RS,RS,RS, RS,RS,RS,RS }, FX_CRASH },
+        /* 6 montee */
+        { 0x1111, 0xF000, 0x2222, 0,
+          { 0,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, { 12,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, FX_RISER },
+        /* 7 retour lourd */
+        { 0x1111, 0x1010, 0x2222, 0x4444,
+          { 0,RS,0,RS, RS,RS,0,RS, 0,RS,RS,RS, 3,RS,RS,RS }, { 12,RS,15,RS, RS,RS,19,RS, RS,RS,15,RS, 13,RS,RS,RS }, FX_CRASH },
+      },
+      { 0, 1, 3, 7, 8, 12, 13, 15, 19 }, MUS_BELL, 0.0f },
+
+    /* LE CANYON : breakbeat du desert en mi phrygien dominant, 138 BPM avec du swing. Grosse caisse cassee, claps sur
+     * 2 et 4, basse qui galope, lead pince facon guitare de western ; au break, un appel de lead dans le vide. */
+    { "Canyon", 138.0f, 4.0f, 82.41f,                     /* mi (mi2) */
+      32,
+      { 0,0,1,1, 2,2,3,4,   2,2,3,4, 5,6,3,4,   2,7,3,4, 2,7,3,4,   5,6,7,4, 3,4,7,4 },
+      { 3,4,3,4, 7,4,3,4,   2,7,3,4, 5,6,7,4,   3,4,3,7, 2,7,3,4,   5,6,7,4, 3,4,7,4 },
+      { 0, 0, 1, 0,  0, 0, -2, 1 },
+      {
+        /* 0 intro : break seul */
+        { 0x0221, 0, 0, 0,
+          { 0,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, { R16 }, 0 },
+        /* 1 + hats */
+        { 0x0221, 0, 0x5555, 0x0000,
+          { 0,RS,RS,RS, RS,0,RS,RS, RS,0,RS,RS, RS,RS,RS,RS }, { R16 }, 0 },
+        /* 2 break complet, basse qui galope */
+        { 0x0221, 0x1010, 0x5555, 0x8080,
+          { 0,RS,0,1, RS,0,RS,RS, RS,0,RS,4, RS,RS,1,RS }, { R16 }, 0 },
+        /* 3 lead A : appel */
+        { 0x0221, 0x1010, 0x5555, 0x8080,
+          { 0,RS,0,1, RS,0,RS,RS, RS,0,RS,4, RS,RS,1,RS }, { 12,RS,13,RS, 16,RS,RS,RS, 17,RS,16,RS, 13,RS,12,RS }, 0 },
+        /* 4 lead B : reponse */
+        { 0x0221, 0x1010, 0x5555, 0x8080,
+          { 0,RS,0,1, RS,0,RS,RS, 5,RS,5,RS, 4,RS,1,RS }, { 19,RS,17,RS, 16,RS,13,RS, 12,RS,RS,RS, 13,RS,RS,RS }, 0 },
+        /* 5 break : claps en roulement, plus de basse */
+        { 0x0000, 0xAAAA, 0x5555, 0,
+          { R16 }, { 24,RS,RS,RS, RS,RS,RS,RS, 25,RS,RS,RS, RS,RS,RS,RS }, FX_CRASH },
+        /* 6 montee */
+        { 0x0221, 0xF000, 0x5555, 0,
+          { 0,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, { 12,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, FX_RISER },
+        /* 7 lead C : galop serre */
+        { 0x0A21, 0x1010, 0xFFFF, 0x8080,
+          { 0,0,RS,0, 0,RS,0,RS, 0,0,RS,0, 4,RS,1,RS }, { 12,12,RS,13, RS,16,RS,13, 12,RS,RS,8, RS,7,RS,RS }, 0 },
+      },
+      { 0, 1, 4, 5, 7, 8, 10, 12, 13 }, MUS_PLUCK, 0.14f },
+
+    /* LA BOUCLE : synthwave (outrun) en re mineur, 116 BPM. Basse en octaves sur les croches, arpeges pinces en
+     * doubles croches, claps larges sur 2 et 4 ; on roule de nuit autour de l'anneau. */
+    { "Boucle", 116.0f, 3.0f, 73.42f,                     /* re (re2) */
+      32,
+      { 0,0,1,1, 2,2,3,3,   2,4,3,5, 6,6,7,7,   3,3,4,5, 3,4,5,7,   6,6,7,7, 3,4,5,7 },
+      { 3,4,3,5, 7,7,3,5,   3,4,5,7, 6,6,7,7,   3,3,4,5, 3,4,5,7,   6,6,7,7, 3,4,5,7 },
+      { 0, 0, 0, 0,  -2, -2, -4, -5 },
+      {
+        /* 0 intro : kick et basse en octaves */
+        { 0x1111, 0, 0, 0,
+          { 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS }, { R16 }, 0 },
+        /* 1 + hats */
+        { 0x1111, 0, 0xAAAA, 0x0000,
+          { 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS }, { R16 }, 0 },
+        /* 2 + claps */
+        { 0x1111, 0x1010, 0xAAAA, 0x0000,
+          { 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS }, { R16 }, 0 },
+        /* 3 arpege A (re mineur) */
+        { 0x1111, 0x1010, 0xAAAA, 0x4444,
+          { 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS }, { 12,15,19,24, 19,15,12,15, 19,24,27,24, 19,15,19,24 }, 0 },
+        /* 4 arpege B */
+        { 0x1111, 0x1010, 0xAAAA, 0x4444,
+          { 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS }, { 12,17,20,24, 20,17,12,17, 20,24,29,24, 20,17,20,24 }, 0 },
+        /* 5 arpege C (montee) */
+        { 0x1111, 0x1010, 0xAAAA, 0x4444,
+          { 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS }, { 14,17,22,26, 22,17,14,17, 22,26,29,26, 22,26,29,31 }, FX_RISER },
+        /* 6 break : notes longues, plus de kick */
+        { 0x0000, 0x1010, 0xAAAA, 0,
+          { 0,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, { 24,RS,RS,RS, RS,RS,RS,RS, 22,RS,RS,RS, RS,RS,RS,RS }, FX_CRASH },
+        /* 7 melodie */
+        { 0x1111, 0x1010, 0xAAAA, 0x4444,
+          { 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS, 0,RS,12,RS }, { 24,RS,RS,22, RS,RS,19,RS, 17,RS,19,RS, 15,RS,RS,RS }, 0 },
+      },
+      { 0, 2, 3, 5, 7, 10, 12, 14, 15 }, MUS_PLUCK, 0.0f },
+
+    /* LE DOJO : drum and bass en do diese (gamme in japonaise), 170 BPM. Kick sur 1 et 3+, caisse claire sur 2 et 4,
+     * hats rapides, basse grave et pleine, cloches FM pentatoniques ; le break est un temple. */
+    { "Dojo", 170.0f, 2.0f, 69.3f,                        /* do diese (do#2) */
+      32,
+      { 0,0,1,1, 2,2,3,4,   2,3,2,4, 5,5,6,7,   3,4,3,4, 2,7,3,4,   5,5,6,7, 3,4,7,4 },
+      { 3,4,3,4, 7,4,3,4,   3,7,3,4, 5,5,6,7,   3,4,7,4, 3,7,3,4,   5,5,6,7, 3,4,7,4 },
+      { 0, 0, -2, 0,  0, 0, 3, -2 },
+      {
+        /* 0 intro : cloches et hats, pas de kick */
+        { 0x0000, 0, 0x5555, 0,
+          { R16 }, { 12,RS,RS,RS, 13,RS,RS,RS, 17,RS,RS,RS, 19,RS,RS,RS }, 0 },
+        /* 1 + break dnb */
+        { 0x0401, 0x1010, 0x5555, 0,
+          { 0,RS,RS,RS, RS,RS,RS,RS, RS,RS,0,RS, RS,RS,RS,RS }, { R16 }, 0 },
+        /* 2 break + basse */
+        { 0x0401, 0x1010, 0xFFFF, 0x0080,
+          { 0,RS,RS,RS, RS,RS,RS,-5, RS,RS,0,RS, RS,RS,1,RS }, { R16 }, 0 },
+        /* 3 cloches A */
+        { 0x0401, 0x1010, 0xFFFF, 0x0080,
+          { 0,RS,RS,RS, RS,RS,RS,-5, RS,RS,0,RS, RS,RS,1,RS }, { 12,RS,13,RS, RS,17,RS,RS, 19,RS,RS,20, RS,19,RS,17 }, 0 },
+        /* 4 cloches B */
+        { 0x0421, 0x1010, 0xFFFF, 0x0080,
+          { 0,RS,RS,RS, RS,RS,5,RS, RS,RS,0,RS, RS,1,RS,RS }, { 24,RS,RS,20, RS,19,RS,RS, 17,RS,13,RS, 12,RS,RS,RS }, 0 },
+        /* 5 temple : plus de kick, cloches longues */
+        { 0x0000, 0, 0x1111, 0,
+          { R16 }, { 24,RS,RS,RS, RS,RS,RS,RS, 25,RS,RS,RS, RS,RS,RS,RS }, FX_CRASH },
+        /* 6 montee */
+        { 0x0401, 0xF0F0, 0xFFFF, 0,
+          { 0,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, { 12,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, FX_RISER },
+        /* 7 rouleau */
+        { 0x0425, 0x1010, 0xFFFF, 0x0080,
+          { 0,RS,0,RS, RS,RS,-5,RS, RS,RS,0,RS, 1,RS,0,RS }, { 12,13,RS,17, RS,19,RS,20, 19,RS,17,RS, 13,RS,12,RS }, FX_CRASH },
+      },
+      { 0, 1, 5, 7, 8, 12, 13, 17, 19 }, MUS_BELL, 0.0f },
+
+    /* LA TOILE (course) : trance qui decolle, en fa majeur, 136 BPM. Basse sur les contretemps (rolling), supersaw
+     * en accords brises qui montent avec les portes, breaks avec risers : de quoi se balancer entre les tours. */
+    { "Toile", 136.0f, 3.0f, 87.31f,                      /* fa (fa2) */
+      32,
+      { 0,1,1,2, 2,3,4,3,   4,5,6,7, 3,4,3,4,   5,5,6,7, 3,4,3,4,   2,3,4,6, 7,3,4,7 },
+      { 3,4,3,4, 6,7,3,4,   3,4,5,6, 7,3,4,7,   3,4,3,4, 5,6,7,7,   3,4,3,4, 6,7,3,4 },
+      { 0, 0, -3, -3,  -5, -5, -1, 0 },
+      {
+        /* 0 intro : kick et hats ouverts */
+        { 0x1111, 0, 0, 0x4444,
+          { R16 }, { R16 }, 0 },
+        /* 1 + basse roulante */
+        { 0x1111, 0, 0xAAAA, 0x4444,
+          { RS,RS,0,0, RS,RS,0,0, RS,RS,0,0, RS,RS,0,0 }, { R16 }, 0 },
+        /* 2 + claps */
+        { 0x1111, 0x1010, 0xAAAA, 0x4444,
+          { RS,RS,0,0, RS,RS,0,0, RS,RS,0,0, RS,RS,0,0 }, { R16 }, 0 },
+        /* 3 accord brise A */
+        { 0x1111, 0x1010, 0xAAAA, 0x4444,
+          { RS,RS,0,0, RS,RS,0,0, RS,RS,0,0, RS,RS,0,0 }, { 12,RS,16,RS, 19,RS,16,RS, 24,RS,19,RS, 16,RS,19,RS }, 0 },
+        /* 4 accord brise B : la phrase monte */
+        { 0x1111, 0x1010, 0xAAAA, 0x4444,
+          { RS,RS,0,0, RS,RS,0,0, RS,RS,0,0, RS,RS,2,2 }, { 14,RS,19,RS, 21,RS,19,RS, 26,RS,21,RS, 24,RS,28,RS }, 0 },
+        /* 5 break : plus de kick, notes longues, crash */
+        { 0x0000, 0, 0xAAAA, 0,
+          { R16 }, { 24,RS,RS,RS, RS,RS,RS,RS, 26,RS,RS,RS, 28,RS,RS,RS }, FX_CRASH },
+        /* 6 montee : roulement de claps */
+        { 0x1111, 0xAAAA, 0xAAAA, 0,
+          { RS,RS,0,RS, RS,RS,0,RS, RS,RS,0,RS, RS,RS,0,RS }, { 24,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS, RS,RS,RS,RS }, FX_RISER },
+        /* 7 drop : la melodie entiere */
+        { 0x1111, 0x1010, 0xAAAA, 0x4444,
+          { RS,RS,0,0, RS,RS,0,0, RS,RS,0,0, RS,RS,0,0 }, { 24,RS,24,28, RS,26,RS,24, 21,RS,24,RS, 19,RS,16,RS }, FX_CRASH },
+      },
+      { 0, 2, 4, 7, 9, 12, 14, 16, 19 }, MUS_SAW, 0.0f },
 };
 #define NTRACKS ((int)(sizeof tracks / sizeof tracks[0]))
 
@@ -153,12 +332,13 @@ static float mus_hash(int bar, int step, int sel) {
 
 static const float musDet[7] = { -1.0f, -0.62f, -0.25f, 0.0f, 0.25f, 0.62f, 1.0f };   /* desaccord et position des 7 scies */
 static const signed char musScale[] = { 0, 2, 5, 9, 12, 14, 17, 21, 24 };   /* do ré fa la, sans tierce */
-static int mus_scale_step(int n, int dir) {               /* note voisine dans la gamme */
+static int mus_scale_step(int n, int dir) {               /* note voisine dans la gamme du morceau */
+    const signed char *sc = tracks[mus.track].scale[1] ? tracks[mus.track].scale : musScale;
     int best = 0;
-    for (int i = 1; i < (int)sizeof musScale; i++)
-        if (abs(n - musScale[i]) < abs(n - musScale[best])) best = i;
+    for (int i = 1; i < 9; i++)
+        if (abs(n - sc[i]) < abs(n - sc[best])) best = i;
     best += dir;
-    return musScale[best < 0 ? 0 : best >= (int)sizeof musScale ? (int)sizeof musScale - 1 : best];
+    return sc[best < 0 ? 0 : best >= 9 ? 8 : best];
 }
 
 static void mus_apply_level(void) {                       /* tempo, saturation et clarte du niveau courant */
@@ -261,7 +441,10 @@ static void music_step(void) {
 static void music_frame(float *outL, float *outR) {
     *outL = *outR = 0;
     if (mus.track < 0) return;
-    if (++mus.cnt >= mus.sps) { mus.cnt -= mus.sps; music_step(); }
+    {                                                     /* swing : les pas pairs durent plus, les impairs moins */
+        float sw = tracks[mus.track].swing, len = mus.sps * ((mus.step & 1) ? 1 - sw : 1 + sw);
+        if (++mus.cnt >= len) { mus.cnt -= len; music_step(); }
+    }
     mus.fade = fminf(mus.fade + 1.0f / (1.5f * SR), 1.0f);
     float c = 0, l = 0, r = 0, duck;
     mus.kT += 1.0f / SR;
@@ -295,16 +478,36 @@ static void music_frame(float *outL, float *outR) {
     float rk = 0.03f + 0.55f * mus.rise, rg = mus.rise * mus.rise * 0.7f;
     mus.rLp += rk * (n - mus.rLp); mus.rLp2 += rk * (n2 - mus.rLp2);
     l += mus.rLp * rg; r += mus.rLp2 * rg;
-    /* lead : SUPERSAW, 7 scies desaccordees (celle du centre plus forte), chacune a sa place, saturees, filtre qui se ferme */
-    float swL = 0, swR = 0;
-    for (int i = 0; i < 7; i++) {
-        mus.lPh[i] += mus.lFreq * (1 + musDet[i] * mus.detune) / SR; if (mus.lPh[i] >= 1) mus.lPh[i] -= 1;
-        float s = (2 * mus.lPh[i] - 1) * (i == 3 ? 1.0f : 0.7f);
-        swL += s * mus.lpl[i]; swR += s * mus.lpr[i];
+    float leadL, leadR, ld = mus.lEnv * duck * 0.34f;
+    int lt = tracks[mus.track].lead;
+    if (lt == MUS_SAW) {
+        /* lead : SUPERSAW, 7 scies desaccordees (celle du centre plus forte), chacune a sa place, saturees, filtre qui se ferme */
+        float swL = 0, swR = 0;
+        for (int i = 0; i < 7; i++) {
+            mus.lPh[i] += mus.lFreq * (1 + musDet[i] * mus.detune) / SR; if (mus.lPh[i] >= 1) mus.lPh[i] -= 1;
+            float s = (2 * mus.lPh[i] - 1) * (i == 3 ? 1.0f : 0.7f);
+            swL += s * mus.lpl[i]; swR += s * mus.lpr[i];
+        }
+        float lk = mus.bright * mus.brightMod + 0.55f * mus.lEnv * mus.lEnv;
+        mus.lLp += lk * (swL * 0.3f - mus.lLp); mus.lLp2 += lk * (swR * 0.3f - mus.lLp2);
+        leadL = tanhf(mus.lLp * 3.0f) * ld; leadR = tanhf(mus.lLp2 * 3.0f) * ld;
+    } else if (lt == MUS_PLUCK) {                         /* carre pince (arpeges) : deux carres legerement ecartes, filtre qui claque */
+        mus.lPh[2] += mus.lFreq * (1 - mus.detune) / SR; if (mus.lPh[2] >= 1) mus.lPh[2] -= 1;
+        mus.lPh[4] += mus.lFreq * (1 + mus.detune) / SR; if (mus.lPh[4] >= 1) mus.lPh[4] -= 1;
+        float qa = mus.lPh[2] < 0.5f ? 1.0f : -1.0f, qb = mus.lPh[4] < 0.5f ? 1.0f : -1.0f;
+        float lk = 0.02f + 0.5f * mus.lEnv * mus.lEnv * mus.brightMod;
+        mus.lLp += lk * (qa * 0.3f - mus.lLp); mus.lLp2 += lk * (qb * 0.3f - mus.lLp2);
+        leadL = tanhf(mus.lLp * 2.5f) * ld * 1.1f; leadR = tanhf(mus.lLp2 * 2.5f) * ld * 1.1f;
+        mus.lEnv *= 0.99975f;                             /* pince : retombe vite */
+    } else {                                              /* cloche FM : porteuse + modulante a 3,5x, l'indice baisse avec la note */
+        mus.lPh[3] += mus.lFreq / SR; if (mus.lPh[3] >= 1) mus.lPh[3] -= 1;
+        mus.lPh[5] += mus.lFreq * 3.5f / SR; if (mus.lPh[5] >= 1) mus.lPh[5] -= 1;
+        mus.lPh[1] += mus.lFreq * 1.003f / SR; if (mus.lPh[1] >= 1) mus.lPh[1] -= 1;
+        float idx = 0.4f + 2.6f * mus.lEnv * mus.lEnv, md = sinf(2 * PI * mus.lPh[5]) * idx;
+        float b1 = sinf(2 * PI * mus.lPh[3] + md), b2 = sinf(2 * PI * mus.lPh[1] + md * 0.8f);
+        leadL = (b1 * 0.8f + b2 * 0.3f) * ld * 0.55f; leadR = (b1 * 0.3f + b2 * 0.8f) * ld * 0.55f;
+        mus.lEnv *= 0.99992f;
     }
-    float lk = mus.bright * mus.brightMod + 0.55f * mus.lEnv * mus.lEnv;
-    mus.lLp += lk * (swL * 0.3f - mus.lLp); mus.lLp2 += lk * (swR * 0.3f - mus.lLp2);
-    float ld = mus.lEnv * duck * 0.34f, leadL = tanhf(mus.lLp * 3.0f) * ld, leadR = tanhf(mus.lLp2 * 3.0f) * ld;
     mus.lEnv *= mus.lDecay;
     /* echo ping-pong du lead (3 pas) : l'entree va dans la ligne gauche, chaque rebond passe de l'autre cote */
     {
