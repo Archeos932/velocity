@@ -2950,6 +2950,8 @@ static void run_tests(const char *path) {
                 freeN += ok;
                 outN += fabsf(c.x) > 78 || fabsf(c.z) > 78;
             }
+            int lineN = 0;                                /* ligne droite libre d'une porte a la suivante (depuis le depart pour la 1re) */
+            for (int i = 0; i < md->ngates; i++) lineN += los(i ? race_gate(i - 1) : vadd(md->start, v3(0, 1, 0)), race_gate(i));
             raceCount = 0; raceBest = 0; ghostBestN = 0;
             float skipped = 0;
             P.prevPos = P.pos = vsub(race_gate(1), v3(0, 0.9f, 0));   /* la porte 2 avant la 1 : ne compte pas */
@@ -2966,10 +2968,10 @@ static void run_tests(const char *path) {
                 }
             }
             V3 back = P.pos;
-            fprintf(f, "course (%s) : %d portes, libres %d, hors carte %d, porte sautee comptee %.0f, arrivee %d en %.1f s, "
-                       "chutes %d, record %.1f, fantome %d positions (attendu %d, %d, 0, 0, 1, %.1f, 1, %.1f, > 0)\n",
-                    maps[rm].name, md->ngates, freeN, outN, skipped, raceDone, raceT, raceFalls, raceBest, ghostCurN,
-                    md->ngates, md->ngates, 0.5f * (md->ngates + 1), 0.5f * (md->ngates + 1));
+            fprintf(f, "course (%s) : %d portes, libres %d, lignes droites libres %d, hors carte %d, porte sautee comptee %.0f, arrivee %d en %.1f s, "
+                       "chutes %d, record %.1f, fantome %d positions (attendu %d, %d, %d, 0, 0, 1, %.1f, 1, %.1f, > 0)\n",
+                    maps[rm].name, md->ngates, freeN, lineN, outN, skipped, raceDone, raceT, raceFalls, raceBest, ghostCurN,
+                    md->ngates, md->ngates, md->ngates, 0.5f * (md->ngates + 1), 0.5f * (md->ngates + 1));
             (void)back;
             raceOn = 0;
             load_map(0); reset_game();
