@@ -50,8 +50,12 @@ static void gauge_remove(int w, float pts) {              /* annulation : peut r
 }
 
 /* points de melee : l'arme en main d'abord, le surplus a l'autre arme du loadout */
+static float ammo_rule_mul(void);                         /* src/jeu/economie.c : regles (x2) et ARTIFICIER */
+static int eco_loadout(int *l);
+static int ecoAmmoBoost;
 static void ammo_points(float pts, int src) {
     if (P.dead || pts <= 0) return;
+    pts *= ammo_rule_mul();
     int s = cur_slot(), a0 = P.ammo[P.loadout[0]], a1 = P.ammo[P.loadout[1]];
     float rest = gauge_add(P.loadout[s], pts), lost = gauge_add(P.loadout[s ^ 1], rest);
     apStat[src] += pts - lost; apStat[AP_LOST] += lost;
@@ -75,9 +79,10 @@ static void tesla_reset(void);                            /* Tesla : definie ave
 static void loadout_apply(void) {                         /* (re)spawn : munitions de depart, jauges vides, arme 1 en main */
     if (!loadout_valid(wantLoadout, wantMelee)) { wantLoadout[0] = WP_RAIL; wantLoadout[1] = WP_ROCKET; wantMelee = MK_SWORD; }
     P.loadout[0] = wantLoadout[0]; P.loadout[1] = wantLoadout[1]; P.meleeKind = wantMelee;
+    eco_loadout(P.loadout);                               /* boutique : les armes achetees (une seule au debut) */
     if (wantSkill < 0 || wantSkill >= SK_COUNT) wantSkill = SK_COIN;
     P.skill = wantSkill; P.ricArmed = 0; P.chargeT = P.chargeHold = 0;
-    for (int w = 0; w < WP_COUNT; w++) { P.ammo[w] = ammoDef[w].start; P.ammoGauge[w] = 0; }
+    for (int w = 0; w < WP_COUNT; w++) { P.ammo[w] = ecoAmmoBoost ? ammoDef[w].max : ammoDef[w].start; P.ammoGauge[w] = 0; }   /* MUNITIONS + */
     P.weapon = P.loadout[0]; P.switchT = 0; P.undoPts[0] = P.undoPts[1] = 0;
     P.kinT = 0; P.kinDashT = 1; P.kinPreDash = 0;          /* Elan : ni fenetre de dash-tir ni malus */
     P.sgPumpT = P.sgPumpMax = 0; P.sgLastT = 0;           /* Eventail : pompe au repos */

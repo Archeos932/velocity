@@ -246,6 +246,22 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
 - Moteur : jusqu'à 768 boîtes par carte, lightmaps libérées au changement de carte, `--pos` pour les captures.
 - Vérifié : tous les tests (aucune régression), match de bots sur la carte (4 kills, navigation, 0 chute).
 
+## 21. Règles de partie, modes d'équipe, boutique, spécialisations, L'OASIS
+
+- **Règles choisies par l'hôte** (HEBERGER > RÈGLES) : mode, grappin oui/non, munitions normales / ×2 / infinies,
+  boutique, spécialisations, durée.
+- **Modes** : CHRONO (le plus de kills dans le temps), **3 ZONES** (rester dedans pour la prendre, l'équipe qui en
+  tient le plus marque), **DRAPEAU** (le porteur qui meurt le laisse sur place, un coéquipier peut le reprendre, un
+  défenseur qui reste à côté sans être touché le rend), **BOUCLIER** (les ROUGES le surchargent, les BLEUS tiennent).
+  Pas de bots dans ces trois modes pour l'instant.
+- **Boutique** : une arme de départ au choix parmi 4, des pièces à chaque kill, mort et objectif, et à chaque mort on
+  achète d'autres armes (gardées pour le match) ou des munitions.
+- **Spécialisations** : ASSAUT, REMPART, ÉCLAIREUR, SOUTIEN, ARTIFICIER (LOADOUT).
+- **Nouvelle carte L'OASIS** : tactique, sans grappin, une salle d'apparition fermée par équipe (l'adversaire y
+  brûle), trois couloirs (ruines, temple, bazar), deux tours de guet.
+- Corrigé au passage : le sol d'une carte pouvait disparaître quand ses coins et son centre étaient sous d'autres
+  boîtes (test de face enfouie sur une grille 5 × 5).
+
 ---
 
 ## Vérifications faites

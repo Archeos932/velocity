@@ -490,13 +490,36 @@ static void bot_think(float dt) {
         } else patrol = -1;
         int hasGoal = seek >= 0 || best >= 0 || (patrol >= 0 && patrol < nnav);
         V3 goal = seek >= 0 ? PU[seek].pos : best >= 0 ? NP[best].disp : hasGoal ? NV[patrol].p : P.pos;
+        V3 og;                                            /* modes : l'objectif d'abord, sauf ennemi vu de pres */
+        int objective = mode_bot_goal(&og) && !(best >= 0 && see && bd < 22) && seek < 0;
+        if (objective) {
+            goal = og; hasGoal = 1;
+            float hr = rules.mode == MODE_ZONES ? ZONE_R * 0.6f : rules.mode == MODE_BOUCLIER ? SHIELD_ZONE_R * 0.5f : 0.8f;
+            float od = hlen(vsub(og, P.pos));
+            int shoot = best >= 0 && see && seeT > botReactT[botLevel] && P.fireCd <= 0 && P.switchT <= 0 && wp_has_ammo(P.weapon);
+            if (od < hr && fabsf(og.y - P.pos.y) < 2.5f) {   /* sur l'objectif : on tient, on surveille */
+                static float holdYaw;
+                holdYaw += dt * 0.9f;
+                P.yaw = best >= 0 && see ? aimYaw : holdYaw; P.pitch = best >= 0 && see ? aimPitch : 0;
+                if (shoot) botHeld[A_FIRE] = 1;
+                return;
+            }
+            if (od < 10 && los(eye_pos(), vadd(og, v3(0, 1, 0)))) {   /* tout pres et en vue : droit dessus (le graphe s'arrete parfois avant) */
+                V3 d = vsub(og, P.pos);
+                P.yaw = atan2f(d.x, -d.z); P.pitch = 0;
+                botHeld[A_FWD] = 1;
+                if (P.grounded && og.y > P.pos.y + 0.5f) botPress[A_JUMP] = 1;
+                if (shoot) { P.yaw = aimYaw; P.pitch = aimPitch; botHeld[A_FIRE] = 1; }
+                return;
+            }
+        }
         if (best < 0 && seek < 0 && hasGoal && navMap != curMap) hasGoal = 0;   /* graphe pas encore construit */
         int navOn = 0, wasBusy = navBusy;
         if (hasGoal && !P.hookPlayer && nav_plan(goal, 0, dt)) {
             int cur = navStep > 0 ? navPath[navStep - 1] : navFrom, t0 = nav_edge_type(cur, navPath[navStep]);
             int canShoot = see && seeT > botReactT[botLevel] && bd < 55 && P.fireCd <= 0 && P.switchT <= 0;
             int midAir = !P.grounded && (t0 != NE_WALK || navLanding);   /* en plein trajet (pad, saut, grappin) : on le finit */
-            navOn = seek >= 0 || best < 0 || navHiddenT > 0.35f || wasBusy || midAir || t0 != NE_WALK;   /* (on tire en route, plus bas) */
+            navOn = seek >= 0 || best < 0 || objective || navHiddenT > 0.35f || wasBusy || midAir || t0 != NE_WALK;   /* (on tire en route, plus bas) */
             (void)canShoot;
             if (best >= 0 && see && bd < 9 && t0 == NE_WALK && !midAir) navOn = 0;   /* au contact : on se bat */
         } else navBusy = 0;

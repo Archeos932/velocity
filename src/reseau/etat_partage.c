@@ -69,6 +69,49 @@ static int wantTeams;                                     /* mode choisi au menu
 static const char *teamNames[2] = { "BLEUE", "ROUGE" };
 static const float teamCol[2][3] = { { 0.35f, 0.65f, 1.0f }, { 1.0f, 0.38f, 0.30f } };
 static int hostQuick;                                     /* 1 : la prochaine partie hebergee vient d'une PARTIE RAPIDE */
+
+/* --- Regles de la partie (l'hote les choisit dans HEBERGER, les clients les recoivent dans PkSnap) : src/reseau/modes.c --- */
+enum { MODE_FRAGS, MODE_CHRONO, MODE_ZONES, MODE_DRAPEAU, MODE_BOUCLIER, MODE_COUNT };
+static const char *modeNames[MODE_COUNT] = { "FRAGS", "CHRONO", "3 ZONES", "DRAPEAU", "BOUCLIER" };
+static const char *modeHelp[MODE_COUNT] = {
+    "premier a la limite de frags",
+    "le plus de kills quand le temps est fini",
+    "3 zones : reste dedans pour la prendre, l'equipe qui en tient le plus marque",
+    "vole le drapeau adverse et ramene-le chez toi ; mort = il tombe sur place",
+    "les ROUGES surchargent le bouclier des BLEUS en restant dessus ; les BLEUS tiennent jusqu'a la fin",
+};
+enum { AMMO_NORMAL, AMMO_DOUBLE, AMMO_INFINI, AMMO_COUNT };
+static const char *ammoRuleNames[AMMO_COUNT] = { "NORMALES", "x2", "INFINIES" };
+typedef struct { int mode, hook, ammo, shop, specs, minutes; } MatchRules;
+static MatchRules rules = { MODE_FRAGS, 1, AMMO_NORMAL, 0, 0, 10 };     /* partie en cours */
+static MatchRules wantRules = { MODE_FRAGS, 1, AMMO_NORMAL, 0, 0, 10 }; /* choix du menu HEBERGER (velocity.ini) */
+static int mode_team(int m) { return m >= MODE_ZONES; }   /* modes qui demandent des equipes */
+
+/* --- Specialisations (un bonus passif chacune ; l'hote applique degats et soins, le joueur sa vitesse et ses jauges) --- */
+enum { SPEC_AUCUNE, SPEC_ASSAUT, SPEC_REMPART, SPEC_ECLAIREUR, SPEC_SOUTIEN, SPEC_ARTIFICIER, SPEC_COUNT };
+static const char *specNames[SPEC_COUNT] = { "AUCUNE", "ASSAUT", "REMPART", "ECLAIREUR", "SOUTIEN", "ARTIFICIER" };
+static const char *specHelp[SPEC_COUNT] = {
+    "pas de specialisation",
+    "+15 % de degats infliges",
+    "-20 % de degats subis, un peu plus lent",
+    "+12 % de vitesse, un dash de plus, ennemis proches sur le radar",
+    "regenere hors combat et soigne les allies proches",
+    "munitions : jauges qui se remplissent 50 % plus vite",
+};
+static const float specCol[SPEC_COUNT][3] = {
+    { 0.6f, 0.6f, 0.65f }, { 1.0f, 0.45f, 0.3f }, { 0.4f, 0.7f, 1.0f }, { 0.4f, 1.0f, 0.5f }, { 1.0f, 0.9f, 0.4f }, { 1.0f, 0.6f, 0.15f },
+};
+static int wantSpec = SPEC_AUCUNE;                         /* choisie dans LOADOUT (velocity.ini : spec=) */
+static int my_spec(void) { return rules.specs || netMode == NET_OFF ? wantSpec : SPEC_AUCUNE; }
+static int hook_allowed(void) { return !maps[curMap].noHook && (!dmMode || rules.hook); }   /* grappin : carte et regles */
+/* etat des objectifs (l'hote le tient, PkSnap le transporte) */
+#define NZONES 3
+typedef struct { unsigned char owner, capTeam, prog, pad; } ZoneSt;                    /* owner / capTeam : 0, 1, 2 = personne */
+typedef struct { unsigned char state, carrier, ret, pad; float pos[3]; } FlagSt;       /* state : FLAG_* ; ret : retour 0..255 */
+typedef struct { ZoneSt z[NZONES]; FlagSt fl[2]; short pts[2]; unsigned char shield, pad[3]; } ObjState;
+static ObjState obj;
+enum { OBJ_ZONE, OBJ_FLAG_TAKE, OBJ_FLAG_DROP, OBJ_FLAG_RETURN, OBJ_FLAG_CAPTURE, OBJ_SHIELD };   /* EV_OBJ.sub */
+enum { FLAG_HOME, FLAG_CARRIED, FLAG_DROPPED };
 static int spectating, specFollow = -1;                   /* spectateur : suit le joueur specFollow, -1 = camera libre */
 static float matchT, matchEndT;
 static char myName[16] = "joueur";

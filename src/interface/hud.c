@@ -321,6 +321,8 @@ static void draw_style_hud(void) {
 }
 
 static void draw_race_hud(void);                          /* course_hud.c */
+static void draw_modes_hud(void);                         /* modes_hud.c */
+static void draw_shop(void);
 static void draw_hud(void) {
     glMatrixMode(GL_PROJECTION); glLoadIdentity();
     glOrtho(0, winW, winH, 0, -1, 1);
@@ -345,7 +347,7 @@ static void draw_hud(void) {
     if (dmMode) draw_name_tags();
     if (spectating) {
         draw_spec_hud(cx, cy);
-        if (!captured && !shotMode && !botMode) {
+        if (!captured && !shotMode && !botMode && !ecoShopping) {
             if (settingsOpen) draw_settings(cx, cy); else if (loadoutOpen) draw_loadout(cx, cy); else draw_pause(cx, cy);
         }
         glDisable(GL_BLEND);
@@ -792,7 +794,9 @@ static void draw_hud(void) {
                 snprintf(sb[s], sizeof sb[s], "[%s] %s %d", bind_text(s ? A_WEAP2 : A_WEAP1), ammoDef[P.loadout[s]].name,
                          P.ammo[P.loadout[s]]);
             float x = winW - 30.0f - fontW[0] * (float)(strlen(sb[0]) + strlen(sb[1]) + 3);
-            for (int s = 0; s < 2; s++) {
+            int nslot = P.loadout[1] == P.loadout[0] ? 1 : 2;   /* une seule arme (boutique) : un seul emplacement */
+            if (nslot == 1) x = winW - 30.0f - fontW[0] * (float)strlen(sb[0]);
+            for (int s = 0; s < nslot; s++) {
                 int w = P.loadout[s], act0 = w == P.weapon, emp = !wp_has_ammo(w);
                 float k = act0 ? 1.0f : 0.55f;
                 text(0, x, winH - 13.0f, sb[s], emp ? 1.0f : k, emp ? 0.35f : k, emp ? 0.35f : k * 1.05f, 0.9f);
@@ -805,7 +809,7 @@ static void draw_hud(void) {
                 }
                 x += gw + fontW[0] * 3;
             }
-            if (wantLoadout[0] != P.loadout[0] || wantLoadout[1] != P.loadout[1] || wantMelee != P.meleeKind || wantSkill != P.skill)
+            if (!eco_on() && (wantLoadout[0] != P.loadout[0] || wantLoadout[1] != P.loadout[1] || wantMelee != P.meleeKind || wantSkill != P.skill))
                 text(0, winW - 30.0f - fontW[0] * 32, winH - 120.0f, "nouveau loadout au prochain respawn", 0.6f, 0.6f, 0.65f, 0.8f);
         }
     }
@@ -868,6 +872,8 @@ static void draw_hud(void) {
     if (popT > 0) text_c(1, cx, cy - 40 - (1.2f - popT) * 30, popText, 1, 0.85f, 0.3f, clampf(popT, 0, 1));
     draw_style_hud();                                     /* jauge de style */
     draw_race_hud();                                      /* course : chrono, decompte, arrivee */
+    draw_modes_hud();                                     /* modes : objectifs, temps, pieces */
+    draw_shop();                                          /* boutique (mort) et arme de depart */
     if (msgT > 0) text_c(2, cx, cy - 120, msg, 1, 1, 1, clampf(msgT, 0, 1));
 
     if (dmMode && matchOver) {
@@ -879,15 +885,16 @@ static void draw_hud(void) {
         text_c(1, cx, winH - 150.0f, buf, 0.9f, 0.9f, 0.9f, 1);
     } else if (P.dead && killcam_active()) {              /* camera de mort : qui, avec quoi, combien de PV il lui reste */
         draw_killcam_hud(cx, cy);
-        if (dmMode) draw_death_loadout(cx, winH - 260.0f);
+        if (dmMode && !eco_on()) draw_death_loadout(cx, winH - 260.0f);
     } else if (dmMode && P.dead) {
         rect(0, 0, (float)winW, (float)winH, 0.15f, 0, 0, 0.4f);
         if (killerOfMe >= 0 && killerOfMe != myId) snprintf(buf, sizeof buf, "ELIMINE PAR %s", pname(killerOfMe));
         else snprintf(buf, sizeof buf, fellOut ? "TOMBE DANS LE VIDE" : killerOfMe == myId ? "TU T'ES FAIT SAUTER" : "EN ATTENTE DU SPAWN");
-        text_c(2, cx, cy - 40, buf, 1, 0.35f, 0.3f, 1);
+        float ty = eco_on() ? cy - 190 : cy - 40;          /* boutique : le titre au-dessus du panneau */
+        text_c(2, cx, ty, buf, 1, 0.35f, 0.3f, 1);
         snprintf(buf, sizeof buf, "respawn dans %.1f s", fmaxf(0, RESPAWN_TIME - P.deathT));
-        if (killerOfMe >= 0) text_c(1, cx, cy + 10, buf, 0.9f, 0.9f, 0.9f, 1);
-        draw_death_loadout(cx, cy + 60);
+        if (killerOfMe >= 0) text_c(1, cx, ty + 50, buf, 0.9f, 0.9f, 0.9f, 1);
+        if (!eco_on()) draw_death_loadout(cx, cy + 60);
     } else if (dmMode && bound_held(A_SCORES)) {
         draw_scoreboard(cx, cy);
     } else if (P.dead) {
@@ -901,7 +908,7 @@ static void draw_hud(void) {
         draw_death_loadout(cx, cy + 150);
     }
 
-    if (!captured && !shotMode && !botMode) {
+    if (!captured && !shotMode && !botMode && !ecoShopping) {
         if (settingsOpen) draw_settings(cx, cy); else if (loadoutOpen) draw_loadout(cx, cy); else draw_pause(cx, cy);
     }
     glDisable(GL_BLEND);

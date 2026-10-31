@@ -11,7 +11,7 @@
 /* HIT. Les evenements sont renvoyes 3 fois et dedoublonnes par id.    */
 /* ------------------------------------------------------------------ */
 #define NET_MAGIC 0x564C4F43u
-#define NET_VER   14      /* 13 : carte dans WELCOME / ANNOUNCE / EV_MATCH, W_VOID ; 14 : fusion equipes + cartes */
+#define NET_VER   15      /* 15 : regles (mode, grappin, munitions, boutique, specs) et objectifs dans PkSnap, EV_OBJ, spec dans NetPState */
 enum { PK_QUERY = 1, PK_ANNOUNCE, PK_JOIN, PK_WELCOME, PK_STATE, PK_SNAP, PK_ROSTER, PK_EVENT, PK_LEAVE,
        PK_PUNCH, PK_KEEP };   /* PUNCH : ouvre le NAT vers un client ; KEEP : un spectateur dit qu'il est la */
 enum { EV_RAIL = 1, EV_ROCKET, EV_ROCKET_END, EV_PARRY, EV_HIT, EV_MELEE, EV_KILL, EV_RESPAWN, EV_MATCH, EV_INFO, EV_PICKUP,
@@ -23,7 +23,8 @@ enum { EV_RAIL = 1, EV_ROCKET, EV_ROCKET_END, EV_PARRY, EV_HIT, EV_MELEE, EV_KIL
        EV_SHIELD = 19,                                    /* Egide : sub = SHE_* (revendication du tireur, decisions de l'hote) */
        EV_LANCE = 20,                                    /* Lance : choc de joute, emis par l'hote seulement */
        EV_SLAM = 21,                                      /* identifiants figes des armes : PLAN.md (15 a 20 reserves) */
-       EV_SKILL = 22 };                                   /* Competences : sub = SK_*, target = cible marquee */
+       EV_SKILL = 22,                                     /* Competences : sub = SK_*, target = cible marquee */
+       EV_OBJ = 23 };                                     /* objectifs des modes : sub = OBJ_*, target = equipe, actor = joueur, f[0] = indice */
 
 #pragma pack(push, 1)
 typedef struct { unsigned int magic; unsigned char type, from, ver, pad; } PkHead;
@@ -38,7 +39,9 @@ typedef struct { PkHead h; unsigned char id, refused, pad[2]; } PkWelcome;
 typedef struct { PkHead h; NetPState st; } PkState;
 typedef struct { unsigned char active, alive; short hp, kills, deaths; NetPState st; unsigned char team; } SnapP;
 typedef struct { PkHead h; float matchT; unsigned char matchOver, winner; unsigned short pickMask; unsigned char fragLimit, teamSize;
-                 SnapP p[MAXP]; } PkSnap;
+                 SnapP p[MAXP];
+                 unsigned char rMode, rFlags, rMinutes, rAmmo;   /* regles : mode, grappin | boutique << 1 | specs << 2, duree, munitions */
+                 ObjState obj; } PkSnap;
 typedef struct { PkHead h; char names[MAXP][16]; } PkRoster;
 typedef struct { PkHead h; NetEvent ev; } PkEvent;
 #pragma pack(pop)
@@ -167,6 +170,7 @@ static void pack_state(NetPState *s) {
                                (P.parryWin > 0 ? NF_PARRY : 0));
     s->weapon = (unsigned char)P.weapon;
     s->skin = (unsigned char)wantSkin;
+    s->spare[0] = (unsigned char)my_spec();               /* specialisation (l'hote l'applique aux degats et aux soins) */
     float swingT = P.meleeKind == MK_ANVIL ? ANVIL_SWING_T : P.meleeKind == MK_LANCE ? 0.2f :   /* Lance : estoc */
                    P.meleeKind == MK_FLAIL ? FLAIL_ANIM : 0.25f;
     s->melee = (unsigned char)(clampf(P.meleeT / swingT, 0, 1) * 255);
@@ -677,6 +681,7 @@ static void pickup_taken(int i, int who) {
     burst(PU[i].pos, v3(0.4f, 0.9f, 1.0f), 25, 5, 0.5f, 0.12f);
     if (who == myId) {                                    /* chaque arme du loadout recoit les points de la cellule */
         float pts = (float)PU[i].pts;
+        pts *= ammo_rule_mul();                           /* regles x2, ARTIFICIER */
         for (int s = 0; s < 2; s++) { float lost = gauge_add(P.loadout[s], pts); apStat[AP_CELL] += pts - lost; apStat[AP_LOST] += lost; }
         snprintf(popText, sizeof popText, "CELLULE +%d", PU[i].pts);
         popT = 1.0f;
@@ -846,12 +851,15 @@ static void apply_event(const NetEvent *ev) {
             P.lanceState = LS_IDLE;                       /* Lance : relevee */
             killerOfMe = k;
             if (!fellOut) killcam_start(k, ev->sub);          /* camera de mort */
+            eco_gain(ECO_DEATH, NULL);                    /* boutique : de quoi se racheter quelque chose */
+            if (botMode) eco_bot_shop();
         }
         if (k == myId && v != myId) {
             if (is_melee_w(ev->sub)) ammo_points(PTS_MELEE_KILL, AP_KILL);   /* kill en melee : +100 points */
             play(S_KILL, 0.7f, 1.0f);
             combo++; comboT = 3; hitMarker = 0.25f;
             style_kill(ev->sub);
+            eco_gain(ECO_KILL, "KILL");
             snprintf(popText, sizeof popText, "ELIMINE %s", pname(v));
             popT = 1.5f;
         }
@@ -887,6 +895,8 @@ static void apply_event(const NetEvent *ev) {
                 netlog("carte : %s", maps[curMap].name);
             }
             matchOver = 0;
+            eco_reset();                                  /* boutique : pieces de depart, arme de depart a choisir */
+            if (botMode && ecoNeedStarter) eco_bot_shop();
             for (int i = 0; i < MAXPR; i++) if (PR[i].kind == PR_MINE) PR[i].alive = 0;   /* Ventouse : nouveau match */
             memset(kfeed, 0, sizeof kfeed);
             snprintf(msg, sizeof msg, "COMBAT !");
@@ -903,6 +913,26 @@ static void apply_event(const NetEvent *ev) {
             netlog("fin du match, gagnant : %s", msg);
         }
         break;
+    case EV_OBJ: {                                        /* objectifs : message, son, pieces */
+        int t = ev->target & 1, a = ev->actor, idx = (int)ev->f[0];
+        const char *tn = teamNames[t];
+        static const char *zl[NZONES] = { "A", "B", "C" };
+        int mine = myId < MAXP && (NP[myId].team & 1) == t;
+        switch (ev->sub) {
+        case OBJ_ZONE: snprintf(msg, sizeof msg, "ZONE %s PRISE PAR LES %sS", zl[idx % NZONES], tn); break;
+        case OBJ_FLAG_TAKE: snprintf(msg, sizeof msg, "DRAPEAU %s PRIS PAR %s", tn, a < MAXP ? pname(a) : "?"); break;
+        case OBJ_FLAG_DROP: snprintf(msg, sizeof msg, "DRAPEAU %s TOMBE", tn); break;
+        case OBJ_FLAG_RETURN: snprintf(msg, sizeof msg, "DRAPEAU %s RENDU", tn); break;
+        case OBJ_FLAG_CAPTURE: snprintf(msg, sizeof msg, "LES %sS MARQUENT !", tn); break;
+        case OBJ_SHIELD: snprintf(msg, sizeof msg, "BOUCLIER A %d %%", idx); break;
+        }
+        msgT = 2.5f;
+        play(ev->sub == OBJ_FLAG_CAPTURE || ev->sub == OBJ_ZONE ? S_WAVE : S_PAD, 0.7f, mine ? 1.2f : 0.8f);
+        if (a == myId) eco_gain(ev->sub == OBJ_FLAG_DROP ? 0 : ECO_OBJ, "OBJECTIF");
+        else if (mine && ev->sub != OBJ_FLAG_DROP && ev->sub != OBJ_SHIELD && ev->sub != OBJ_FLAG_TAKE) eco_gain(ECO_TEAM_OBJ, NULL);
+        netlog("objectif : %s", msg);
+        break;
+    }
     case EV_SKILL:                                        /* Competences d'un autre joueur */
         if (ev->sub == SK_MARK) {
             add_beam(a, b, v3(0.85f, 0.35f, 1), 0.3f);

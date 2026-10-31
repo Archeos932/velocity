@@ -24,7 +24,7 @@ enum { NN_SURF, NN_PAD, NN_ANCHOR };
 enum { NE_WALK, NE_JUMP, NE_PAD, NE_HOOK, NE_DROP };
 typedef struct { V3 p, aim; int kind, box; int ne; short to[NAV_EMAX]; unsigned char type[NAV_EMAX]; float cost[NAV_EMAX]; } NavNode;
 static NavNode NV[NAV_MAX];
-static int nnav, navMap = -1, navNb = -1;
+static int nnav, navMap = -1, navNb = -1, navHookOk = -1;
 static int navStat[5], navPaths, navArrive;               /* journal : aretes suivies par type, chemins calcules, arrivees */
 
 static int nav_ground_below(V3 p, float maxDrop) { return ray_world(v3(p.x, p.y + 0.3f, p.z), v3(0, -1, 0), maxDrop + 0.3f, 0) < maxDrop + 0.3f; }
@@ -78,7 +78,7 @@ static int nav_ray_ok(V3 a, V3 q) {                       /* le crochet tire de 
 }
 
 static void nav_build(void) {
-    nnav = 0; navMap = curMap; navNb = nb;
+    nnav = 0; navMap = curMap; navNb = nb; navHookOk = hook_allowed();
     float ky = maps[curMap].killY > -999 ? maps[curMap].killY : -1000;
     for (int i = 0; i < nb; i++) {
         Box *b = &boxes[i];
@@ -140,6 +140,7 @@ static void nav_build(void) {
                 }
                 if (h <= NAV_JUMP + (dy < -1 ? -dy * 0.8f : 0) && dy <= NAV_JUMP_UP && h > 0.5f && los(a1, b1) &&
                     los(vadd(A->p, v3(0, 2.6f, 0)), vadd(B->p, v3(0, 2.6f, 0)))) { nav_edge(a, b, NE_JUMP, h * 1.15f + 1); continue; }
+                if (!navHookOk) continue;                     /* pas de grappin : seulement marcher, sauter, pads */
                 if (dy > 1.5f && l <= NAV_HOOK && B->kind == NN_SURF) {   /* grappin vers un dessus plus haut */
                     V3 q = nav_hook_point(ea, B->box);
                     if (nav_ray_ok(ea, q)) { nav_edge(a, b, NE_HOOK, l * 1.25f + 3); continue; }
@@ -149,7 +150,7 @@ static void nav_build(void) {
                     if (nav_ray_ok(ea, q)) nav_edge(a, b, NE_HOOK, l * 1.3f + 4);
                 }
             } else if (B->kind == NN_ANCHOR) {            /* vers une ancre : grappin */
-                if (l <= NAV_HOOK && nav_ray_ok(ea, B->p)) nav_edge(a, b, NE_HOOK, l * 1.2f + 2);
+                if (navHookOk && l <= NAV_HOOK && nav_ray_ok(ea, B->p)) nav_edge(a, b, NE_HOOK, l * 1.2f + 2);
             } else {                                      /* ancre -> sol : on lache (et on plane) */
                 if (dy < 2 && h < 26 && los(ea, vadd(B->p, v3(0, 1, 0)))) nav_edge(a, b, NE_DROP, h + 2);
             }
@@ -207,7 +208,7 @@ static int nav_edge_type(int a, int b) {
 }
 /* calcule (au plus tous les 0,4 s) un chemin vers `goal` ; renvoie 1 si le bot doit le suivre maintenant */
 static int nav_plan(V3 goal, int force, float dt) {
-    if (navMap != curMap || navNb != nb) { nav_build(); navGoal = -1; navLen = 0; }
+    if (navMap != curMap || navNb != nb || navHookOk != hook_allowed()) { nav_build(); navGoal = -1; navLen = 0; }
     if (nnav == 0) return 0;
     navReplanT -= dt;
     int flying = !P.grounded && navLen > 0 && navStep < navLen && navEdgeT < 6;   /* en vol (pad, saut, grappin) : on suit */

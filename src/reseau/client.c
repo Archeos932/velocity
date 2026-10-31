@@ -83,6 +83,14 @@ static void apply_snap(const PkSnap *s) {
     matchWinner = s->winner;
     fragLimit = s->fragLimit > 0 ? s->fragLimit : FRAG_LIMIT;
     teamSize = s->teamSize <= TEAM_MAX ? s->teamSize : 0;
+    {                                                     /* regles de la partie et objectifs, decides par l'hote */
+        int shopWas = rules.shop;
+        rules.mode = s->rMode < MODE_COUNT ? s->rMode : MODE_FRAGS; rules.minutes = s->rMinutes;
+        rules.ammo = s->rAmmo < AMMO_COUNT ? s->rAmmo : AMMO_NORMAL;
+        rules.hook = s->rFlags & 1; rules.shop = (s->rFlags >> 1) & 1; rules.specs = (s->rFlags >> 2) & 1;
+        if (rules.shop && !shopWas) eco_reset();          /* arrive en cours de partie : pieces de depart */
+        obj = s->obj;
+    }
     for (int i = 0; i < npu; i++) {                       /* l'hote dit quelles recharges sont la */
         if (s->pickMask & (1 << i)) PU[i].t = 0;
         else if (PU[i].t <= 0) PU[i].t = PICKUP_RESPAWN;
@@ -213,6 +221,9 @@ static void net_update(float dt) {
                 s.p[i].st = NP[i].st; s.p[i].team = NP[i].team;
             }
             s.teamSize = (unsigned char)teamSize;
+            s.rMode = (unsigned char)rules.mode; s.rMinutes = (unsigned char)rules.minutes; s.rAmmo = (unsigned char)rules.ammo;
+            s.rFlags = (unsigned char)((rules.hook ? 1 : 0) | (rules.shop ? 2 : 0) | (rules.specs ? 4 : 0));
+            s.obj = obj;
             host_send_all(&s, sizeof s);
             flush_events();
         }
@@ -288,11 +299,17 @@ static int net_host_start(void) {
     dm_local_start();
     matchOver = 0; matchT = 0;
     teamSize = hostQuick || hostFfa ? 0 : wantTeams;      /* partie rapide et duel du menu : chacun pour soi */
+    rules = hostQuick || hostFfa ? (MatchRules){ MODE_FRAGS, 1, AMMO_NORMAL, 0, 0, 10 } : wantRules;   /* regles de HEBERGER */
+    if (!mode_ok(rules.mode, curMap)) rules.mode = MODE_FRAGS;   /* objectifs absents de cette carte */
+    if (mode_team(rules.mode) && teamSize <= 0) teamSize = 2;    /* modes d'equipe : 2 contre 2 au moins */
     hostFfa = 0;
     fragLimit = hostQuick ? FRAG_LIMIT_QUICK : team_frag_limit(teamSize); hostQuick = 0;
+    if (rules.mode != MODE_FRAGS) fragLimit = 255;        /* chrono et objectifs : pas de limite de frags */
+    mode_reset(); eco_reset();
     NP[0].team = 0;
     host_respawn(0);
-    netlog("partie hebergee, ip %s, %d frags, equipes %d", hostIpText, fragLimit, teamSize);
+    netlog("partie hebergee, ip %s, %d frags, equipes %d, mode %s, grappin %d, munitions %s, boutique %d, specs %d, %d min",
+           hostIpText, fragLimit, teamSize, modeNames[rules.mode], rules.hook, ammoRuleNames[rules.ammo], rules.shop, rules.specs, rules.minutes);
     return 1;
 }
 

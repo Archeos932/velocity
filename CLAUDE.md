@@ -21,6 +21,8 @@ Le propriétaire est francophone : réponses, commentaires et docs **en françai
 - Navigation des bots (graphe auto) : **§3.19** ; jauge de style : **§3.20** ; mode COURSE (LA TOILE, fantôme) : **§3.21**
 - Décor maillé (triangles éclairés par sommet, boîtes `B_HIDDEN`) et LA CITADELLE : **§3.22** ; nouvelle carte détaillée :
   géométrie jouable en boîtes + décor `dc_*`, `MapDef.style` / `light` pour textures et soleil propres
+- Règles de partie, modes (CHRONO, 3 ZONES, DRAPEAU, BOUCLIER), boutique, spécialisations, L'OASIS : **§3.23** ;
+  l'hôte arbitre les objectifs (`mode_tick`), les clients reçoivent `rules` et `obj` dans `PkSnap`
 - Réglages graphiques modifiables sans recompiler : **`graphismes/rendu.ini`** (+ textures `.bmp`, F5 en jeu) ;
   code : §3.13 de `docs/CODE.md`. Toute nouvelle valeur d'aspect doit y être exposée (`gfxKeys`).
 

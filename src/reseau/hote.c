@@ -2,6 +2,13 @@
    Morceau de main.c : inclus dans l'ordre, ne se compile pas seul (voir main.c). */
 
 /* --- hote : arbitrage ------------------------------------------------ */
+static void mode_on_death(int v);                         /* src/reseau/modes.c */
+static void mode_tick(float dt);
+static void mode_reset(void);
+static int mode_time_winner(void);
+static float match_time_limit(void);
+static int np_spec(int i);
+static V3 np_feet(int i);
 static void host_end_match(int winner) {
     if (matchOver) return;
     matchOver = 1; matchWinner = winner; matchEndT = 8;
@@ -12,6 +19,7 @@ static void host_end_match(int winner) {
 }
 
 static void host_kill(int killer, int victim, int kind) {
+    mode_on_death(victim);                                /* drapeau : tombe la ou le porteur meurt */
     NP[victim].alive = 0; NP[victim].hp = 0; NP[victim].deaths++; NP[victim].respawnT = RESPAWN_TIME;
     if (killer != victim && killer < MAXP && NP[killer].active) {
         NP[killer].kills++;
@@ -155,6 +163,10 @@ static void host_take_pickup(int i, int who) {
 /* degats arbitres : PV, plafond par touche, temps pour tuer, kill (EV_HIT, et les decisions du bouclier) */
 static void host_apply_damage(int from, int v, float dmgIn, int w) {
     float before = NP[v].hp;
+    if (from != v && from >= 0 && from < MAXP) {          /* specialisations : ASSAUT tape plus fort, REMPART encaisse */
+        if (np_spec(from) == SPEC_ASSAUT) dmgIn *= SPEC_ASSAUT_MUL;
+        if (np_spec(v) == SPEC_REMPART) dmgIn *= SPEC_REMPART_MUL;
+    }
     float dmg = (w == W_SELF || w == W_VOID) ? dmgIn : fminf(dmgIn, PVP_HIT_CAP);   /* plafond par touche */
     if (w != W_SELF && w != W_VOID && from != v && from < MAXP) { NP[v].lastHitBy = from; NP[v].lastHitT = nowT; }   /* kill zone */
     if (before >= 99.9f) lifeFirstHitT[v] = nowT;
@@ -361,6 +373,21 @@ static V3 pick_spawn(int who) {
     };
     const MapDef *md = &maps[curMap];                    /* points de depart de la carte (coordonnees du monde) */
     int team = teamSize > 0 && who >= 0 && who < MAXP;
+    if (team && md->teamSpawn) {                          /* carte a salles de depart : celles de son equipe */
+        int t = NP[who].team & 1, best = 0;
+        float bd = -1;
+        for (int k = 0; k < md->nTeamSpawn; k++) {
+            const float *q = md->teamSpawn[t * md->nTeamSpawn + k];
+            V3 p = v3(q[0], q[1], q[2]);
+            if (!pos_free(p, H_STAND)) continue;
+            float d = 100;
+            for (int i = 0; i < MAXP; i++) if (i != who && NP[i].active && NP[i].alive) d = fminf(d, vlen(vsub(np_feet(i), p)));
+            d += frange(0, 3);
+            if (d > bd) { bd = d; best = k; }
+        }
+        const float *q = md->teamSpawn[t * md->nTeamSpawn + best];
+        return v3(q[0], q[1], q[2]);
+    }
     int areneTeam = team && curMap == 0;
     int n = areneTeam ? (int)(sizeof teamPts / sizeof teamPts[0]) : md->nspawns;
     float zs = team && NP[who].team == 1 ? -1.0f : 1.0f;
@@ -412,6 +439,7 @@ static void host_balance_teams(void) {
 
 static void host_start_match(void) {
     matchOver = 0; matchT = 0;
+    mode_reset();
     host_balance_teams();
     for (int i = 0; i < MAXP; i++) NP[i].kills = NP[i].deaths = 0;
     NetEvent e = ev_new(EV_MATCH);
@@ -453,14 +481,8 @@ static void host_tick(float dt) {
     }
     if (!matchOver) {
         matchT += dt;
-        if (matchT >= MATCH_TIME) {
-            int w = 0;
-            if (teamSize > 0) {                           /* equipes : la plus forte, egalite = TEAM_DRAW */
-                int a = team_score(0), b = team_score(1);
-                w = a > b ? 0 : b > a ? 1 : TEAM_DRAW;
-            } else for (int i = 0; i < MAXP; i++) if (NP[i].active && NP[i].kills > NP[w].kills) w = i;
-            host_end_match(w);
-        }
+        mode_tick(dt);                                    /* zones, drapeaux, bouclier, salles de depart, SOUTIEN */
+        if (!matchOver && matchT >= match_time_limit()) host_end_match(mode_time_winner());   /* temps ecoule : selon le mode */
         for (int i = 0; i < MAXP; i++)
             if (NP[i].active && !NP[i].alive && (NP[i].respawnT -= dt) <= 0) host_respawn(i);
     } else if (matchEndT <= 0) {

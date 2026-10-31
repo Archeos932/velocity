@@ -2773,7 +2773,7 @@ static void run_tests(const char *path) {
         int mapsOk = 1;
         for (int m = 0; m < NMAPS; m++) mapsOk &= maps[m].music >= 0 && maps[m].music < NTRACKS;
         fprintf(f, "musiques : %d morceaux (%s), corrects %d, chaque carte a le sien %d (attendu %d, rms 0,15 a 0,8, %d, 1)\n",
-                NTRACKS, mb, okN, mapsOk, NMAPS, NTRACKS);
+                NTRACKS, mb, okN, mapsOk, NTRACKS, NTRACKS);
     }
     {                                                     /* stereo : le lead et les hats ne sont pas identiques a gauche et a droite */
         float l, r, diff = 0, tot = 0;
@@ -3040,6 +3040,93 @@ static void run_tests(const char *path) {
             for (int i = 0; i < nb; i++) hid += boxes[i].kind == B_HIDDEN;
             fprintf(f, "decor (%s) : %d triangles (max %d), %d boites dont %d collisions de decor (attendu > 20000, < max)\n",
                     maps[cm].name, ndv / 3, DEC_MAXV / 3, nb, hid);
+            load_map(0); reset_game();
+        }
+        {   /* --- Modes, specialisations, boutique (l'hote arbitre ; 4 joueurs : 0 et 2 BLEUS, 1 et 3 ROUGES) --- */
+            int cm = -1, om = -1;
+            for (int m = 0; m < NMAPS; m++) { if (!strcmp(maps[m].name, "LA CITADELLE")) cm = m; if (maps[m].spawnRooms) om = m; }
+            load_map(cm); reset_game();
+            int nm0 = netMode, dm0 = dmMode, id0 = myId, ts0 = teamSize;
+            MatchRules r0 = rules;
+            FILE *logSave = botLog; botLog = NULL;            /* pas de journal dans le fichier de test */
+            netMode = NET_HOST; dmMode = 1; myId = 0; teamSize = 2; matchOver = 0; matchT = 0;
+            memset(NP, 0, sizeof NP);
+            for (int i = 0; i < 4; i++) { NP[i].active = NP[i].alive = 1; NP[i].hp = 100; NP[i].team = (unsigned char)(i & 1); NP[i].disp = v3(60, 0, 60 + i); }
+            P.pos = v3(60, 0, 60);
+            #define TICKS(sec) for (int _k = 0; _k < (int)((sec) * 120); _k++) { nowT += TICK; mode_tick(TICK); }
+            rules = (MatchRules){ MODE_ZONES, 1, AMMO_NORMAL, 0, 0, 10 }; mode_reset();
+            NP[1].disp = zone_pos(0);
+            TICKS(ZONE_CAP_T + 0.2f);
+            int ownA = obj.z[0].owner;
+            NP[2].disp = zone_pos(1); NP[3].disp = zone_pos(1);   /* zone B contestee : personne ne la prend */
+            TICKS(10);
+            int ownB = obj.z[1].owner, ptsR = obj.pts[1];
+            fprintf(f, "mode 3 ZONES : A prise par l'equipe %d en %.0f s, B contestee -> %d, points ROUGES apres 10 s %d (attendu 1, %.0f, 2, ~10)\n",
+                    ownA, ZONE_CAP_T, ownB, ptsR, ZONE_CAP_T);
+            rules.mode = MODE_DRAPEAU; mode_reset();
+            for (int i = 0; i < 4; i++) NP[i].disp = v3(60, 0, 60 + i);
+            NP[1].disp = flag_home(0);                    /* un ROUGE prend le drapeau BLEU */
+            TICKS(0.1f);
+            int carried = obj.fl[0].state == FLAG_CARRIED && obj.fl[0].carrier == 1;
+            NP[1].disp = v3(-20, 0, 0);
+            host_kill(0, 1, W_RAIL);                      /* il meurt : le drapeau tombe ou il est */
+            int dropped = obj.fl[0].state == FLAG_DROPPED, at = fabsf(obj.fl[0].pos[0] + 20) < 0.1f;
+            NP[2].disp = v3(-20.5f, 0, 0.5f); NP[2].lastHitT = -100;   /* un BLEU reste a cote sans etre touche */
+            TICKS(FLAG_RETURN_T * 0.6f);
+            NP[2].lastHitT = nowT;                        /* touche : le retour repart de zero */
+            TICKS(0.1f);
+            int retReset = obj.fl[0].ret == 0;
+            NP[2].lastHitT = -100;
+            TICKS(FLAG_RETURN_T + 0.3f);
+            int returned = obj.fl[0].state == FLAG_HOME;
+            NP[2].disp = v3(60, 0, 62);
+            NP[3].disp = flag_home(0); TICKS(0.1f);       /* capture : le ROUGE 3 prend, ramene chez lui */
+            NP[3].disp = flag_home(1); TICKS(0.1f);
+            fprintf(f, "mode DRAPEAU : pris %d, tombe a la mort %d (sur place %d), retour remis a zero si touche %d, rendu %d, capture -> %d point (attendu 1, 1 1, 1, 1, 1)\n",
+                    carried, dropped, at, retReset, returned, obj.pts[1]);
+            rules.mode = MODE_BOUCLIER; mode_reset();
+            for (int i = 0; i < 4; i++) { NP[i].alive = 1; NP[i].disp = v3(60, 0, 60 + i); }
+            NP[1].disp = shield_pos(); TICKS(10);
+            int sh1 = obj.shield;
+            NP[0].disp = shield_pos(); P.pos = shield_pos(); TICKS(5);   /* un BLEU dessus : plus de surcharge */
+            fprintf(f, "mode BOUCLIER : un ROUGE seul 10 s -> %d %%, un BLEU arrive -> %d %% 5 s plus tard (attendu ~%d, meme valeur)\n",
+                    sh1, obj.shield, 100 - (int)(SHIELD_DRAIN * 10));
+            rules.mode = MODE_FRAGS; rules.specs = 1;     /* specialisations : degats */
+            NP[1].st.spare[0] = SPEC_ASSAUT; NP[2].hp = 100; NP[2].alive = 1;
+            host_apply_damage(1, 2, 40, W_RAIL);
+            float hpA = NP[2].hp;
+            NP[1].st.spare[0] = 0; NP[2].st.spare[0] = SPEC_REMPART; NP[2].hp = 100;
+            host_apply_damage(1, 2, 40, W_RAIL);
+            fprintf(f, "specialisations : ASSAUT 40 -> %.0f degats, REMPART encaisse %.0f (attendu %.0f, %.0f)\n", 100 - hpA, 100 - NP[2].hp,
+                    40 * SPEC_ASSAUT_MUL, 40 * SPEC_REMPART_MUL);
+            NP[2].st.spare[0] = SPEC_SOUTIEN; NP[2].hp = 50; NP[2].lastHitT = nowT; NP[0].hp = 50; NP[0].disp = NP[2].disp = v3(0, 0, 0); P.pos = v3(0, 0, 0);
+            TICKS(2);
+            float hpS1 = NP[2].hp, hpAlly = NP[0].hp;
+            TICKS(3);
+            fprintf(f, "SOUTIEN : touche il y a 2 s -> %.0f PV (pas de regen), allie proche %.0f -> soigne ; 3 s plus tard %.0f (attendu 50, > 50, > 60)\n",
+                    hpS1, hpAlly, NP[2].hp);
+            if (om >= 0) {                                /* salle de depart adverse */
+                load_map(om);
+                const float *rb = maps[om].spawnRooms[0];
+                NP[1].hp = 100; NP[1].alive = 1; NP[1].st.spare[0] = 0; NP[1].disp = v3((rb[0] + rb[3]) * 0.5f, 0.1f, (rb[2] + rb[5]) * 0.5f);
+                TICKS(1.01f);
+                fprintf(f, "salle de depart (%s) : un ROUGE 1 s chez les BLEUS -> %.0f PV (attendu %.0f)\n", maps[om].name, NP[1].hp, 100 - SPAWN_ROOM_DPS);
+                fprintf(f, "%s : grappin %d (attendu 0)\n", maps[om].name, hook_allowed());
+                load_map(cm);
+            }
+            rules.shop = 1; eco_reset();                  /* boutique */
+            int c0 = credits, need = ecoNeedStarter;
+            eco_pick_starter(WP_SHOTGUN);
+            int noMoney = eco_buy(WP_ROCKET);
+            eco_gain(ECO_KILL, NULL);
+            int bought = eco_buy(WP_ROCKET);
+            int lo[2]; eco_loadout(lo);
+            fprintf(f, "boutique : depart %d pieces, arme a choisir %d, ROQUETTES trop cheres %d puis achetees %d, reste %d, armes %s + %s (attendu %d, 1, 0, 1, %d, EVENTAIL + ROQUETTES)\n",
+                    c0, need, noMoney, bought, credits, ammoDef[lo[0]].name, ammoDef[lo[1]].name, ECO_START, ECO_START + ECO_KILL - eco_price(WP_ROCKET));
+            #undef TICKS
+            botLog = logSave;
+            rules = r0; netMode = nm0; dmMode = dm0; myId = id0; teamSize = ts0; matchOver = 0;
+            memset(NP, 0, sizeof NP); memset(&obj, 0, sizeof obj); ecoNeedStarter = 0;
             load_map(0); reset_game();
         }
         {   /* --- Jauge de style : kill aerien a pleine vitesse, puis un deuxieme enchaine, un coup recu, et l'oubli --- */

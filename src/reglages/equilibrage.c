@@ -163,6 +163,40 @@ enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_COUNT };
 #define STYLE_DECAY      10.0f    /* baisse par seconde (rang D) ... */
 #define STYLE_DECAY_RANK 6.0f     /* ... plus 6 par rang au-dessus */
 
+/* Modes de jeu (src/reseau/modes.c) */
+#define ZONE_R           5.0f     /* 3 ZONES : rayon d'une zone (a l'horizontale) */
+#define ZONE_CAP_T       6.0f     /* 3 ZONES : secondes pour prendre une zone seul (plus vite a plusieurs) */
+#define ZONE_SCORE       200      /* 3 ZONES : points pour gagner (1 par seconde et par zone tenue) */
+#define FLAG_TOUCH_R     2.2f     /* DRAPEAU : distance pour le prendre ou capturer */
+#define FLAG_RETURN_R    3.5f     /* DRAPEAU : distance pour le rendre (rester a cote) */
+#define FLAG_RETURN_T    5.0f     /* DRAPEAU : secondes a cote sans etre touche pour le rendre */
+#define FLAG_RETURN_HIT  0.6      /* DRAPEAU : touche depuis moins de 0,6 s = le retour repart de zero */
+#define FLAG_AUTO_RETURN 30.0f    /* DRAPEAU : tombe et oublie 30 s = rendu tout seul */
+#define FLAG_CAPS        3        /* DRAPEAU : captures pour gagner */
+#define SHIELD_ZONE_R    6.0f     /* BOUCLIER : rayon de la zone du generateur */
+#define SHIELD_DRAIN     1.6f     /* BOUCLIER : % par seconde avec un attaquant seul dessus (+35 % par attaquant en plus) */
+#define SPAWN_ROOM_DPS   40.0f    /* salle de depart adverse : degats par seconde */
+
+/* Specialisations */
+#define SPEC_ASSAUT_MUL  1.15f
+#define SPEC_REMPART_MUL 0.8f
+#define SPEC_REMPART_SPD 0.93f    /* REMPART : vitesse x0,93 */
+#define SPEC_ECLAIR_SPD  1.12f    /* ECLAIREUR : vitesse x1,12, 3 charges de dash */
+#define SPEC_REGEN_DELAY 3.0      /* SOUTIEN : secondes sans etre touche avant de regenerer */
+#define SPEC_REGEN       6.0f     /* SOUTIEN : PV par seconde */
+#define SPEC_HEAL_R      7.0f     /* SOUTIEN : rayon du soin des allies */
+#define SPEC_HEAL        4.0f     /* SOUTIEN : PV par seconde aux allies proches */
+#define SPEC_AMMO_MUL    1.5f     /* ARTIFICIER : jauges */
+
+/* Economie et boutique (src/jeu/economie.c) */
+#define ECO_START        400      /* pieces au debut du match */
+#define ECO_KILL         200
+#define ECO_DEATH        100      /* consolation a chaque mort */
+#define ECO_OBJ          300      /* objectif personnel (zone prise, drapeau pris ou rendu, capture) */
+#define ECO_TEAM_OBJ     100      /* objectif de l'equipe */
+#define ECO_AMMO_PRICE   250      /* MUNITIONS + : jauges pleines a chaque respawn (pour le match) */
+#define ECO_STARTER_T    10.0f    /* secondes pour choisir l'arme de depart */
+
 /* Mode COURSE (src/jeu/course.c) */
 #define RACE_COUNTDOWN   3.0f     /* decompte avant le depart */
 #define SWING_HALF       1.5f     /* points de balancement : cubes de 3 m */

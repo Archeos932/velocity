@@ -97,7 +97,7 @@ velocity/
 │   ├── reglages/     equilibrage.c : TOUS les #define (mouvement, armes, parry, PvP, points)
 │   ├── son/          audio.c (mixeur, sons synthetises), music.h (morceaux et sequenceur)
 │   ├── monde/        carte.c (boites AABB, cartes MapDef, collisions, rayons), decor.c (decor maille),
-│   │                 citadelle.c (LA CITADELLE), entites.c (Player P, Enemy, Proj...)
+│   │                 citadelle.c (LA CITADELLE), oasis.c (L'OASIS), entites.c (Player P, Enemy, Proj...)
 │   ├── entrees/      actions.c (touches, A_*, bindDefault)
 │   ├── effets/       combat_fx.c (impact frames, input_poll), particules.c, camera_mort.c, monde_fx.c (neons, meteo)
 │   ├── joueur/       mouvement.c (player_tick, grappin)
@@ -165,6 +165,10 @@ velocity/
 | `rendu/joueurs.c` | joueurs distants | `np_anim`, `draw_trails`, `draw_outlines`, `draw_remote_players` |
 | `monde/decor.c` | décor maillé (§3.22) | `dc_tri`, `dc_quad`, `dc_cone`, `dc_sphere`, `dc_bevel`, `dc_arch`, `dc_arch_fill`, `dc_roof`, `dc_window`, `dc_awning`, `dc_cypress`, `dc_palm`, `dc_railing`, `dc_lantern`, `dc_column`, `DV`, `ndv` |
 | `monde/citadelle.c` | LA CITADELLE (§3.22) | `build_map_citadelle`, `ct_house`, `ct_arcade`, `ct_belltower`, `ct_fountain`, `ct_rampart`, `ct_landscape` |
+| `monde/oasis.c` | L'OASIS (§3.23) | `build_map_oasis`, `oa_half`, `oa_tent`, `oa_watchtower`, `oa_pool` |
+| `reseau/modes.c` | modes de jeu (§3.23) | `mode_tick`, `mode_reset`, `mode_on_death`, `mode_time_winner`, `mode_bot_goal`, `mode_ok`, `obj_event` |
+| `jeu/economie.c` | boutique (§3.23) | `credits`, `eco_reset`, `eco_gain`, `eco_buy`, `eco_pick_starter`, `eco_loadout`, `ammo_rule_mul` |
+| `interface/modes_hud.c` | modes : affichage (§3.23) | `draw_modes_world`, `draw_modes_hud`, `draw_shop` |
 | `jeu/style.c` | jauge de style (§3.20) | `style_add`, `style_kill`, `style_parry`, `style_tick`, `style_mult` |
 | `jeu/course.c` | mode COURSE (§3.21) | `race_start`, `race_tick`, `race_respawn`, `race_ghost_at` |
 | `interface/hud.c` | HUD | `melee_preview`, `draw_radar`, `draw_style_hud`, `draw_hud` |
@@ -870,6 +874,44 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
   sud, oliviers et cyprès, montagnes. Ce n'est la copie d'aucune carte existante.
 - Captures : `--shot X.bmp --map 6 --pos x,y,z[,inclinaison] --yaw A` (`--pos` marche sur toutes les cartes autres
   que l'Arène). Test : « decor (LA CITADELLE) : N triangles ».
+
+### 3.23 Règles de partie, modes, boutique, spécialisations, L'OASIS
+
+- **Règles** (`MatchRules rules` ; `wantRules` = choix du panneau RÈGLES de HEBERGER, `regles=` dans `velocity.ini`,
+  `--regles mode,grappin,munitions,boutique,specs,minutes` pour les bots) : mode, grappin oui/non (`hook_allowed()` :
+  aussi `MapDef.noHook`), munitions normales / ×2 / infinies (`ammo_rule_mul`, `game_tick`), boutique, spécialisations,
+  durée (3 à 15 min). L'hôte les copie au démarrage (`net_host_start` : mode indisponible sur la carte → FRAGS,
+  mode d'équipe sans équipes → 2 contre 2) et les envoie dans chaque `PkSnap` (`rMode`, `rFlags`, `rMinutes`, `rAmmo`).
+- **Modes** (`src/reseau/modes.c`, l'hôte fait autorité, état `ObjState obj` dans `PkSnap`, messages `EV_OBJ`) :
+  FRAGS (comme avant) ; CHRONO (pas de limite de frags, le plus de kills au temps) ; **3 ZONES** (`MapDef.zones` :
+  une seule équipe dedans prend la zone en `ZONE_CAP_T`, plus vite à plusieurs, contestée = bloquée ; chaque zone
+  tenue rapporte 1 point par seconde, `ZONE_SCORE` pour gagner) ; **DRAPEAU** (`MapDef.flags` : l'adversaire le
+  prend en le touchant, le porteur qui meurt le laisse tomber sur place (`mode_on_death`), un coéquipier du porteur
+  peut le reprendre ; un défenseur qui reste à côté `FLAG_RETURN_T` sans être touché le rend (une touche remet le
+  retour à zéro) ; capture = le porteur touche son propre drapeau resté à la base ; `FLAG_CAPS` pour gagner ;
+  oublié `FLAG_AUTO_RETURN` = rendu) ; **BOUCLIER** (`MapDef.shield` : les ROUGES le surchargent en restant dessus
+  sans BLEU présent, les BLEUS gagnent si le temps s'écoule). L'hôte garde les progressions en décimal
+  (`zoneProg`, `flagRet`) : l'octet de `ObjState` ne sert qu'à l'envoi.
+- **Salles de départ** (`MapDef.spawnRooms`, `teamSpawn`) : chaque équipe réapparaît dans la sienne ; un adversaire
+  qui y entre perd `SPAWN_ROOM_DPS` PV par seconde (voile coloré, message à l'écran).
+- **Bots** : vont à l'objectif (`mode_bot_goal` : zone pas à eux, drapeau à voler / rendre / ramener, bouclier),
+  le tiennent sur place, se battent si un ennemi est vu de près. **Dans HEBERGER, pas de bots en 3 ZONES, DRAPEAU
+  et BOUCLIER** (modes entre joueurs pour l'instant) ; FRAGS et CHRONO les gardent.
+- **Boutique** (`src/jeu/economie.c`, chaque joueur pour lui-même) : `ECO_START` pièces, `ECO_KILL`, `ECO_DEATH`,
+  `ECO_OBJ` (objectif personnel), `ECO_TEAM_OBJ`. Début de match : choix d'une arme parmi 4 (`ecoStarters`, 10 s,
+  souris libérée, immobile) ; à chaque mort, la boutique remplace le sélecteur de loadout : acheter une arme
+  (`eco_price`) l'équipe en 2e place, inverser les armes, MUNITIONS + (jauges pleines au respawn). Les armes
+  achetées restent pour le match. Bots : `eco_bot_shop`.
+- **Spécialisations** (LOADOUT, `spec=`, envoyée dans `NetPState.spare[0]`) : ASSAUT (+15 % de dégâts, hôte),
+  REMPART (−20 % de dégâts subis, hôte ; un peu plus lent), ÉCLAIREUR (+12 % de vitesse, 3 charges de dash),
+  SOUTIEN (régénère hors combat, soigne les alliés proches, hôte), ARTIFICIER (jauges +50 %). Actives en solo, et en
+  multi si l'hôte les autorise.
+- **L'OASIS** (carte 7, `noHook`) : symétrique, BLEUS au nord. Salle de départ fermée (toit, 3 sorties), cour avec
+  drapeau (et bouclier des BLEUS), maisons à terrasse qui séparent 3 couloirs : A à l'ouest (ruines à colonnade,
+  bassins), B au centre (place surélevée d'un temple, autel), C à l'est (bazar sous les tentes). Deux tours de guet
+  par escalier. LA CITADELLE a aussi ses zones, drapeaux, bouclier et départs par équipe (sans salles fermées).
+- `NET_VER` 15. Captures : `--shot boutique.bmp`, `--shot armedepart.bmp`. Tests : zones, drapeau, bouclier,
+  spécialisations, SOUTIEN, salle de départ, grappin interdit, boutique.
 
 ## 4. Réseau LAN
 

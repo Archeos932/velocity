@@ -61,6 +61,12 @@ static int face_hidden(int bi, int f) {
         V3 q = vadd(vadd(vlerp(c[k], mid, 0.02f), vmul(n, 0.05f)), v3(0, 0, 0));
         if (!point_in_box(q)) return 0;
     }
+    for (int i = 0; i < 5; i++)                           /* grille 5 x 5 : coins et centre enfouis ne suffisent pas (un sol */
+        for (int j = 0; j < 5; j++) {                     /* dont les coins sont dans l'enceinte et le centre sous une place) */
+            float u = 0.02f + 0.96f * i / 4, v = 0.02f + 0.96f * j / 4;
+            V3 q = vadd(vlerp(vlerp(c[0], c[1], u), vlerp(c[3], c[2], u), v), vmul(n, 0.05f));
+            if (!point_in_box(q)) return 0;
+        }
     return 1;
 }
 

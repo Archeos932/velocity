@@ -57,6 +57,7 @@ static void do_action(void) {
         break;
     case ACT_VSBOT: {                                     /* heberge en local, puis lance les bots (autres processus) qui nous rejoignent */
         if (!net_host_start()) break;
+        if (mode_team(rules.mode)) { appState = APP_GAME; set_capture(1); netlog("pas de bots en %s", modeNames[rules.mode]); break; }   /* modes a objectif : sans bots */
         int lv = pendingArg < 0 ? 0 : pendingArg > 2 ? 2 : pendingArg;
         int nBots = teamSize > 0 ? host_max_players() - 1 : 1, ok = 0;   /* equipes : toutes les places libres */
         for (int k = 0; k < nBots && k < MAXP; k++) {
@@ -201,6 +202,10 @@ static int velocity_main(const char *cmd) {
             else if (!strcmp(t, "--local")) botLocal = 1;
             else if (!strcmp(t, "--hidden")) botHidden = 1;
             else if (!strcmp(t, "--teams") && (t = strtok(NULL, " "))) wantTeams = atoi(t) < 0 ? 0 : atoi(t) > TEAM_MAX ? TEAM_MAX : atoi(t);
+            else if (!strcmp(t, "--regles") && (t = strtok(NULL, " "))) {   /* --regles mode,grappin,munitions,boutique,specs,minutes */
+                MatchRules r = wantRules;
+                if (sscanf(t, "%d,%d,%d,%d,%d,%d", &r.mode, &r.hook, &r.ammo, &r.shop, &r.specs, &r.minutes) >= 1 && r.mode >= 0 && r.mode < MODE_COUNT) wantRules = r;
+            }
             else if (!strcmp(t, "--updated")) updAfter = 1;
             else if (!strcmp(t, "--level") && (t = strtok(NULL, " "))) botLevel = atoi(t) < 0 ? 0 : atoi(t) > 2 ? 2 : atoi(t);
             else if (!strcmp(t, "--map") && (t = strtok(NULL, " "))) menuMap = atoi(t) >= 0 && atoi(t) < NMAPS ? atoi(t) : 0;
@@ -310,6 +315,7 @@ static int velocity_main(const char *cmd) {
     }
     if (!shotMode && !botHidden) audio_init();
     if (curMap != menuMap) load_map(menuMap);             /* --map N ou map= de velocity.ini */
+    if (botMode) wantSpec = 1 + (int)(frand() * (SPEC_COUNT - 1)) % (SPEC_COUNT - 1);   /* specialisation au hasard */
     if (botMode) {                                        /* Competences : sans --skill, le bot en tire une au hasard */
         if (!botSkillSet) wantSkill = (int)(frand() * SK_COUNT) % SK_COUNT;
         netlog("competence du bot : %s%s", skillDef[wantSkill].name, botSkillSet ? " (imposee)" : " (au hasard)");
@@ -446,6 +452,23 @@ static int velocity_main(const char *cmd) {
         }
         matchT = 95;
         if (strstr(shotPath, "bench")) { bench_render(shotPath); return 0; }
+        render(1, TICK);
+        save_bmp(shotPath);
+        return 0;
+    }
+    if (shotMode && (strstr(shotPath, "boutique") || strstr(shotPath, "armedepart"))) {   /* boutique a la mort, choix de l'arme */
+        for (int m = 0; m < NMAPS; m++) if (maps[m].spawnRooms) { load_map(m); break; }
+        reset_game(); appState = APP_GAME; dmMode = 1; netMode = NET_HOST; myId = 0; teamSize = 2;
+        NP[0].active = NP[0].alive = 1; NP[0].team = 0;
+        rules = (MatchRules){ MODE_ZONES, 0, AMMO_NORMAL, 1, 1, 10 }; mode_reset(); eco_reset();
+        obj.z[0].owner = 0; obj.z[2].owner = 1; obj.z[1].capTeam = 1; obj.z[1].prog = 150; obj.pts[0] = 64; obj.pts[1] = 41; matchT = 140;
+        P.pos = P.prevPos = v3(0, 0, -50); P.yaw = PI; P.pitch = -0.05f;
+        if (strstr(shotPath, "boutique")) {
+            eco_pick_starter(WP_SHOTGUN); credits = 1150; eco_buy(WP_ROCKET); credits = 850;
+            P.dead = 1; NP[0].alive = 0;
+        }
+        loadout_apply();
+        gameTime = 3;
         render(1, TICK);
         save_bmp(shotPath);
         return 0;

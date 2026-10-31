@@ -384,6 +384,13 @@ typedef struct {
     float startYaw;                                       /* orientation au depart de la course */
     int style;                                            /* textures : 0 = metal (sol a dalles boulonnees), 1 = pierre et enduit */
     const float *light;                                   /* eclairage propre (MAPL_*) ; NULL = graphismes/rendu.ini */
+    /* objectifs des modes (src/reseau/modes.c) ; NULL = mode indisponible sur cette carte */
+    const float (*zones)[3];                              /* 3 zones (MODE_ZONES) */
+    const float (*flags)[3];                              /* drapeau BLEU puis ROUGE, chez eux (MODE_DRAPEAU) */
+    const float *shield;                                  /* bouclier des BLEUS (MODE_BOUCLIER) */
+    const float (*teamSpawn)[3]; int nTeamSpawn;          /* departs par equipe : nTeamSpawn BLEUS puis nTeamSpawn ROUGES */
+    const float (*spawnRooms)[6];                         /* salle de depart BLEUE puis ROUGE (x0 y0 z0 x1 y1 z1) : l'adversaire y brule */
+    int noHook;                                           /* 1 : pas de grappin sur cette carte */
 } MapDef;
 #define NSP(a) (int)(sizeof a / sizeof a[0])
 /* eclairage propre a une carte : direction du soleil (3), couleur (3), force (1), lumiere du ciel (3), rebond (3),
@@ -397,6 +404,27 @@ static const float citadelleSpawns[][3] = {
 };
 static const float citadelleLight[MAPL_N] = { 0.5f, 0.78f, 0.38f,  1.0f, 0.9f, 0.74f,  1.25f,  0.5f, 0.6f, 0.82f,
                                               0.3f, 0.24f, 0.17f,  0.55f, 0.56f, 0.62f };
+/* LA CITADELLE : objectifs et departs par equipe (BLEUS au nord) */
+static const float citadelleZones[3][3] = { { -36, 0, -24 }, { 38, 0, -34 }, { 0, 0, 26 } };
+static const float citadelleFlags[2][3] = { { 0, 0, -58 }, { 0, 0, 58 } };
+static const float citadelleShield[3] = { 0, 0, -50 };
+static const float citadelleTeam[][3] = {
+    { -10, 0, -60 }, { 10, 0, -60 }, { 0, 0, -55 }, { -4, 0, -66 }, { 4, 0, -66 },
+    { -10, 0, 62 }, { 10, 0, 62 }, { 0, 0, 56 }, { -20, 0, 60 }, { 20, 0, 60 },
+};
+/* L'OASIS (src/monde/oasis.c) */
+static void build_map_oasis(void);
+static const float oasisSpawns[][3] = {
+    { -8, 0, -68 }, { 0, 0, -68 }, { 8, 0, -68 }, { -8, 0, -64 }, { 8, 0, -64 }, { 0, 0, -64 },
+    { -8, 0, 68 }, { 0, 0, 68 }, { 8, 0, 68 }, { -8, 0, 64 }, { 8, 0, 64 }, { 0, 0, 64 },
+};
+static const float oasisZones[3][3] = { { -42, 0, 0 }, { 0, 1.2f, 0 }, { 40, 0, 0 } };
+static const float oasisFlags[2][3] = { { 0, 0, -53 }, { 0, 0, 53 } };
+static const float oasisShield[3] = { 0, 0, -44 };
+static const float oasisRooms[2][6] = { { -14, 0, -74, 14, 7, -60 }, { -14, 0, 60, 14, 7, 74 } };
+static const float oasisLight[MAPL_N] = { 0.45f, 0.8f, -0.4f,  1.0f, 0.86f, 0.66f,  1.1f,  0.5f, 0.56f, 0.72f,
+                                          0.3f, 0.23f, 0.15f,  0.6f, 0.58f, 0.6f };
+
 static const MapDef maps[] = {
     { "ARENE", build_map_arene, areneSpawns, NSP(areneSpawns), { 0, 0, 24 }, -1000,
       9, 18, MS(28), MS(48), 1.0f, { 0, 7, MS(36) }, -0.12f, 5, 1, 0, { 0.04f, 0.05f, 0.12f }, { 0.34f, 0.30f, 0.44f } },
@@ -413,7 +441,10 @@ static const MapDef maps[] = {
       toileGates, NSP(toileGates), 0 },
     { "LA CITADELLE", build_map_citadelle, citadelleSpawns, NSP(citadelleSpawns), { 0, 0, 56 }, -1000,
       9, 16, 20, 55, 1.0f, { 0, 14, 66 }, -0.18f, 6, 1, 6, { 0.22f, 0.45f, 0.86f }, { 0.86f, 0.84f, 0.8f },
-      NULL, 0, 0, 1, citadelleLight },
+      NULL, 0, 0, 1, citadelleLight, citadelleZones, citadelleFlags, citadelleShield, citadelleTeam, 5, NULL, 0 },
+    { "L'OASIS", build_map_oasis, oasisSpawns, NSP(oasisSpawns), { 0, 0, -66 }, -1000,
+      8, 14, 20, 45, 1.0f, { 0, 16, -70 }, -0.25f, 6, 1, 2, { 0.3f, 0.55f, 0.9f }, { 0.92f, 0.84f, 0.7f },
+      NULL, 0, 0, 1, oasisLight, oasisZones, oasisFlags, oasisShield, oasisSpawns, 6, oasisRooms, 1 },
 };
 #define NMAPS NSP(maps)
 static int curMap;                                        /* carte chargee */

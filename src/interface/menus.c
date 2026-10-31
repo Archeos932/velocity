@@ -169,7 +169,7 @@ static void draw_loadout(float cx, float cy) {
     /* mise en page du haut vers le bas : 4 rangees (etiquette 22 px, boutons 44 px, 18 px d'air), centree, jamais
      * au-dessus du bord (fenetre reduite : 640 px de haut suffisent) */
     const float R = 84;
-    float top = fmaxf(10, cy - (370 + 3 * R) * 0.5f), y;
+    float top = fmaxf(10, cy - (370 + 4 * R) * 0.5f), y;
     text_c(2, cx, top + 50, "LOADOUT", 0.5f, 0.9f, 1.0f, 1);
     text_c(0, cx, top + 80, "1 arme de melee + 1 competence + 2 armes a distance ; la melee remplit les jauges de munitions",
            0.7f, 0.75f, 0.85f, 1);
@@ -185,6 +185,11 @@ static void draw_loadout(float cx, float cy) {
         if (sel_button(x0 + k * step, y, bw, 44, skillDef[k].name, k == wantSkill, 1,
                        v3(skillDef[k].r, skillDef[k].g, skillDef[k].b)))
             wantSkill = k;
+    y += R;
+    text(1, x0, y - 8, "SPECIALISATION", 0.5f, 0.9f, 1.0f, 1);
+    for (int k = 0; k < SPEC_COUNT; k++)                  /* specialisations : bonus passif (en multi si l'hote les active) */
+        if (sel_button(x0 + k * step, y, bw, 44, specNames[k], k == wantSpec, 1, v3(specCol[k][0], specCol[k][1], specCol[k][2])))
+            wantSpec = k;
     for (int s = 0; s < 2; s++) {
         y += R;
         text(1, x0, y - 8, s ? "ARME 2" : "ARME 1", 0.5f, 0.9f, 1.0f, 1);
@@ -220,6 +225,9 @@ static void draw_loadout(float cx, float cy) {
         text(0, x0, y, buf, sd->r, sd->g, sd->b, 1);
         y += 22;
     }
+    snprintf(buf, sizeof buf, "%s : %s%s", specNames[wantSpec], specHelp[wantSpec], dmMode && !rules.specs ? "  (desactivees par l'hote)" : "");
+    text(0, x0, y, buf, specCol[wantSpec][0], specCol[wantSpec][1], specCol[wantSpec][2], 1);
+    y += 22;
     if (appState == APP_GAME) text(0, x0, y, "pris en compte au prochain respawn", 0.6f, 0.6f, 0.7f, 1);
     if (button(cx - 105, y + 14, 210, 50, "VALIDER")) { loadoutOpen = 0; cfg_save(); }
     if (uiClick) uiClick = 0;
@@ -302,6 +310,51 @@ static void draw_skin_menu(float cx, float cy) {
     if (uiClick) uiClick = 0;
 }
 
+/* regles de la partie (HEBERGER) : mode, grappin, munitions, boutique, specialisations, duree */
+static void draw_rules_panel(float x, float y, float w) {
+    static const int mins[4] = { 3, 5, 10, 15 };
+    char buf[96];
+    rect(x - 20, y, w + 40, 540, 0.03f, 0.04f, 0.08f, 0.6f);
+    rect(x - 20, y, w + 40, 2, 1.0f, 0.8f, 0.3f, 0.6f);
+    y += 40;
+    text(1, x, y, "REGLES", 1.0f, 0.8f, 0.3f, 1);
+    y += 22;
+    float aw = 46;
+    if (button(x, y, aw, 46, "<")) { do wantRules.mode = (wantRules.mode + MODE_COUNT - 1) % MODE_COUNT; while (!mode_ok(wantRules.mode, menuMap)); }
+    rect(x + aw + 4, y, w - 2 * aw - 8, 46, 0.05f, 0.06f, 0.1f, 0.9f);
+    snprintf(buf, sizeof buf, "MODE : %s", modeNames[wantRules.mode]);
+    text_c(1, x + w * 0.5f, y + 23 + fontH[1] * 0.3f, buf, 1, 0.9f, 0.6f, 1);
+    if (button(x + w - aw, y, aw, 46, ">")) { do wantRules.mode = (wantRules.mode + 1) % MODE_COUNT; while (!mode_ok(wantRules.mode, menuMap)); }
+    if (!mode_ok(wantRules.mode, menuMap)) wantRules.mode = MODE_FRAGS;   /* changement de carte */
+    y += 56;
+    text(0, x, y + 6, modeHelp[wantRules.mode], 0.8f, 0.82f, 0.9f, 1);
+    if (mode_team(wantRules.mode) && wantTeams == 0) { y += 20; text(0, x, y + 6, "mode d'equipe : 2 contre 2 au moins", 1, 0.6f, 0.4f, 1); }
+    y += 34;
+    float hw = (w - 10) * 0.5f;
+    if (sel_button(x, y, hw, 44, maps[menuMap].noHook ? "GRAPPIN : PAS ICI" : wantRules.hook ? "GRAPPIN : OUI" : "GRAPPIN : NON",
+                   wantRules.hook && !maps[menuMap].noHook, !maps[menuMap].noHook, v3(1, 0.85f, 0.4f))) wantRules.hook ^= 1;
+    snprintf(buf, sizeof buf, "MUNITIONS : %s", ammoRuleNames[wantRules.ammo]);
+    if (sel_button(x + hw + 10, y, hw, 44, buf, wantRules.ammo != AMMO_NORMAL, 1, v3(1, 0.85f, 0.4f))) wantRules.ammo = (wantRules.ammo + 1) % AMMO_COUNT;
+    y += 54;
+    if (sel_button(x, y, hw, 44, wantRules.shop ? "BOUTIQUE : OUI" : "BOUTIQUE : NON", wantRules.shop, 1, v3(1, 0.85f, 0.4f))) wantRules.shop ^= 1;
+    if (sel_button(x + hw + 10, y, hw, 44, wantRules.specs ? "SPECIALISATIONS : OUI" : "SPECIALISATIONS : NON", wantRules.specs, 1, v3(1, 0.85f, 0.4f))) wantRules.specs ^= 1;
+    y += 54;
+    text(0, x, y + 4, "DUREE", 0.7f, 0.75f, 0.85f, 1);
+    y += 12;
+    for (int k = 0; k < 4; k++) {
+        snprintf(buf, sizeof buf, "%d MIN", mins[k]);
+        if (sel_button(x + k * (w / 4), y, w / 4 - 8, 44, buf, wantRules.minutes == mins[k], 1, v3(1, 0.85f, 0.4f))) wantRules.minutes = mins[k];
+    }
+    y += 64;
+    if (wantRules.shop) {
+        text(0, x, y, "boutique : une arme de depart parmi 4, des pieces a chaque kill, mort et objectif,", 0.75f, 0.78f, 0.88f, 1);
+        text(0, x, y + 20, "et on achete d'autres armes a chaque mort", 0.75f, 0.78f, 0.88f, 1);
+        y += 46;
+    }
+    if (wantRules.specs) text(0, x, y, "specialisations : chacun choisit la sienne dans LOADOUT", 0.75f, 0.78f, 0.88f, 1);
+    if (uiClick) cfg_save();
+}
+
 /* ecran HEBERGER UNE PARTIE : nombre de joueurs (chacun pour soi ou equipes 1v1 a 4v4), bots pour completer */
 static void draw_host_menu(float cx, float cy) {
     static const char *modeNames[TEAM_MAX + 1] = { "LIBRE", "1V1", "2V2", "3V3", "4V4" };
@@ -309,7 +362,8 @@ static void draw_host_menu(float cx, float cy) {
     char buf[128];
     rect(0, 0, (float)winW, (float)winH, 0.02f, 0.02f, 0.06f, 0.78f);
     text_c(2, cx, cy - 300, "HEBERGER UNE PARTIE", 0.5f, 0.9f, 1.0f, 1);
-    float bw = 620, bx = cx - bw * 0.5f, y = cy - 230;
+    float bw = 620, bx = (winW >= 1260 ? cx - bw - 40 : cx - bw * 0.5f), y = cy - 230;
+    if (winW >= 1260) draw_rules_panel(cx + 20, y - 40, 600);
     rect(bx - 30, y - 40, bw + 60, 540, 0.03f, 0.04f, 0.08f, 0.6f);
     rect(bx - 30, y - 40, bw + 60, 2, 0.5f, 0.9f, 1.0f, 0.5f);
     y -= 6;
@@ -334,8 +388,11 @@ static void draw_host_menu(float cx, float cy) {
     y += 50;
     text(1, bx, y, "COMPLETER AVEC DES BOTS", 0.5f, 0.9f, 1.0f, 1);
     y += 18;
+    int noBots = mode_team(wantRules.mode) && mode_ok(wantRules.mode, menuMap);   /* modes a objectif : entre humains seulement */
+    if (noBots) hostBots = -1;
     for (int k = 0; k < 4; k++) {                         /* -1 = aucun bot, sinon leur niveau */
         float mx = bx + k * 157.0f;
+        if (noBots) { if (sel_button(mx, y, 147, 50, botNames[k], k == 0, k == 0, v3(1, 0.85f, 0.4f))) hostBots = -1; continue; }
         if (button(mx, y, 147, 50, botNames[k])) hostBots = k - 1;
         if (hostBots == k - 1) {
             rect(mx, y, 147, 3, 1, 0.85f, 0.4f, 1); rect(mx, y + 47, 147, 3, 1, 0.85f, 0.4f, 1);
@@ -343,7 +400,8 @@ static void draw_host_menu(float cx, float cy) {
         }
     }
     y += 82;
-    if (hostBots < 0) snprintf(buf, sizeof buf, "les autres joueurs te trouvent en LAN ou en ligne");
+    if (noBots) snprintf(buf, sizeof buf, "pas de bots en %s : partie entre joueurs (LAN ou en ligne)", modeNames[wantRules.mode]);
+    else if (hostBots < 0) snprintf(buf, sizeof buf, "les autres joueurs te trouvent en LAN ou en ligne");
     else if (wantTeams > 0)
         snprintf(buf, sizeof buf, "%d bot%s : toi + %d allie%s contre %d", wantTeams * 2 - 1, wantTeams * 2 - 1 > 1 ? "s" : "",
                  wantTeams - 1, wantTeams > 2 ? "s" : "", wantTeams);

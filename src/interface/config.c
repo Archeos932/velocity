@@ -49,6 +49,8 @@ static void cfg_save(void) {
     fprintf(f, "online=%d" "\n" "teams=%d" "\n" "update_check=%d" "\n", onlineOn, wantTeams, updCheck);
     fprintf(f, "loadout=%d,%d" "\n" "melee=%d" "\n" "skill=%d" "\n" "skin=%d" "\n", wantLoadout[0], wantLoadout[1], wantMelee, wantSkill, wantSkin);
     fprintf(f, "map=%d" "\n" "map_rotate=%d" "\n", menuMap, mapRotate);
+    fprintf(f, "regles=%d,%d,%d,%d,%d,%d" "\n" "spec=%d" "\n", wantRules.mode, wantRules.hook, wantRules.ammo, wantRules.shop,
+            wantRules.specs, wantRules.minutes, wantSpec);
     if (strcmp(lobbyAddr, LOBBY_DEFAULT)) fprintf(f, "lobby=%s" "\n", lobbyAddr);   /* le defaut peut changer avec une mise a jour */
     for (int a = 0; a < A_COUNT; a++) fprintf(f, "bind_%s=%d,%d" "\n", actId[a], binds[a][0], binds[a][1]);
     fclose(f);
@@ -90,6 +92,12 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
         else if (!strcmp(line, "skin")) wantSkin = atoi(v) < 0 || atoi(v) >= SKN_COUNT ? 0 : atoi(v);
         else if (!strcmp(line, "map")) menuMap = atoi(v) >= 0 && atoi(v) < NMAPS ? atoi(v) : 0;
         else if (!strcmp(line, "map_rotate")) mapRotate = atoi(v) != 0;
+        else if (!strcmp(line, "regles")) {
+            MatchRules r = wantRules;
+            if (sscanf(v, "%d,%d,%d,%d,%d,%d", &r.mode, &r.hook, &r.ammo, &r.shop, &r.specs, &r.minutes) == 6 &&
+                r.mode >= 0 && r.mode < MODE_COUNT && r.ammo >= 0 && r.ammo < AMMO_COUNT && r.minutes > 0 && r.minutes <= 60) wantRules = r;
+        }
+        else if (!strcmp(line, "spec")) wantSpec = atoi(v) >= 0 && atoi(v) < SPEC_COUNT ? atoi(v) : 0;
         else if (!strcmp(line, "skill")) wantSkill = atoi(v) >= 0 && atoi(v) < SK_COUNT ? atoi(v) : SK_COIN;
         else if (!strncmp(line, "bind_", 5))
             for (int a = 0; a < A_COUNT; a++)

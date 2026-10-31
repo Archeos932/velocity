@@ -331,6 +331,7 @@ static void render(float alpha, float frameDt) {
     glDisable(GL_TEXTURE_2D);
     draw_map_fx();                                        /* bandes d'acceleration, plan de mort */
     draw_race_world();                                    /* course : portes et fantome */
+    draw_modes_world();                                   /* modes : zones, drapeaux, bouclier, salles de depart */
     draw_slam_marker();
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);

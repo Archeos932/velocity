@@ -106,10 +106,24 @@ static void game_tick(float dt) {
         P.deathT += dt;
         if (!dmMode && (rp || (lmbp && P.deathT > 1.0f))) { reset_game(); return; }
     } else gameTime += dt;
+    if (eco_on()) {                                       /* boutique : curseur libre a la mort et au choix de l'arme de depart */
+        static int shopWas;
+        int shopping = (P.dead || ecoNeedStarter) && !spectating && !botMode;
+        if (shopping && captured) set_capture(0);
+        if (!shopping && shopWas && !captured) set_capture(1);
+        shopWas = shopping; ecoShopping = shopping;
+        if (ecoNeedStarter && !P.dead) {                  /* arme de depart : 10 s pour choisir, immobile en attendant */
+            ecoStarterT -= dt;
+            if (ecoStarterT <= 0) { eco_pick_starter(WP_RAIL); loadout_apply(); }
+            P.vel = v3(0, 0, 0);
+        }
+    }
+    if (dmMode && rules.ammo == AMMO_INFINI && !P.dead)   /* regle : munitions infinies */
+        for (int s = 0; s < 2; s++) P.ammo[P.loadout[s]] = ammoDef[P.loadout[s]].max;
 
     if (P.dead) {                                         /* ecran de mort : les touches d'arme changent le loadout */
-        if (w1) loadout_cycle(0);
-        if (w2) loadout_cycle(1);
+        if (w1 && !eco_on()) loadout_cycle(0);            /* (boutique : les armes s'achetent, on ne les fait pas defiler) */
+        if (w2 && !eco_on()) loadout_cycle(1);
         if (meleePress) { do wantMelee = (wantMelee + 1) % MK_COUNT; while (!mkReady[wantMelee]); cfg_save(); }
         if (coinPress) { wantSkill = (wantSkill + 1) % SK_COUNT; cfg_save(); }   /* Competences : la touche fait defiler */
     } else {

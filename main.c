@@ -22,6 +22,7 @@
 #include "src/monde/carte.c"                     /* carte en boites (AABB), recharges, collisions, rayons */
 #include "src/monde/decor.c"                     /* decor maille : colonnes, arches, coupoles, toits, arbres... */
 #include "src/monde/citadelle.c"                 /* LA CITADELLE : carte detaillee, pierre et enduit au soleil */
+#include "src/monde/oasis.c"                     /* L'OASIS : carte tactique en equipes, sans grappin, salles de depart */
 #include "src/monde/entites.c"                   /* structures du jeu : joueur P, ennemis, pieces, projectiles, particules */
 
 #include "src/reseau/etat_partage.c"             /* ce que le jeu doit savoir du reseau avant le reseau : joueurs NP, equipes, declarations */
@@ -63,8 +64,10 @@
 
 #include "src/solo/ennemis_vagues.c"             /* mode solo : ennemis et vagues */
 
+#include "src/jeu/economie.c"                   /* boutique : pieces, arme de depart, achats a la mort */
 #include "src/reseau/protocole.c"                /* paquets, evenements EV_*, apply_event */
 #include "src/reseau/hote.c"                     /* hote : arbitrage (PV, kills, respawns, parry) */
+#include "src/reseau/modes.c"                    /* modes : chrono, 3 zones, drapeau, bouclier ; salles de depart ; SOUTIEN */
 #include "src/reseau/client.c"                   /* client : connexion, instantanes, envoi */
 #include "src/reseau/en_ligne.c"                 /* parties en ligne : STUN, lobby WebSocket */
 
@@ -101,6 +104,7 @@
 #include "src/rendu/joueurs.c"                   /* joueurs distants, scies et mines en monde, trainees, contours */
 
 #include "src/interface/hud.c"
+#include "src/interface/modes_hud.c"               /* modes : objectifs (monde et HUD), boutique, arme de depart */
 #include "src/interface/course_hud.c"              /* mode COURSE : chrono, portes en 3D, fantome, record */                   /* HUD : viseur, vie, munitions, radar */
 
 #include "src/rendu/ciel_ombres_bloom.c"         /* ciel, ombres dynamiques, bloom */
