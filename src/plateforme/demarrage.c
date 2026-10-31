@@ -25,6 +25,7 @@ static void music_follow_game(void) {
     } else if (appState == APP_GAME) {
         lvl = wave - 1;
     }
+    if (appState == APP_GAME) lvl += styleRank >= ST_S ? 2 : styleRank >= ST_A ? 1 : 0;   /* le style pousse la musique */
     music_level(lvl);
 }
 
@@ -499,6 +500,11 @@ static int velocity_main(const char *cmd) {
                 impactT = 0;
             }
             P.vel = v3(0, 0, -32);
+        }
+        if (strstr(shotPath, "style")) {                  /* jauge de style en S, trois bonus qui defilent */
+            P.grounded = 0; P.vel = v3(0, 0, -26);
+            style_kill(W_COIN); style_kill(W_RAIL); style_add(60, "PARRY");
+            styleFlash = 0.4f;
         }
         if (strstr(shotPath, "enclume")) {                /* pique de l'Enclume au-dessus d'un drone : repere d'impact */
             hook_release(0);

@@ -104,6 +104,7 @@ static void reset_game(void) {
     memset(&P, 0, sizeof P);
     P.pos = P.prevPos = maps[curMap].start;
     P.hp = 100; P.dashCharge = 2; P.airJumps = 1; P.eyeH = EYE_STAND; P.fovCur = fovBase;
+    style_reset();
     loadout_apply();
     anvil_reset();
     P.skillCh = (float)skillDef[P.skill].max;

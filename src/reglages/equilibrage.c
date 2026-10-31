@@ -144,6 +144,24 @@ enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_COUNT };
 #define PARRY_RANGE_SHRINK 0.85f  /* ... et une zone de parry 15 % plus courte */
 #define PARRY_AIM_COS     0.988f  /* aide a la visee du renvoi : ~9 degres */
 #define PVP_HIT_CAP       60.0f   /* en PvP, aucune touche ne retire plus de 60 PV */
+
+/* Jauge de style (src/jeu/style.c) : seuils des rangs C, B, A, S et plafond */
+#define STYLE_C          60.0f
+#define STYLE_B          130.0f
+#define STYLE_A          220.0f
+#define STYLE_S          330.0f
+#define STYLE_MAX        420.0f
+#define STYLE_KILL       45.0f    /* un kill */
+#define STYLE_BONUS      30.0f    /* chaque bonus d'un kill (en l'air, vitesse, grappin, ricochet, enchaine...) */
+#define STYLE_PARRY      55.0f    /* un parry reussi */
+#define STYLE_FAST       20.0f    /* m/s : kill "PLEINE VITESSE" */
+#define STYLE_CHAIN_T    3.0f     /* kills enchaines en moins de 3 s */
+#define STYLE_SPEED_MIN  12.0f    /* au-dela, la vitesse remplit la jauge */
+#define STYLE_SPEED_K    1.6f     /* points par seconde et par m/s au-dela de STYLE_SPEED_MIN */
+#define STYLE_WALL_K     8.0f     /* points par seconde en wall-run ou au grappin a pleine vitesse */
+#define STYLE_HURT_K     1.8f     /* points perdus par PV perdu */
+#define STYLE_DECAY      10.0f    /* baisse par seconde (rang D) ... */
+#define STYLE_DECAY_RANK 6.0f     /* ... plus 6 par rang au-dessus */
 #define MELEE_PARRIED_CD  1.0f    /* attaquant dont l'epee est paree : epee bloquee */
 #define MELEE_PARRY_GRACE 0.15f   /* tolerance de latence pour l'hote */
 

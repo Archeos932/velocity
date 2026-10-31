@@ -54,7 +54,7 @@ static void bot_void_guard(float dt) {
         V3 dv = v3(wish.x * sp, P.grounded ? fmaxf(v.y, vy) : (vy > 2 ? vy : vy < 0 ? vy : 2), wish.z * sp);
         if (!bot_lands(P.pos, dv, ky) && bot_lands(P.pos, v, ky)) botPress[A_DASH] = 0;
     }
-    if (navBusy && rescueT <= 0 && (P.hook != HOOK_NONE || botPress[A_HOOK] || P.grounded)) return;   /* navigation : grappin ou pad prevu */   /* navigation : grappin ou pad prevu */
+    if (navBusy && rescueT <= 0 && (P.hook != HOOK_NONE || botPress[A_HOOK] || P.grounded || navLanding)) return;   /* navigation : grappin ou pad prevu */   /* navigation : grappin ou pad prevu */
     if (P.grounded) {
         rescueT = 0;
         int onPad = boxes[P.groundBox].kind == B_PAD;

@@ -64,7 +64,8 @@ static void kill_enemy(int i, int byPlayer) {
     kills++;
     combo++; comboT = 3.0f;
     float mult = (1 + rel_speed(e->vel) / 15.0f) * (1 + 0.25f * (combo - 1));
-    int pts = (int)((e->type == EN_DRONE ? 100 : 60) * mult);
+    int pts = (int)((e->type == EN_DRONE ? 100 : 60) * mult * style_mult());   /* le style multiplie les points */
+    style_kill(-1);
     score += pts;
     P.hp = fminf(100, P.hp + (e->type == EN_DRONE ? 15 : 8));
     snprintf(popText, sizeof popText, "+%d", pts);
@@ -156,4 +157,5 @@ static void parry_feedback(V3 where) {
     popT = 1.0f;
     for (int k = 0; k < 30; k++) add_part(where, vmul(rand_dir(), 9), v3(1, 1, 0.85f), 0.4f, 0.12f, 0);
     play(S_PARRY, 0.9f, 1.0f);
+    style_parry();
 }

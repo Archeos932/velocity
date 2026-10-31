@@ -32,6 +32,8 @@
 #include "src/joueur/mouvement.c"                /* physique du joueur : bhop, slide, dash, wall-run, grappin */
 #include "src/effets/camera_mort.c"              /* camera de mort : la vue se tourne vers le tueur */
 
+#include "src/jeu/style.c"                      /* jauge de style D a S : mouvement et beaux kills */
+
 #include "src/combat/degats.c"                   /* degats, kills, explosions, serie de tirs, parry */
 #include "src/combat/loadout.c"                  /* loadout a deux armes et munitions a jauge */
 

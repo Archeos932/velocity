@@ -291,6 +291,35 @@ static void draw_killcam_hud(float cx, float cy) {
     (void)cy;
 }
 
+/* jauge de style : rang (lettre), mot, barre du rang en cours, derniers bonus ; a droite, a mi-hauteur */
+static void draw_style_hud(void) {
+    if (P.dead || spectating || (style <= 0.5f && styleFeed[0].t <= 0)) return;
+    int r = styleRank;
+    const float *c = styleCol[r];
+    float x = winW - 250.0f, y = winH * 0.36f, fl = fmaxf(styleFlash, 0), hurt = fmaxf(-styleFlash, 0);
+    float lo = styleAt[r], hi = r + 1 < ST_COUNT ? styleAt[r + 1] : STYLE_MAX, k = clampf((style - lo) / (hi - lo), 0, 1);
+    float a = clampf(style / 20, 0.35f, 1);
+    hud_panel(x - 14, y - 10, 236, 82 + 18.0f * STYLE_FEED + 8);
+    float sh = 1 + 0.5f * fl, jx = hurt * 6 * sinf((float)nowT * 90);
+    for (int g = 0; g < 3 && r >= ST_A; g++)              /* A et S : halo qui pulse autour de la lettre */
+        text(2, x + jx - 2 + g * 2, y + 52 - g, styleName[r], c[0], c[1], c[2], 0.12f + 0.08f * sinf((float)nowT * 8));
+    text(2, x + jx, y + 52, styleName[r], c[0] * sh, c[1] * sh, c[2] * sh, a);
+    text(1, x + 54, y + 20, styleWord[r], c[0], c[1], c[2], a);
+    char buf[24];
+    snprintf(buf, sizeof buf, "x%.2g", styleMultTab[r]);
+    if (!dmMode) text(0, x + 54, y + 44, buf, 0.85f, 0.85f, 0.9f, a * 0.8f);
+    rect(x + 54, y + 56, 150, 6, 0.1f, 0.1f, 0.15f, 0.8f);
+    rect(x + 54, y + 56, 150 * k, 6, c[0], c[1], c[2], 0.95f);
+    if (hurt > 0) rect(x + 54, y + 56, 150, 6, 1, 0.2f, 0.2f, hurt * 0.6f);
+    for (int i = 0; i < STYLE_FEED; i++) {                /* +BONUS qui glissent et s'effacent */
+        if (styleFeed[i].t <= 0) continue;
+        char fb[40];
+        snprintf(fb, sizeof fb, "+ %s", styleFeed[i].txt);
+        float t = styleFeed[i].t, al = clampf(t / 0.5f, 0, 1);
+        text(0, x + 54 + (1.6f - t) * 8, y + 82 + i * 18.0f, fb, 1, 0.9f, 0.6f, al);
+    }
+}
+
 static void draw_hud(void) {
     glMatrixMode(GL_PROJECTION); glLoadIdentity();
     glOrtho(0, winW, winH, 0, -1, 1);
@@ -836,6 +865,7 @@ static void draw_hud(void) {
     text(0, winW - 110.0f, 30, buf, 0.5f, 0.5f, 0.6f, 0.8f);
 
     if (popT > 0) text_c(1, cx, cy - 40 - (1.2f - popT) * 30, popText, 1, 0.85f, 0.3f, clampf(popT, 0, 1));
+    draw_style_hud();                                     /* jauge de style */
     if (msgT > 0) text_c(2, cx, cy - 120, msg, 1, 1, 1, clampf(msgT, 0, 1));
 
     if (dmMode && matchOver) {

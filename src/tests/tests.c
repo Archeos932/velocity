@@ -2936,6 +2936,24 @@ static void run_tests(const char *path) {
                     bot_lands(s, v3(0, JUMP_V, 0), maps[1].killY), bot_lands(s, v3(-15, JUMP_V, 0), maps[1].killY));
         }
 
+        {   /* --- Jauge de style : kill aerien a pleine vitesse, puis un deuxieme enchaine, un coup recu, et l'oubli --- */
+            reset_game(); gameTime = 100;
+            P.grounded = 0; P.vel = v3(25, 0, 0);
+            style_kill(W_RAIL);
+            float s1 = style; int r1 = styleRank;
+            gameTime += 1;
+            style_kill(W_RAIL);
+            float s2 = style; int r2 = styleRank;
+            P.hp = 60; style_tick(TICK);
+            float s3 = style;
+            P.vel = v3(0, 0, 0);
+            for (int i = 0; i < 20 * 120; i++) style_tick(TICK);
+            fprintf(f, "style : kill aerien rapide %.0f (%s), enchaine %.0f (%s), coup de 40 PV -> %.0f, 20 s a l'arret -> %.0f (%s), "
+                       "points x%.2f en S (attendu 105 C, %.0f A, %.0f, 0 D, x2.00)\n",
+                    s1, styleName[r1], s2, styleName[r2], s3, style, styleName[styleRank], styleMultTab[ST_S],
+                    105 + 105 + STYLE_BONUS, 105 + 105 + STYLE_BONUS - 40 * STYLE_HURT_K);
+            reset_game();
+        }
         {   /* --- Navigation des bots : depart -> but sur chaque carte, avec le graphe et les vraies commandes --- */
             static const float nv[6][7] = {               /* carte, depart x y z, but x y z */
                 { 0, -66, 0, 66, 66, 0, -66 }, { 1, 17.8f, 0, 17.8f, -3, 50, 0 }, { 2, -60, 20, 10, 60, 20, -10 },
@@ -2949,7 +2967,6 @@ static void run_tests(const char *path) {
                 V3 goal = v3(nv[k][4], nv[k][5], nv[k][6]);
                 navLen = 0; navReplanT = 0; navMap = -1;
                 int plan = nav_plan(goal, 1, TICK), plen = navLen, ok = 0, falls = 0;
-                }
                 float t = 0;
                 for (; t < 40 && !ok; t += TICK) {
                     memset(botHeld, 0, sizeof botHeld);
@@ -2959,6 +2976,9 @@ static void run_tests(const char *path) {
                     game_tick(TICK); P.hp = 100;
                     if (P.dead || P.pos.y < maps[curMap].killY) { falls++; P.dead = 0; P.pos = P.prevPos = v3(nv[k][1], nv[k][2], nv[k][3]); P.vel = v3(0, 0, 0); navLen = 0; }
                     ok = hlen(vsub(goal, P.pos)) < 4 && fabsf(goal.y - P.pos.y) < 2.5f;
+                    if (getenv("NAVDBG") && fmodf(t, 0.5f) < TICK)   /* NAVDBG=1 : trace du trajet dans le fichier de test */
+                        fprintf(f, "  [%d %.1f] pos %.1f %.1f %.1f v %.1f etape %d/%d crochet %d sol %d atterr %d\n", k, t, P.pos.x, P.pos.y,
+                                P.pos.z, hlen(P.vel), navStep, navLen, P.hook, P.grounded, navLanding);
                 }
                 nn += snprintf(nb2 + nn, sizeof nb2 - nn, "%s%s %d noeuds chemin %d -> %s en %.1f s chutes %d", k ? " ; " : "",
                                maps[curMap].name, nnav, plan ? plen : 0, ok ? "arrive" : "PERDU", t, falls);

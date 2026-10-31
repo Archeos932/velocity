@@ -120,6 +120,7 @@ static void game_tick(float dt) {
     }
 
     player_tick(dt, jp, dp);
+    style_tick(dt);
     if (maps[curMap].killY < -999) {                      /* carte fermee : sortie de la carte = chute (sinon void_check) */
         if (!P.dead && !fellOut && P.pos.y < FALL_DEATH_Y) {  /* sorti de la carte et tombe dans le vide : mort */
             fellOut = 1;

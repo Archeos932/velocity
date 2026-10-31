@@ -851,6 +851,7 @@ static void apply_event(const NetEvent *ev) {
             if (is_melee_w(ev->sub)) ammo_points(PTS_MELEE_KILL, AP_KILL);   /* kill en melee : +100 points */
             play(S_KILL, 0.7f, 1.0f);
             combo++; comboT = 3; hitMarker = 0.25f;
+            style_kill(ev->sub);
             snprintf(popText, sizeof popText, "ELIMINE %s", pname(v));
             popT = 1.5f;
         }
