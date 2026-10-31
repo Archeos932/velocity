@@ -18,6 +18,7 @@ Le propriétaire est francophone : réponses, commentaires et docs **en françai
 - Mode équipes 1v1 à 4v4 (implémenté) : **§3.11 de `docs/CODE.md`** ; éclairage, ombres, bloom : **§3.12**
 - Cartes (`MapDef`, 5 cartes, kill zone) : **§3.18** ; compétences (PIECE, MARQUE, CHARGE…) : `src/combat/competences.c`
   et `docs/COMPETENCES_MARKSMAN.md`
+- Navigation des bots (graphe auto) : **§3.19** ; jauge de style : **§3.20** ; mode COURSE (LA TOILE, fantôme) : **§3.21**
 - Réglages graphiques modifiables sans recompiler : **`graphismes/rendu.ini`** (+ textures `.bmp`, F5 en jeu) ;
   code : §3.13 de `docs/CODE.md`. Toute nouvelle valeur d'aspect doit y être exposée (`gfxKeys`).
 

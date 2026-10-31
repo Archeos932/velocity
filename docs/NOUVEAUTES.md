@@ -209,6 +209,24 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
   conformes (+ une ligne : départs par camp sur LE CANYON), captures, matchs bot contre bot sur LE CANYON et LE DOJO
   (le client sans `--map` charge bien la carte de l'hôte). Pas encore vérifié sous Windows.
 
+## 19. Bots qui savent se déplacer, jauge de style, course au grappin, nouvelles musiques
+
+- **Navigation des bots** : chaque carte a son graphe calculé tout seul (sols, pads, ancres, grappin). Les bots
+  passent les vides du Canyon (pad → îlot → grappin vers l'autre falaise), montent la spirale du Puits, contournent
+  les piliers du Dojo, et tirent en route. Simulation de test : les 6 trajets d'essai arrivent, sans chute
+  (avant : Canyon et Puits impossibles). Match de bots sur Le Canyon : 1 chute au lieu de 3 à 6.
+- **Jauge de style D → S** (à droite du viseur) : la vitesse, le wall-run, le grappin et les beaux kills (en l'air,
+  à pleine vitesse, au grappin, ricochet, enchaînés, parry) la remplissent ; les coups reçus la vident. Points du solo
+  × 2 en S, musique plus intense en A et S.
+- **Mode COURSE** (bouton à côté de SOLO) : course au grappin façon Spider-Man sur la nouvelle carte **LA TOILE**,
+  quatre avenues de gratte-ciel au-dessus du vide, 13 portes, chrono, écart au record à chaque porte, **fantôme** de
+  ton meilleur temps, chute = retour à la dernière porte, R pour recommencer. Record dans `velocity_course.txt`.
+- **5 nouvelles musiques**, une par carte : Le Puits (dub techno sombre, cloches FM), Le Canyon (breakbeat du désert
+  avec swing), La Boucle (synthwave, arpèges), Le Dojo (drum and bass, gamme japonaise), La Toile (trance qui monte
+  avec les portes). Le moteur gère maintenant une gamme, un timbre de lead et un swing par morceau ; l'Arène est
+  identique à l'échantillon près.
+- Docs : §3.19 à §3.21 de `docs/CODE.md`. Tests : navigation, style, course, musiques.
+
 ---
 
 ## Vérifications faites

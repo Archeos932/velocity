@@ -104,8 +104,9 @@ velocity/
 │   ├── armes/        une arme = un fichier : enclume, lance, fleau, poings, egide, elan, eventail, tesla, scie, ventouse
 │   ├── solo/         ennemis_vagues.c
 │   ├── reseau/       etat_partage.c, protocole.c (paquets, EV_*), hote.c, client.c, en_ligne.c (lobby, STUN)
-│   ├── bots/         bot.c
-│   ├── jeu/          kill_zone.c (void_check, bots prudents), boucle.c (pickup_tick, game_tick)
+│   ├── bots/         navigation.c (graphe de la carte, plus court chemin), bot.c
+│   ├── jeu/          style.c (jauge D a S), course.c (mode COURSE), kill_zone.c (void_check, bots prudents),
+│   │                 boucle.c (pickup_tick, game_tick)
 │   ├── graphismes/   rendu_ini.c (lecture de graphismes/rendu.ini, ambiances, qualite)
 │   ├── perso/        skins.c (modeles et animation des personnages)
 │   ├── rendu/        base, textures, eclairage (lightmaps), modeles, armes_rendu, viewmodel, joueurs,
@@ -145,6 +146,7 @@ velocity/
 | `reseau/hote.c` | autorité de l'hôte | `host_handle`, `host_kill`, `host_tick`, `pick_spawn` |
 | `reseau/client.c` | client | `on_welcome`, `apply_snap`, `client_recv`, `net_update`, `net_connect` |
 | `reseau/en_ligne.c` | lobby et STUN (voir §4) | `stun_*`, `lb_*`, `quick_play` |
+| `bots/navigation.c` | navigation des bots (§3.19) | `nav_build`, `nav_path`, `nav_plan`, `nav_follow`, `NV`, `navBusy`, `navLanding` |
 | `bots/bot.c` | bots | `aim_assist`, `bot_think` |
 | `combat/competences.c` | compétences (touche `A_SKILL`) | `skill_mark`, `skill_allin`, `skill_decoy`, `skill_tick` |
 | `jeu/kill_zone.c` | chute sous `killY` | `void_check`, `bot_lands`, `bot_void_guard` |
@@ -160,7 +162,10 @@ velocity/
 | `interface/menus.c` | menus et paramètres | `button`, `slider`, `draw_settings`, `draw_loadout`, `draw_skin_menu`, `draw_main_menu`, `draw_pause` |
 | `interface/scores.c` | scores, killfeed, pseudos | `draw_scoreboard`, `draw_killfeed`, `project`, `draw_name_tags` |
 | `rendu/joueurs.c` | joueurs distants | `np_anim`, `draw_trails`, `draw_outlines`, `draw_remote_players` |
-| `interface/hud.c` | HUD | `melee_preview`, `draw_radar`, `draw_hud` |
+| `jeu/style.c` | jauge de style (§3.20) | `style_add`, `style_kill`, `style_parry`, `style_tick`, `style_mult` |
+| `jeu/course.c` | mode COURSE (§3.21) | `race_start`, `race_tick`, `race_respawn`, `race_ghost_at` |
+| `interface/hud.c` | HUD | `melee_preview`, `draw_radar`, `draw_style_hud`, `draw_hud` |
+| `interface/course_hud.c` | course : affichage et record | `draw_race_world`, `draw_race_hud`, `race_save`, `race_load` |
 | `rendu/ciel_ombres_bloom.c` | ciel, ombres, bloom (voir §3.12) | `draw_sky_dome`, `draw_dyn_shadows`, `bloom_apply` |
 | `effets/monde_fx.c` | effets du monde | `draw_world_marks`, `draw_world_glow`, `draw_weather`, `storm_tick`, `draw_flare` |
 | `interface/carte_ecran.c` | second écran : carte et stats (§3.15) | `draw_map_screen`, `maps_draw_map`, `maps_draw_panel` |
@@ -433,7 +438,8 @@ Touche `A_SKILL` (ancien `A_COIN`), charges `P.skillCh` (max et recharge par `sk
 - Les sons `S_*` sont fabriqués **une fois** dans `make_sounds` (sinus, bruit filtré, enveloppes
   exponentielles) puis convertis par `mksound`. `sbuf(secondes, &n)` alloue un tampon de travail.
 - Pas d'audio en mode `--shot` ni `--test` (`audio_ok == 0`, `play` ne fait rien).
-- **Musique** (hard techno, un morceau par carte) : tout le design est dans **`src/son/music.h`** (morceaux `tracks[]`
+- **Musique** (un morceau par carte : Arène hard techno, Puits dub techno, Canyon breakbeat, Boucle synthwave,
+  Dojo drum and bass, Toile trance ; `MapDef.music`) : tout le design est dans **`src/son/music.h`** (morceaux `tracks[]`
   + moteur), inclus par `son/audio.c`. Séquenceur synthétisé mixé dans `audio_fill` via `music_frame()` (stéréo), volume
   `musicVol` (`music=` dans `velocity.ini`, curseur « Musique »). Un morceau : BPM de départ, `bpmStep` (BPM
   gagnés par niveau), tonique (Hz), jusqu'à 16 **cellules** d'une mesure de 16 pas (`MusBar` : masques
@@ -441,7 +447,10 @@ Touche `A_SKILL` (ancien `A_COIN`), charges `P.skillCh` (max et recharge par `sk
   l'**ordre des cellules sur 32 mesures** (`song` aux niveaux 0-2 avec intro progressive, `songHi` dès le
   niveau 3 sans intro) plus une transposition `prog` par groupe de 4 mesures. Instruments : kick saturé à chute
   de hauteur, basse rumble en sidechain, hats/clap/crash/riser en bruit, lead supersaw (7 scies désaccordées, écart croissant avec le niveau), acid
-  (scie dans un filtre résonant, dès le niveau 5).
+  (scie dans un filtre résonant, dès le niveau 5). Chaque morceau choisit aussi sa **gamme** (`scale`, pour les notes
+  voisines ; tout à 0 = do ré fa la de l'Arène), son **timbre de lead** (`MUS_SAW` supersaw, `MUS_PLUCK` carré pincé
+  pour les arpèges, `MUS_BELL` cloche FM) et son **swing** (pas pairs plus longs). L'Arène est inchangée à l'échantillon près.
+  Intensité : en course, 2 + la progression dans les portes ; la jauge de style ajoute +1 en A, +2 en S.
   - **Stéréo** : kick, basse et acid au centre ; hats à des positions aléatoires ; clap, crash et riser larges
     (deux bruits différents) ; les 7 scies du supersaw réparties de gauche à droite ; écho ping-pong du lead
     (3 pas). `music_sample()` reste la version mono (moyenne) pour les tests.
@@ -769,6 +778,53 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
 - Réglage : PARAMETRES > « 2e ECRAN : NON / HAUT / 3D » (`second_ecran=`, `carte_vue=` dans `velocity.ini`).
   Jamais en `--bot`/`--shot`. Capture de la vue 3D : `--shot carte3d.bmp`, `carte3d_dm.bmp`…
 - Capture : `--shot carte.bmp` (solo), `carte_dm.bmp`, `carte_dm_equipes.bmp` dessinent cet écran dans la fenêtre du jeu.
+
+### 3.19 Navigation des bots (`src/bots/navigation.c`)
+
+- **Graphe calculé tout seul** à chaque carte (`nav_build`, au premier besoin ou quand `curMap` / `nb` change) :
+  nœuds **SOL** (dessus libre d'une boîte, une grille tous les `NAV_GRID` m sur les grands sols, un coin libre si le
+  centre est couvert), **PAD** (dessus d'un jump pad), **ANCRE** (petit cube flottant sans sol dessous).
+- **Arêtes** : MARCHE (sol continu, passage assez large pour le corps : `nav_fat_los`), SAUT (trou ≤ `NAV_JUMP`, marche
+  ≤ `NAV_JUMP_UP`), PAD (point de chute balistique), GRAPPIN (vers un dessus plus haut, au-dessus d'un grand vide ou vers
+  une ancre ; visée sur le bord : `nav_hook_point`), LÂCHER (d'une ancre vers un sol plus bas). Au plus `NAV_EMAX` par
+  nœud : la plus chère est remplacée. Une arête qui bloque (immobile 0,8 s ou 6 s sans arriver) est retirée.
+- **Suivi** (`nav_plan` toutes les 0,4 s, jamais en plein vol ; `nav_follow`) : course au sol puis bhop avec
+  air-strafe ; pad : on revient dessus tant qu'il n'a pas lancé ; grappin : point visé figé au lancer, pas d'avance
+  pendant la traction, lâcher au bord puis phase « atterrissage » (`navLanding`, double saut et air-control).
+- **Dans `bot_think`** : le bot suit le graphe quand sa cible est cachée (> 0,35 s), quand il va chercher une
+  recharge, quand le chemin commence par autre chose qu'une marche (un vide entre eux), en plein trajet, ou en ronde
+  sans cible ; il **tire en route** (sauf pendant la traction). En vue sur le même sol, il se bat comme avant.
+- **Garde-fou du vide** (`bot_void_guard`) : il laisse faire la navigation pendant un grappin, un pad ou un
+  atterrissage prévus ; son grappin de secours (≥ 5 m) a priorité et annule le chemin.
+- Journal : « navigation : graphe N nœuds, chemins, arêtes suivies par type, arrivées ». Test : trajets départ → but
+  sur chaque carte avec les vraies commandes (« navigation : … arrive partout »).
+
+### 3.20 Jauge de style (`src/jeu/style.c`)
+
+- Rangs **D, C, B, A, S** (`STYLE_C/B/A/S`, plafond `STYLE_MAX`). Monte avec la vitesse au-delà de `STYLE_SPEED_MIN`,
+  le wall-run et le grappin à pleine vitesse ; chaque kill (`STYLE_KILL`) avec bonus `STYLE_BONUS` : AERIEN, PLEINE
+  VITESSE (≥ `STYLE_FAST`), TARZAN (au grappin), SUR LE MUR (< 1 s après un wall-run), RICOCHET, AU CONTACT, DOUBLE /
+  TRIPLE / CARNAGE (< `STYLE_CHAIN_T`) ; parry `STYLE_PARRY` ; porte de course. Baisse de `STYLE_DECAY` +
+  `STYLE_DECAY_RANK` par rang et par seconde (×1,6 à l'arrêt), et de `STYLE_HURT_K` par PV perdu. Remise à zéro à la mort.
+- Effets : points du solo × `style_mult()` (1 ; 1,1 ; 1,25 ; 1,5 ; 2), musique +1 en A et +2 en S, rien sur
+  l'équilibre PvP. Affichage `draw_style_hud` (lettre, mot, barre, derniers bonus). Branché dans `kill_enemy`,
+  `apply_event` (`EV_KILL` à moi), `parry_feedback`, `game_tick`. Capture : `--shot style.bmp`.
+
+### 3.21 Mode COURSE (`src/jeu/course.c`, `src/interface/course_hud.c`)
+
+- Bouton **COURSE** du menu principal (`ACT_RACE`) : carte à portes (`MapDef.gates` x y z rayon, `ngates`,
+  `startYaw` ; la première est **LA TOILE**, `build_map_toile` : quatre avenues de gratte-ciel au-dessus du vide,
+  13 portes jusqu'au toit d'arrivée). Pas d'ennemis, pas de vagues.
+- `race_start` : décompte `RACE_COUNTDOWN` immobile, puis chrono ; une porte compte quand le segment
+  `prevPos → pos` (centre du corps) traverse sa sphère, dans l'ordre. Chute sous `killY` : `race_respawn` à la
+  dernière porte passée (le chrono continue, compteur de chutes). **R** ou RECOMMENCER : `race_start`.
+- **Record** : temps, temps intermédiaires (écart vert / rouge à chaque porte) et **fantôme** (position et
+  orientation à 30 Hz, `RACE_GMAX`) dans `velocity_course.txt` à côté de `velocity.ini` (jamais en `--bot`,
+  `--shot`, `--test`). Le fantôme est dessiné en silhouette additive bleutée (`skinFlat`).
+- Affichage : anneaux des 3 prochaines portes (la suivante respire, avec une colonne de lumière ; l'arrivée est
+  dorée), flèche au bord de l'écran si la porte est hors champ, chrono, PORTE k / n, écran d'ARRIVEE.
+- Captures : `--shot course.bmp`, `course_depart.bmp`, `course_fin.bmp`. Test : portes libres, lignes droites
+  porte à porte dégagées, porte sautée non comptée, chute → retour à la porte, arrivée, record, fantôme.
 
 ## 4. Réseau LAN
 

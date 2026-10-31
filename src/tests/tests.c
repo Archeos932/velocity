@@ -3018,6 +3018,7 @@ static void run_tests(const char *path) {
                 { 2, -60, 20, 0, 0, 18, 12 }, { 3, 10, 0, 26, 32, 10, 0 }, { 4, 16, 0, 16, -16, 0, -16 },
             };
             char nb2[512]; int nn = 0;
+            FILE *logSave = botLog; botLog = NULL;        /* pas de journal des bots dans le fichier de test */
             for (int k = 0; k < 6; k++) {
                 load_map((int)nv[k][0]); reset_game(); hitstop = 0; appState = APP_GAME;
                 memset(act, 0, sizeof act); memset(botHeld, 0, sizeof botHeld); memset(botPress, 0, sizeof botPress);
@@ -3041,6 +3042,7 @@ static void run_tests(const char *path) {
                 nn += snprintf(nb2 + nn, sizeof nb2 - nn, "%s%s %d noeuds chemin %d -> %s en %.1f s chutes %d", k ? " ; " : "",
                                maps[curMap].name, nnav, plan ? plen : 0, ok ? "arrive" : "PERDU", t, falls);
             }
+            botLog = logSave;
             fprintf(f, "navigation : %s (attendu arrive partout)\n", nb2);
             appState = APP_MENU;
         }
