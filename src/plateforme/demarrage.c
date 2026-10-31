@@ -361,6 +361,10 @@ static int velocity_main(const char *cmd) {
         }
         P.pos = P.prevPos = v3(0, 0, 24); P.yaw = -0.1f; P.pitch = 0.08f; P.hp = 100;
         if (strstr(shotPath, "bas")) { P.yaw = -0.45f; P.pitch = -0.32f; }   /* regard vers le sol : ombres des joueurs */
+        if (strstr(shotPath, "mort")) {                   /* camera de mort : Rival m'a eu au rail, la vue se tourne vers lui */
+            P.yaw = 1.2f; P.pitch = -0.1f; NP[1].hp = 45;
+            killcam_start(1, W_RAIL); P.dead = 1; P.deathT = 0.9f;
+        }
         if (strstr(shotPath, "eventail")) {               /* Rival a l'Eventail : son tir recu (traceurs recalcules) */
             NP[1].st.weapon = WP_SHOTGUN; NP[1].st.flags = 0; NP[1].st.melee = 0;
             NetEvent e = ev_new(EV_SHOT);

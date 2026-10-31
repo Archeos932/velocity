@@ -832,6 +832,7 @@ static void apply_event(const NetEvent *ev) {
             P.dead = 1; P.deathT = 0; P.hook = HOOK_NONE; P.hookEnemy = P.hookPlayer = 0;
             P.lanceState = LS_IDLE;                       /* Lance : relevee */
             killerOfMe = k;
+            if (!fellOut) killcam_start(k, ev->sub);          /* camera de mort */
         }
         if (k == myId && v != myId) {
             if (is_melee_w(ev->sub)) ammo_points(PTS_MELEE_KILL, AP_KILL);   /* kill en melee : +100 points */

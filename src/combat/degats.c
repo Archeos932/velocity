@@ -16,6 +16,7 @@ static void damage_player(float dmg) {
     play(S_HURT, 0.8f, frange(0.9f, 1.1f));
     if (P.hp <= 0) {
         P.hp = 0; P.dead = 1; P.deathT = 0;
+        if (!fellOut) killcam_start(-1, 0);               /* solo : camera vers l'ennemi le plus proche */
         saw_remove_owner(myId);                           /* Scie : elle disparait, neuve au prochain depart */
         if (score > bestScore) bestScore = score;
     }

@@ -385,6 +385,12 @@ enum { AP_HIT, AP_KILL, AP_PARRY, AP_CELL, AP_LOST, AP_COUNT };   /* origine des
 #define SCREEN_POLL_T      1.0f    /* second ecran : on recompte les moniteurs toutes les secondes */
 #define SCREEN_MAP_FPS     30.0f   /* images par seconde de la carte sur le second ecran */
 #define MAPS_HEAT_R        9.0f    /* carte de chaleur : rayon d'une tache (m) */
+#define KILLCAM_T          1.6f    /* camera de mort : duree (s), avant l'ecran de respawn (RESPAWN_TIME 2,5 s) */
+#define KILLCAM_TURN       0.45f   /* ...temps pour pivoter vers le tueur (s) */
+#define KILLCAM_BACK       2.5f    /* ...recul (m) et montee (m) de la camera */
+#define KILLCAM_UP         1.2f
+#define KILLCAM_ZOOM       0.35f   /* ...zoom sur le tueur (part du champ de vision retiree) */
+#define KILLCAM_SOLO_R     60.0f   /* solo : ennemi le plus proche qui me voit, dans ce rayon (m) */
 #define HP_GHOST_HOLD      0.4     /* barre de vie : la partie perdue reste affichee (s)... */
 #define HP_GHOST_RATE      80.0f   /* ...puis se vide a cette vitesse (PV/s) */
 #define DRYFIRE_CD         0.35f   /* delai entre deux clics a sec */

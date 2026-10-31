@@ -98,7 +98,7 @@ velocity/
 │   ├── son/          audio.c (mixeur, sons synthetises), music.h (morceaux et sequenceur)
 │   ├── monde/        carte.c (boites AABB, collisions, rayons), entites.c (Player P, Enemy, Proj...)
 │   ├── entrees/      actions.c (touches, A_*, bindDefault)
-│   ├── effets/       combat_fx.c (impact frames, chiffres, input_poll), particules.c, monde_fx.c (neons, meteo)
+│   ├── effets/       combat_fx.c (impact frames, input_poll), particules.c, camera_mort.c, monde_fx.c (neons, meteo)
 │   ├── joueur/       mouvement.c (player_tick, grappin)
 │   ├── combat/       degats.c, loadout.c, melee.c, pieces_rail.c, roquettes.c, projectiles.c
 │   ├── armes/        une arme = un fichier : enclume, lance, fleau, poings, egide, elan, eventail, tesla, scie, ventouse
@@ -133,6 +133,7 @@ velocity/
 | `effets/combat_fx.c` | impact frames, chiffres de dégâts, éclats **et lecture des entrées** | `impact_frame`, `DmgNum`, `Shard`, `input_poll`, `set_capture` |
 | `effets/particules.c` | particules, rayons | `add_part`, `burst`, `add_beam`, `add_light`, `decal_at`, `fx_explosion` |
 | `joueur/mouvement.c` | physique du joueur et grappin | `view_dir`, `eye_pos`, `move_axis`, `wall_check`, `accelerate`, `grapple_tick`, `player_tick` |
+| `effets/camera_mort.c` | caméra de mort (§3.16) | `killcam_start`, `killcam_active`, `killcam_view` |
 | `combat/degats.c` | dégâts, kills, explosions | `damage_player`, `kill_enemy`, `damage_enemy`, `explode_ex`, `streak_mult`, `parry_feedback` |
 | `combat/loadout.c` | deux armes, munitions à jauge | `loadout`, `weapon_select`, `wp_has_ammo` |
 | `combat/melee.c` | épée et aiguillage des mêlées | `melee` (`try_parry` est dans `loadout.c`) |
@@ -590,6 +591,16 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
 - **Radar des alliés** (`draw_radar`) : mode équipes, en haut à gauche.
 - **Anticrénelage** : macOS demande un format 4x MSAA (`src/plateforme/mac/mac_platform.m`), sinon le format simple. Pas encore sous
   Windows (il faudrait `wglChoosePixelFormatARB`).
+
+### 3.16 Caméra de mort
+
+`src/effets/camera_mort.c`. À la mort (`apply_event` sur `EV_KILL` en LAN, `damage_player` en solo), `killcam_start`
+retient l'œil, le cap et le tueur (en solo : l'ennemi vivant le plus proche qui me voit, dans `KILLCAM_SOLO_R`). Pendant
+`KILLCAM_T` (1,6 s, le respawn reste à `RESPAWN_TIME` 2,5 s), `render` prend la vue de `killcam_view` : la caméra
+recule et monte (`KILLCAM_BACK`, `KILLCAM_UP`, sans traverser les murs), pivote vers le tueur en `KILLCAM_TURN` et
+zoome (`KILLCAM_ZOOM`). `draw_killcam_hud` : bandes noires, « ELIMINE PAR … », arme, PV qui lui restent, crochets autour
+de lui ; le bas du HUD est masqué, le choix du loadout reste. Ni suicide ni chute. Réglage : PARAMETRES > CAM. MORT
+(`camera_mort=`). Capture : `--shot dm_mort.bmp`.
 
 ### 3.15 Second écran : carte de la partie
 

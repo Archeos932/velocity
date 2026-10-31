@@ -81,8 +81,10 @@ static void draw_settings(float cx, float cy) {
     snprintf(buf, sizeof buf, "FPS : %s", showFps ? "OUI" : "NON");
     if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) showFps = !showFps;
     y += 50;
-    snprintf(buf, sizeof buf, "Impact frames (flashs) : %s", impactFrames ? "OUI" : "NON");
-    if (button(lx, y, lw, 44, buf)) impactFrames = !impactFrames;
+    snprintf(buf, sizeof buf, "FLASHS : %s", impactFrames ? "OUI" : "NON");   /* impact frames */
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) impactFrames = !impactFrames;
+    snprintf(buf, sizeof buf, "CAM. MORT:%s", killcamOn ? "OUI" : "NON");     /* camera de mort */
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) killcamOn = !killcamOn;
     y += 50;
     snprintf(buf, sizeof buf, "EFFETS : %s", screenFx ? "OUI" : "NON");
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) screenFx = !screenFx;

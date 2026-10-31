@@ -257,6 +257,40 @@ static void hp_ghost_tick(float hp, double t) {
     else if (t - hpHitAt > HP_GHOST_HOLD) hpGhost = fmaxf(hp, hpGhost - HP_GHOST_RATE * dt);
 }
 
+static void draw_killcam_hud(float cx, float cy) {
+    char buf[96];
+    V3 tg = kcLast;
+    float k = clampf(P.deathT / KILLCAM_TURN, 0, 1), sx, sy;
+    const float *c = dmMode ? pcolor(kcKiller) : NULL;
+    float cr = c ? c[0] : 1, cg = c ? c[1] : 0.3f, cb = c ? c[2] : 0.25f;
+    rect(0, 0, (float)winW, 70, 0, 0, 0, 0.55f * k);      /* bandes de cinema */
+    rect(0, winH - 70.0f, (float)winW, 70, 0, 0, 0, 0.55f * k);
+    if (project(tg, &sx, &sy)) {                          /* crochets autour du tueur, qui se resserrent */
+        float r = 70 - 30 * k, l = 16;
+        glLineWidth(3);
+        glColor4f(cr, cg, cb, k);
+        glBegin(GL_LINES);
+        for (int q = 0; q < 4; q++) {
+            float qx = q & 1 ? 1.0f : -1.0f, qy = q & 2 ? 1.0f : -1.0f, x = sx + qx * r, y = sy + qy * r * 1.3f;
+            glVertex2f(x, y); glVertex2f(x - qx * l, y); glVertex2f(x, y); glVertex2f(x, y - qy * l);
+        }
+        glEnd();
+        glLineWidth(1);
+    }
+    if (dmMode) snprintf(buf, sizeof buf, "ELIMINE PAR %s", pname(kcKiller));
+    else snprintf(buf, sizeof buf, "TUE PAR UN %s", kcEnemy >= 0 && E[kcEnemy].type == EN_DRONE ? "DRONE" : "RUSHER");
+    float tw = fontW[2] * (float)strlen(buf);
+    hud_panel(cx - tw * 0.5f - 24, 96, tw + 48, 112);
+    text_c(2, cx, 150, buf, cr, cg, cb, 1);
+    if (dmMode) {
+        snprintf(buf, sizeof buf, "[%s]   il lui reste %d PV", weaponNames[kcWeapon % W_COUNT], (int)ceilf(NP[kcKiller].hp));
+        text_c(1, cx, 192, buf, 0.9f, 0.9f, 0.95f, 1);
+        snprintf(buf, sizeof buf, "respawn dans %.1f s", fmaxf(0, RESPAWN_TIME - P.deathT));
+        text_c(0, cx, winH - 30.0f, buf, 0.8f, 0.8f, 0.85f, 1);
+    }
+    (void)cy;
+}
+
 static void draw_hud(void) {
     glMatrixMode(GL_PROJECTION); glLoadIdentity();
     glOrtho(0, winW, winH, 0, -1, 1);
@@ -370,335 +404,337 @@ static void draw_hud(void) {
         }
     }
 
-    /* vitesse */
-    hud_panel(cx - 92, winH - 120.0f, 184, 108);
-    float hs = hlen(P.vel), k = clampf((hs - RUN_SPEED) / 20, 0, 1);
-    snprintf(buf, sizeof buf, "%.1f", hs);
-    text_c(2, cx, winH - 70.0f, buf, 1 - k * 0.6f, 1 - k * 0.2f, 1, 1);
-    text_c(0, cx, winH - 46.0f, "m/s", 0.7f, 0.7f, 0.8f, 0.9f);
-    for (int i = 0; i < 2; i++) {                         /* charges de dash */
-        float fill = clampf(P.dashCharge - i, 0, 1);
-        float x = cx - 52 + i * 56.0f, y = winH - 32.0f;
-        rect(x, y, 48, 8, 0.1f, 0.1f, 0.15f, 0.7f);
-        rect(x, y, 48 * fill, 8, fill >= 1 ? 0.4f : 0.3f, fill >= 1 ? 0.9f : 0.5f, 1, 0.95f);
-    }
-    float hookFill = clampf(1 - P.hookCd / GRAPPLE_CD, 0, 1);  /* recharge du grappin */
-    rect(cx - 52, winH - 18.0f, 104, 5, 0.1f, 0.1f, 0.15f, 0.7f);
-    rect(cx - 52, winH - 18.0f, 104 * (P.hook == HOOK_NONE ? hookFill : 0), 5, 1, 0.8f, 0.35f, 0.95f);
-    int hookable = 0;                                     /* 1 = mur a portee, 2 = ennemi a portee */
-    if (!P.dead && P.hook == HOOK_NONE && P.hookCd <= 0) {
-        V3 eye = eye_pos(), vd = view_dir();
-        float tw = ray_world(eye, vd, GRAPPLE_RANGE, 0), te;
-        if (tw < GRAPPLE_RANGE) hookable = 1;
-        for (int i = 0; i < MAXE; i++)
-            if (E[i].alive && ray_sphere(eye, vd, E[i].pos, enemy_radius(E[i].type) + 0.3f, tw, &te)) hookable = 2;
-        for (int i = 0; i < MAXP; i++) {
-            V3 mn, mx;
-            if (!np_target(i)) continue;
-            np_aabb(i, 0.3f, &mn, &mx);
-            if (ray_box(eye, vd, mn, mx, tw, &te, NULL)) hookable = 2;
+    if (!killcam_active()) {                              /* camera de mort : le bas du HUD laisse voir la scene */
+        /* vitesse */
+        hud_panel(cx - 92, winH - 120.0f, 184, 108);
+        float hs = hlen(P.vel), k = clampf((hs - RUN_SPEED) / 20, 0, 1);
+        snprintf(buf, sizeof buf, "%.1f", hs);
+        text_c(2, cx, winH - 70.0f, buf, 1 - k * 0.6f, 1 - k * 0.2f, 1, 1);
+        text_c(0, cx, winH - 46.0f, "m/s", 0.7f, 0.7f, 0.8f, 0.9f);
+        for (int i = 0; i < 2; i++) {                         /* charges de dash */
+            float fill = clampf(P.dashCharge - i, 0, 1);
+            float x = cx - 52 + i * 56.0f, y = winH - 32.0f;
+            rect(x, y, 48, 8, 0.1f, 0.1f, 0.15f, 0.7f);
+            rect(x, y, 48 * fill, 8, fill >= 1 ? 0.4f : 0.3f, fill >= 1 ? 0.9f : 0.5f, 1, 0.95f);
         }
-    }
-    if (hookable) {
-        glLineWidth(2);                                   /* le viseur montre qu'on peut s'accrocher */
-        if (hookable == 2) glColor4f(1, 0.25f, 0.25f, 0.95f); else glColor4f(1, 0.8f, 0.35f, 0.9f);
-        glBegin(GL_LINES);
-        for (int k = 0; k < 4; k++) {
-            float sx = (k & 1) ? 1.0f : -1.0f, sy = (k & 2) ? 1.0f : -1.0f;
-            glVertex2f(cx + sx * 22, cy + sy * 22); glVertex2f(cx + sx * 15, cy + sy * 22);
-            glVertex2f(cx + sx * 22, cy + sy * 22); glVertex2f(cx + sx * 22, cy + sy * 15);
+        float hookFill = clampf(1 - P.hookCd / GRAPPLE_CD, 0, 1);  /* recharge du grappin */
+        rect(cx - 52, winH - 18.0f, 104, 5, 0.1f, 0.1f, 0.15f, 0.7f);
+        rect(cx - 52, winH - 18.0f, 104 * (P.hook == HOOK_NONE ? hookFill : 0), 5, 1, 0.8f, 0.35f, 0.95f);
+        int hookable = 0;                                     /* 1 = mur a portee, 2 = ennemi a portee */
+        if (!P.dead && P.hook == HOOK_NONE && P.hookCd <= 0) {
+            V3 eye = eye_pos(), vd = view_dir();
+            float tw = ray_world(eye, vd, GRAPPLE_RANGE, 0), te;
+            if (tw < GRAPPLE_RANGE) hookable = 1;
+            for (int i = 0; i < MAXE; i++)
+                if (E[i].alive && ray_sphere(eye, vd, E[i].pos, enemy_radius(E[i].type) + 0.3f, tw, &te)) hookable = 2;
+            for (int i = 0; i < MAXP; i++) {
+                V3 mn, mx;
+                if (!np_target(i)) continue;
+                np_aabb(i, 0.3f, &mn, &mx);
+                if (ray_box(eye, vd, mn, mx, tw, &te, NULL)) hookable = 2;
+            }
         }
-        glEnd();
-    }
-    /* axe corps a corps : degats et portee selon la vitesse relative avec la cible visee */
-    int aimed;
-    /* fenetre etroite : les deux panneaux montent au-dessus de la vie et de l'arme */
-    int compact = winW < 1300;
-    float by = compact ? winH - 90.0f : (float)winH;
-    float sp3 = melee_preview(&aimed), mk = clampf(sp3 / 30, 0, 1), mx = compact ? 30 : cx - 330;
-    {
-        char mt[64];
-        int blink = dryHintT > 0 && fmodf(dryHintT, 0.4f) < 0.2f;   /* a sec : le panneau de melee clignote */
-        if (dryHintT > 0) snprintf(mt, sizeof mt, "A SEC : MELEE = MUNITIONS");
-        else if (P.meleeKind == MK_LANCE)                 /* Lance : estoc / joute */
-            snprintf(mt, sizeof mt, P.lanceState == LS_COUCH ? "LANCE COUCHEE +%d" : "LANCE  +%d pts",
-                     P.lanceState == LS_COUCH ? PTS_LANCE_JOUST : meleePts[MK_LANCE]);
-        else if (P.meleeKind == MK_FIST)                  /* Poings : points du combo deja gagnes */
-            snprintf(mt, sizeof mt, "%s  +%d pts (%d/%d)", meleeNames[MK_FIST], meleePts[MK_FIST], P.fistPts, PTS_FIST_COMBO_MAX);
-        else snprintf(mt, sizeof mt, "%s%s  +%d pts", meleeNames[P.meleeKind], aimed ? " (vs cible)" : "", meleePts[P.meleeKind]);
-        hud_panel(mx - 12, by - 104.0f, fmaxf(204, fontW[0] * (float)strlen(mt) + 24), 78);
-        text(0, mx, by - 78.0f, mt, blink ? 1.0f : 0.75f, blink ? 0.6f : 0.75f, blink ? 0.2f : 0.85f, 0.9f);
-    }
-    float pvp = dmMode ? PVP_SCALE : 1.0f, mcd = MELEE_CD;
-    if (P.meleeKind == MK_ANVIL) {                        /* Enclume : coup au sol, ou pique prevu en l'air */
-        V3 at; float vy, R;
-        int air = !P.grounded && (P.anvilState == ANVIL_DIVE || anvil_ground_dist(P.pos) >= SLAM_MIN_H);
-        mcd = ANVIL_CD;
-        if (air && slam_predict(&at, &vy, &R, NULL)) {
-            float fall = (P.anvilState == ANVIL_DIVE ? P.anvilStartY : P.pos.y) - at.y;
-            snprintf(buf, sizeof buf, "PIQUE %d dmg R %.1fm", (int)(slam_dmg(vy, fall) * pvp), R);
-        } else snprintf(buf, sizeof buf, "%d dmg %.1fm", (int)(anvil_dmg(sp3) * pvp), anvil_range(sp3));
-    } else if (P.meleeKind == MK_LANCE) {                 /* Lance : v_c vers la cible visee, degats de la joute (plafond PvP) */
-        int la;
-        float vc = lance_preview(&la), jd = lance_dmg(fmaxf(vc, 0)) * pvp;
-        if (dmMode) jd = fminf(jd, PVP_HIT_CAP);
-        mk = clampf(vc / 20, 0, 1); mcd = LANCE_HIT_CD;
-        if (vc >= LANCE_VC_MIN) snprintf(buf, sizeof buf, "JOUTE v%.0f %d dmg", vc, (int)jd);
-        else snprintf(buf, sizeof buf, "v%.0f/%.0f estoc %d", fmaxf(vc, 0), LANCE_VC_MIN, (int)(lance_thrust_dmg(sp3) * pvp));
-    } else if (P.meleeKind == MK_FLAIL) {                 /* --- Fleau : degats et portee de l'arc, crochets si une cible y est --- */
-        int inArc = 0;
-        V3 eye = eye_pos(), c;
-        mcd = FLAIL_CD;
-        snprintf(buf, sizeof buf, "%d dmg %.1fm", (int)(flail_dmg(sp3) * pvp), flail_range(sp3));
-        for (int k = 0; k < MAXE + MAXP && !inArc && !P.dead; k++)   /* meme test que le coup, sans ligne de vue (cout) */
-            if (flail_target(k, &c))
-                inArc = flail_in_arc(eye, c, k < MAXE ? enemy_radius(E[k].type) : 0.5f,
-                                     rel_speed(k < MAXE ? E[k].vel : np_vel(k - MAXE)), 0);
-        if (inArc) {
-            float al = P.meleeCd <= 0 ? 0.9f : 0.35f;
-            glLineWidth(2);
-            glColor4f(0.75f, 0.8f, 0.9f, al);
+        if (hookable) {
+            glLineWidth(2);                                   /* le viseur montre qu'on peut s'accrocher */
+            if (hookable == 2) glColor4f(1, 0.25f, 0.25f, 0.95f); else glColor4f(1, 0.8f, 0.35f, 0.9f);
             glBegin(GL_LINES);
-            for (int s = -1; s <= 1; s += 2) {            /* [ ] autour du viseur */
-                glVertex2f(cx + s * 34, cy - 10); glVertex2f(cx + s * 34, cy + 10);
-                glVertex2f(cx + s * 34, cy - 10); glVertex2f(cx + s * 28, cy - 10);
-                glVertex2f(cx + s * 34, cy + 10); glVertex2f(cx + s * 28, cy + 10);
+            for (int k = 0; k < 4; k++) {
+                float sx = (k & 1) ? 1.0f : -1.0f, sy = (k & 2) ? 1.0f : -1.0f;
+                glVertex2f(cx + sx * 22, cy + sy * 22); glVertex2f(cx + sx * 15, cy + sy * 22);
+                glVertex2f(cx + sx * 22, cy + sy * 22); glVertex2f(cx + sx * 22, cy + sy * 15);
             }
             glEnd();
-        }                                                 /* --- fin Fleau --- */
-    } else if (P.meleeKind == MK_FIST) {                  /* --- Poings : coup suivant, pastilles du combo, aide au punch-jump --- */
-        int nxt = P.fistStep < 3 ? P.fistStep : 0;
-        float fd = fist_dmg(sp3, nxt == 2) * pvp;
-        if (dmMode) fd = fminf(fd, PVP_HIT_CAP);
-        mcd = FIST_END_CD;
-        snprintf(buf, sizeof buf, "%s%d dmg %.1fm", nxt == 2 ? "UPPERCUT " : "", (int)fd, fist_range(sp3));
-        for (int k = 0; k < 3; k++) {                     /* coups du combo deja donnes, le 3e en or */
-            int on = k < P.fistStep;
-            if (k == 2) rect(mx + k * 16.0f, by - 26.0f, 12, 10, on ? 1.0f : 0.25f, on ? 0.8f : 0.22f, on ? 0.25f : 0.1f, 0.95f);
-            else rect(mx + k * 16.0f, by - 26.0f, 12, 10, on ? 0.45f : 0.12f, on ? 0.9f : 0.2f, on ? 1.0f : 0.25f, 0.95f);
         }
-        if (P.fistPJ && !P.dead) {                        /* le decor est a portee de poing : anneau cyan autour du viseur */
-            V3 n;
-            float t = ray_world(eye_pos(), view_dir(), FIST_PJ_RANGE, &n);
-            int floorNo = n.y > 0.7f && (P.grounded || P.fistAirT < FIST_PJ_FLOOR_DELAY);
-            if (t < FIST_PJ_RANGE && !floorNo) {
+        /* axe corps a corps : degats et portee selon la vitesse relative avec la cible visee */
+        int aimed;
+        /* fenetre etroite : les deux panneaux montent au-dessus de la vie et de l'arme */
+        int compact = winW < 1300;
+        float by = compact ? winH - 90.0f : (float)winH;
+        float sp3 = melee_preview(&aimed), mk = clampf(sp3 / 30, 0, 1), mx = compact ? 30 : cx - 330;
+        {
+            char mt[64];
+            int blink = dryHintT > 0 && fmodf(dryHintT, 0.4f) < 0.2f;   /* a sec : le panneau de melee clignote */
+            if (dryHintT > 0) snprintf(mt, sizeof mt, "A SEC : MELEE = MUNITIONS");
+            else if (P.meleeKind == MK_LANCE)                 /* Lance : estoc / joute */
+                snprintf(mt, sizeof mt, P.lanceState == LS_COUCH ? "LANCE COUCHEE +%d" : "LANCE  +%d pts",
+                         P.lanceState == LS_COUCH ? PTS_LANCE_JOUST : meleePts[MK_LANCE]);
+            else if (P.meleeKind == MK_FIST)                  /* Poings : points du combo deja gagnes */
+                snprintf(mt, sizeof mt, "%s  +%d pts (%d/%d)", meleeNames[MK_FIST], meleePts[MK_FIST], P.fistPts, PTS_FIST_COMBO_MAX);
+            else snprintf(mt, sizeof mt, "%s%s  +%d pts", meleeNames[P.meleeKind], aimed ? " (vs cible)" : "", meleePts[P.meleeKind]);
+            hud_panel(mx - 12, by - 104.0f, fmaxf(204, fontW[0] * (float)strlen(mt) + 24), 78);
+            text(0, mx, by - 78.0f, mt, blink ? 1.0f : 0.75f, blink ? 0.6f : 0.75f, blink ? 0.2f : 0.85f, 0.9f);
+        }
+        float pvp = dmMode ? PVP_SCALE : 1.0f, mcd = MELEE_CD;
+        if (P.meleeKind == MK_ANVIL) {                        /* Enclume : coup au sol, ou pique prevu en l'air */
+            V3 at; float vy, R;
+            int air = !P.grounded && (P.anvilState == ANVIL_DIVE || anvil_ground_dist(P.pos) >= SLAM_MIN_H);
+            mcd = ANVIL_CD;
+            if (air && slam_predict(&at, &vy, &R, NULL)) {
+                float fall = (P.anvilState == ANVIL_DIVE ? P.anvilStartY : P.pos.y) - at.y;
+                snprintf(buf, sizeof buf, "PIQUE %d dmg R %.1fm", (int)(slam_dmg(vy, fall) * pvp), R);
+            } else snprintf(buf, sizeof buf, "%d dmg %.1fm", (int)(anvil_dmg(sp3) * pvp), anvil_range(sp3));
+        } else if (P.meleeKind == MK_LANCE) {                 /* Lance : v_c vers la cible visee, degats de la joute (plafond PvP) */
+            int la;
+            float vc = lance_preview(&la), jd = lance_dmg(fmaxf(vc, 0)) * pvp;
+            if (dmMode) jd = fminf(jd, PVP_HIT_CAP);
+            mk = clampf(vc / 20, 0, 1); mcd = LANCE_HIT_CD;
+            if (vc >= LANCE_VC_MIN) snprintf(buf, sizeof buf, "JOUTE v%.0f %d dmg", vc, (int)jd);
+            else snprintf(buf, sizeof buf, "v%.0f/%.0f estoc %d", fmaxf(vc, 0), LANCE_VC_MIN, (int)(lance_thrust_dmg(sp3) * pvp));
+        } else if (P.meleeKind == MK_FLAIL) {                 /* --- Fleau : degats et portee de l'arc, crochets si une cible y est --- */
+            int inArc = 0;
+            V3 eye = eye_pos(), c;
+            mcd = FLAIL_CD;
+            snprintf(buf, sizeof buf, "%d dmg %.1fm", (int)(flail_dmg(sp3) * pvp), flail_range(sp3));
+            for (int k = 0; k < MAXE + MAXP && !inArc && !P.dead; k++)   /* meme test que le coup, sans ligne de vue (cout) */
+                if (flail_target(k, &c))
+                    inArc = flail_in_arc(eye, c, k < MAXE ? enemy_radius(E[k].type) : 0.5f,
+                                         rel_speed(k < MAXE ? E[k].vel : np_vel(k - MAXE)), 0);
+            if (inArc) {
+                float al = P.meleeCd <= 0 ? 0.9f : 0.35f;
                 glLineWidth(2);
-                glColor4f(0.4f, 0.9f, 1, P.wallJumpCd <= 0 && P.meleeCd <= 0 ? 0.9f : 0.35f);
-                glBegin(GL_LINE_LOOP);
-                for (int k = 0; k < 24; k++) glVertex2f(cx + 30 * cosf(k * (2 * PI / 24)), cy + 30 * sinf(k * (2 * PI / 24)));
+                glColor4f(0.75f, 0.8f, 0.9f, al);
+                glBegin(GL_LINES);
+                for (int s = -1; s <= 1; s += 2) {            /* [ ] autour du viseur */
+                    glVertex2f(cx + s * 34, cy - 10); glVertex2f(cx + s * 34, cy + 10);
+                    glVertex2f(cx + s * 34, cy - 10); glVertex2f(cx + s * 28, cy - 10);
+                    glVertex2f(cx + s * 34, cy + 10); glVertex2f(cx + s * 28, cy + 10);
+                }
                 glEnd();
+            }                                                 /* --- fin Fleau --- */
+        } else if (P.meleeKind == MK_FIST) {                  /* --- Poings : coup suivant, pastilles du combo, aide au punch-jump --- */
+            int nxt = P.fistStep < 3 ? P.fistStep : 0;
+            float fd = fist_dmg(sp3, nxt == 2) * pvp;
+            if (dmMode) fd = fminf(fd, PVP_HIT_CAP);
+            mcd = FIST_END_CD;
+            snprintf(buf, sizeof buf, "%s%d dmg %.1fm", nxt == 2 ? "UPPERCUT " : "", (int)fd, fist_range(sp3));
+            for (int k = 0; k < 3; k++) {                     /* coups du combo deja donnes, le 3e en or */
+                int on = k < P.fistStep;
+                if (k == 2) rect(mx + k * 16.0f, by - 26.0f, 12, 10, on ? 1.0f : 0.25f, on ? 0.8f : 0.22f, on ? 0.25f : 0.1f, 0.95f);
+                else rect(mx + k * 16.0f, by - 26.0f, 12, 10, on ? 0.45f : 0.12f, on ? 0.9f : 0.2f, on ? 1.0f : 0.25f, 0.95f);
             }
-        }                                                 /* --- fin Poings --- */
-    } else if (P.meleeKind == MK_SHIELD) {                /* --- Egide : etat, apercu du coup de bouclier, jauge en 4 segments --- */
-        mcd = SHIELD_BASH_CD;
-        if (P.shieldState == SHS_BROKEN) snprintf(buf, sizeof buf, "BRISE %.1f s", fmaxf(P.shieldBrokenT, 0));
-        else if (P.shieldRipT > 0) snprintf(buf, sizeof buf, "ARRACHE");
-        else if (P.shieldState == SHS_UP) snprintf(buf, sizeof buf, "LEVE %d", (int)P.shieldGauge);
-        else snprintf(buf, sizeof buf, "%d dmg %.1fm", (int)((SHIELD_BASH_DMG + SHIELD_BASH_PER_MS * sp3) * pvp), SHIELD_BASH_RANGE);
-        V3 sc = P.shieldState == SHS_BROKEN ? v3(0.5f, 0.2f, 0.2f) : shield_col(P.shieldGauge);
-        for (int s = 0; s < 4; s++) {
-            float fill = clampf((P.shieldGauge - s * 30) / 30, 0, 1);
-            rect(mx + s * 46.0f, by - 100.0f, 42, 7, 0.1f, 0.1f, 0.15f, 0.7f);
-            if (fill > 0) rect(mx + s * 46.0f, by - 100.0f, 42 * fill, 7, sc.x, sc.y, sc.z, P.shieldState == SHS_UP ? 1.0f : 0.75f);
+            if (P.fistPJ && !P.dead) {                        /* le decor est a portee de poing : anneau cyan autour du viseur */
+                V3 n;
+                float t = ray_world(eye_pos(), view_dir(), FIST_PJ_RANGE, &n);
+                int floorNo = n.y > 0.7f && (P.grounded || P.fistAirT < FIST_PJ_FLOOR_DELAY);
+                if (t < FIST_PJ_RANGE && !floorNo) {
+                    glLineWidth(2);
+                    glColor4f(0.4f, 0.9f, 1, P.wallJumpCd <= 0 && P.meleeCd <= 0 ? 0.9f : 0.35f);
+                    glBegin(GL_LINE_LOOP);
+                    for (int k = 0; k < 24; k++) glVertex2f(cx + 30 * cosf(k * (2 * PI / 24)), cy + 30 * sinf(k * (2 * PI / 24)));
+                    glEnd();
+                }
+            }                                                 /* --- fin Poings --- */
+        } else if (P.meleeKind == MK_SHIELD) {                /* --- Egide : etat, apercu du coup de bouclier, jauge en 4 segments --- */
+            mcd = SHIELD_BASH_CD;
+            if (P.shieldState == SHS_BROKEN) snprintf(buf, sizeof buf, "BRISE %.1f s", fmaxf(P.shieldBrokenT, 0));
+            else if (P.shieldRipT > 0) snprintf(buf, sizeof buf, "ARRACHE");
+            else if (P.shieldState == SHS_UP) snprintf(buf, sizeof buf, "LEVE %d", (int)P.shieldGauge);
+            else snprintf(buf, sizeof buf, "%d dmg %.1fm", (int)((SHIELD_BASH_DMG + SHIELD_BASH_PER_MS * sp3) * pvp), SHIELD_BASH_RANGE);
+            V3 sc = P.shieldState == SHS_BROKEN ? v3(0.5f, 0.2f, 0.2f) : shield_col(P.shieldGauge);
+            for (int s = 0; s < 4; s++) {
+                float fill = clampf((P.shieldGauge - s * 30) / 30, 0, 1);
+                rect(mx + s * 46.0f, by - 100.0f, 42, 7, 0.1f, 0.1f, 0.15f, 0.7f);
+                if (fill > 0) rect(mx + s * 46.0f, by - 100.0f, 42 * fill, 7, sc.x, sc.y, sc.z, P.shieldState == SHS_UP ? 1.0f : 0.75f);
+            }
+            if (P.parryWin > 0 && P.shieldState == SHS_UP) text_c(0, cx, cy + 40, "PARFAIT", 1, 1, 0.85f, 0.9f);
+        } else snprintf(buf, sizeof buf, "%d dmg %.1fm", (int)(melee_dmg(sp3) * pvp), melee_range(sp3));
+        text(1, mx, by - 48.0f, buf, 1, 1 - mk * 0.45f, 1 - mk * 0.85f, 1);
+        rect(mx, by - 36.0f, 180, 6, 0.1f, 0.1f, 0.15f, 0.7f);
+        rect(mx, by - 36.0f, 180 * clampf(1 - P.meleeCd / mcd, 0, 1), 6, 1, 0.55f + 0.45f * (1 - mk), 0.3f, 0.95f);
+
+        /* axe tir : chaine de touches successives */
+        float sx = compact ? winW - 214.0f : cx + 130;
+        hud_panel(sx - 12, by - 104.0f, STREAK_MAX * 23.0f + 20, 78);
+        text(0, sx, by - 78.0f, "CHAINE DE TIR", 0.75f, 0.75f, 0.85f, 0.9f);
+        float sk = clampf(shotStreak / (float)STREAK_MAX, 0, 1);
+        snprintf(buf, sizeof buf, "x%.2f", streak_mult());
+        text(1, sx, by - 48.0f, buf, 1, 1 - sk * 0.2f, 1 - sk * 0.8f, 1);
+        for (int i = 0; i < STREAK_MAX; i++)
+            rect(sx + i * 23.0f, by - 36.0f, 19, 6, i < shotStreak ? 1.0f : 0.1f, i < shotStreak ? 0.8f : 0.1f,
+                 i < shotStreak ? 0.3f : 0.15f, i < shotStreak ? 0.95f : 0.7f);
+        if (streakLostT > 0) text(0, sx, by - 100.0f, "CHAINE PERDUE", 1, 0.3f, 0.3f, clampf(streakLostT, 0, 1));
+
+        if (P.anvilState == ANVIL_DIVE) text_c(0, cx, winH - 110.0f, "PIQUE !", 1, 0.6f, 0.25f, 0.95f);
+        else if (P.anvilState == ANVIL_STUN) {                /* Enclume : onde ratee, barre d'immobilisation */
+            text_c(0, cx, winH - 110.0f, "IMMOBILISE", 1, 0.35f, 0.3f, 0.95f);
+            rect(cx - 60, winH - 102.0f, 120, 5, 0.1f, 0.1f, 0.15f, 0.7f);
+            rect(cx - 60, winH - 102.0f, 120 * clampf(P.anvilStunT / SLAM_STUN, 0, 1), 5, 1, 0.35f, 0.3f, 0.95f);
+        } else if (P.hook == HOOK_ATTACHED)
+            text_c(0, cx, winH - 110.0f, (P.hookEnemy || P.hookPlayer) ? "GRAPPIN -> CIBLE" : "GRAPPIN", 1,
+                   (P.hookEnemy || P.hookPlayer) ? 0.35f : 0.8f, 0.35f, 0.9f);
+        else if (P.wallrun) text_c(0, cx, winH - 110.0f, "WALL-RUN", 1, 0.6f, 0.9f, 0.9f);
+        else if (P.sliding) text_c(0, cx, winH - 110.0f, "SLIDE", 1, 0.8f, 0.4f, 0.9f);
+
+        /* vie : barre, trainee des degats qui se vide, eclat au soin, graduations tous les 25 PV */
+        hp_ghost_tick(P.hp, nowT);
+        float hpk = clampf(P.hp / 100.0f, 0, 1), ghk = clampf(hpGhost / 100.0f, 0, 1), hx = 30, hy = winH - 50.0f;
+        rect(hx - 3, hy - 3, 306, 26, 0.02f, 0.02f, 0.05f, 0.55f);
+        rect(hx, hy, 300, 20, 0.1f, 0.1f, 0.15f, 0.7f);
+        if (ghk > hpk) {
+            float fresh = clampf(1 - (float)(nowT - hpHitAt) / HP_GHOST_HOLD, 0, 1);   /* blanc juste apres le coup, puis rouge */
+            rect(hx + 300 * hpk, hy, 300 * (ghk - hpk), 20, 1, 0.3f + 0.7f * fresh, 0.25f + 0.75f * fresh, 0.85f);
         }
-        if (P.parryWin > 0 && P.shieldState == SHS_UP) text_c(0, cx, cy + 40, "PARFAIT", 1, 1, 0.85f, 0.9f);
-    } else snprintf(buf, sizeof buf, "%d dmg %.1fm", (int)(melee_dmg(sp3) * pvp), melee_range(sp3));
-    text(1, mx, by - 48.0f, buf, 1, 1 - mk * 0.45f, 1 - mk * 0.85f, 1);
-    rect(mx, by - 36.0f, 180, 6, 0.1f, 0.1f, 0.15f, 0.7f);
-    rect(mx, by - 36.0f, 180 * clampf(1 - P.meleeCd / mcd, 0, 1), 6, 1, 0.55f + 0.45f * (1 - mk), 0.3f, 0.95f);
-
-    /* axe tir : chaine de touches successives */
-    float sx = compact ? winW - 214.0f : cx + 130;
-    hud_panel(sx - 12, by - 104.0f, STREAK_MAX * 23.0f + 20, 78);
-    text(0, sx, by - 78.0f, "CHAINE DE TIR", 0.75f, 0.75f, 0.85f, 0.9f);
-    float sk = clampf(shotStreak / (float)STREAK_MAX, 0, 1);
-    snprintf(buf, sizeof buf, "x%.2f", streak_mult());
-    text(1, sx, by - 48.0f, buf, 1, 1 - sk * 0.2f, 1 - sk * 0.8f, 1);
-    for (int i = 0; i < STREAK_MAX; i++)
-        rect(sx + i * 23.0f, by - 36.0f, 19, 6, i < shotStreak ? 1.0f : 0.1f, i < shotStreak ? 0.8f : 0.1f,
-             i < shotStreak ? 0.3f : 0.15f, i < shotStreak ? 0.95f : 0.7f);
-    if (streakLostT > 0) text(0, sx, by - 100.0f, "CHAINE PERDUE", 1, 0.3f, 0.3f, clampf(streakLostT, 0, 1));
-
-    if (P.anvilState == ANVIL_DIVE) text_c(0, cx, winH - 110.0f, "PIQUE !", 1, 0.6f, 0.25f, 0.95f);
-    else if (P.anvilState == ANVIL_STUN) {                /* Enclume : onde ratee, barre d'immobilisation */
-        text_c(0, cx, winH - 110.0f, "IMMOBILISE", 1, 0.35f, 0.3f, 0.95f);
-        rect(cx - 60, winH - 102.0f, 120, 5, 0.1f, 0.1f, 0.15f, 0.7f);
-        rect(cx - 60, winH - 102.0f, 120 * clampf(P.anvilStunT / SLAM_STUN, 0, 1), 5, 1, 0.35f, 0.3f, 0.95f);
-    } else if (P.hook == HOOK_ATTACHED)
-        text_c(0, cx, winH - 110.0f, (P.hookEnemy || P.hookPlayer) ? "GRAPPIN -> CIBLE" : "GRAPPIN", 1,
-               (P.hookEnemy || P.hookPlayer) ? 0.35f : 0.8f, 0.35f, 0.9f);
-    else if (P.wallrun) text_c(0, cx, winH - 110.0f, "WALL-RUN", 1, 0.6f, 0.9f, 0.9f);
-    else if (P.sliding) text_c(0, cx, winH - 110.0f, "SLIDE", 1, 0.8f, 0.4f, 0.9f);
-
-    /* vie : barre, trainee des degats qui se vide, eclat au soin, graduations tous les 25 PV */
-    hp_ghost_tick(P.hp, nowT);
-    float hpk = clampf(P.hp / 100.0f, 0, 1), ghk = clampf(hpGhost / 100.0f, 0, 1), hx = 30, hy = winH - 50.0f;
-    rect(hx - 3, hy - 3, 306, 26, 0.02f, 0.02f, 0.05f, 0.55f);
-    rect(hx, hy, 300, 20, 0.1f, 0.1f, 0.15f, 0.7f);
-    if (ghk > hpk) {
-        float fresh = clampf(1 - (float)(nowT - hpHitAt) / HP_GHOST_HOLD, 0, 1);   /* blanc juste apres le coup, puis rouge */
-        rect(hx + 300 * hpk, hy, 300 * (ghk - hpk), 20, 1, 0.3f + 0.7f * fresh, 0.25f + 0.75f * fresh, 0.85f);
-    }
-    rect(hx, hy, 300 * hpk, 20, 1 - hpk * 0.7f, 0.25f + hpk * 0.6f, 0.35f, 0.95f);
-    rect_vgrad(hx, hy, 300 * hpk, 9, 1, 1, 1, 0.28f, 0.0f);   /* reflet en haut de la barre */
-    {
-        float heal = clampf(1 - (float)(nowT - hpHealAt) / 0.5f, 0, 1);
-        if (heal > 0) rect(hx - 3, hy - 3, 306, 26, 0.35f, 1, 0.5f, 0.35f * heal);
-    }
-    for (int i = 1; i < 4; i++) rect(hx + 75.0f * i - 1, hy, 2, 20, 0.02f, 0.02f, 0.05f, 0.6f);
-    snprintf(buf, sizeof buf, "%d", (int)ceilf(P.hp));
-    text(1, 30, winH - 60.0f, buf, 1, 1, 1, 1);
-
-    /* arme */
-    char wnBuf[32];
-    const AmmoDef *ad = &ammoDef[P.weapon];
-    if (P.weapon == WP_TESLA) snprintf(wnBuf, sizeof wnBuf, "TESLA %d%%", P.ammo[WP_TESLA]);
-    else if (P.weapon == WP_SAW) saw_hud_name(wnBuf, (int)sizeof wnBuf);
-    else snprintf(wnBuf, sizeof wnBuf, "%s %d/%d%s", ad->name, P.ammo[P.weapon], ad->max,
-                  P.weapon == WP_SHOTGUN && !P.ammo[WP_SHOTGUN] ? " - MELEE !" : "");   /* Eventail a sec */
-    const char *wn = wnBuf;
-    int dryW = !wp_has_ammo(P.weapon);
-    if (P.weapon == WP_SAW) dryW = saw_mine() && saw_mine()->sawState == SAW_PLANTED;   /* elle ne reviendra pas seule */
-    {                                                     /* fond du panneau d'arme (pieces, nom, emplacements) */
-        float pw = fmaxf(fontW[1] * (float)strlen(wn), fontW[0] * 40.0f) + 24;
-        hud_panel(winW - 18.0f - pw, winH - 122.0f, pw, 116);
-    }
-    text(1, winW - 30.0f - fontW[1] * (float)strlen(wn), winH - 60.0f, wn, dryW ? 1.0f : ad->r, dryW ? 0.3f : ad->g,
-         dryW ? 0.3f : ad->b, 1);
-    rect(winW - 230.0f, winH - 40.0f, 200, 8, 0.1f, 0.1f, 0.15f, 0.7f);
-    {
-        float cdMax = P.weapon == WP_SHOTGUN && P.sgPumpMax > 0 ? P.sgPumpMax : wpCd[P.weapon];   /* Eventail : recharge reelle */
-        float cdLeft = P.weapon == WP_SAW ? P.sawCd / SAW_CD : P.fireCd / cdMax;                    /* Scie : delai de lancer */
-        if (P.weapon == WP_TESLA) tesla_hud_bar(winW - 230.0f, winH - 40.0f);                      /* Tesla : batterie */
-        else rect(winW - 230.0f, winH - 40.0f, 200 * clampf(1 - cdLeft, 0, 1), 8, 1, 1, 1, 0.8f);
-    }
-    if (ad->gauge > 0) {                                  /* jauge : la melee et les cellules la remplissent */
-        float gf = P.weapon == WP_TESLA ? P.ammo[WP_TESLA] / 100.0f : gauge_frac(P.weapon);
-        int gain = ammoGainT > 0 && (ammoGainSlot == 2 || ammoGainSlot == cur_slot());
-        rect(winW - 230.0f, winH - 28.0f, 200, 5, 0.1f, 0.1f, 0.15f, 0.7f);
-        rect(winW - 230.0f, winH - 28.0f, 200 * gf, 5, gain ? 1 : ad->r, gain ? 1 : ad->g, gain ? 1 : ad->b,
-             wp_full(P.weapon) ? 0.45f : 0.95f);
-        if (gain) {
-            snprintf(buf, sizeof buf, "+%d", ammoGainPts);
-            text(0, winW - 236.0f - fontW[0] * (float)strlen(buf), winH - 20.0f, buf, 0.4f, 1, 0.4f, clampf(ammoGainT / 0.3f, 0, 1));
+        rect(hx, hy, 300 * hpk, 20, 1 - hpk * 0.7f, 0.25f + hpk * 0.6f, 0.35f, 0.95f);
+        rect_vgrad(hx, hy, 300 * hpk, 9, 1, 1, 1, 0.28f, 0.0f);   /* reflet en haut de la barre */
+        {
+            float heal = clampf(1 - (float)(nowT - hpHealAt) / 0.5f, 0, 1);
+            if (heal > 0) rect(hx - 3, hy - 3, 306, 26, 0.35f, 1, 0.5f, 0.35f * heal);
         }
-    }
-    if (P.weapon == WP_KINETIC && !P.dead) {              /* Elan : apercu des degats et fenetre du dash-tir */
-        float e, kd = kin_preview(&e), ky = compact ? winH - 250.0f : winH - 172.0f;
-        int win = kin_in_window(), late = !win && P.kinDashT < KIN_DASH_FORGET;
-        V3 c = kin_col(e);
-        if (win && fmodf((float)nowT, 0.06f) < 0.03f) c = v3(1, 1, 1);   /* fenetre ouverte : le chiffre clignote en blanc */
-        else if (late) c = v3(0.5f, 0.5f, 0.55f);         /* malus : la vitesse du dash ne compte pas */
-        snprintf(buf, sizeof buf, "%.0f dmg", kd);
-        text(1, winW - 30.0f - fontW[1] * (float)strlen(buf), ky, buf, c.x, c.y, c.z, 1);
-        if (e >= 1) text(0, winW - 230.0f, ky, "PLEIN", 1, 0.3f, 0.9f, 1);
-        rect(winW - 230.0f, ky + 12, 200, 6, 0.1f, 0.1f, 0.15f, 0.7f);
-        rect(winW - 230.0f, ky + 12, 200 * clampf(e, 0, 1), 6, c.x, c.y, c.z, 0.95f);
-        if (dmMode) {                                     /* repere "2 touches" : 50 PvP sans chaine (10,3 m/s) */
-            float e2 = ((50 / PVP_SCALE - KIN_DMG_BASE) / KIN_DMG_PER_MS) / KIN_SPEED_CAP;
-            rect(winW - 230.0f + 200 * e2 - 1, ky + 9, 2, 12, 1, 1, 1, 0.9f);
+        for (int i = 1; i < 4; i++) rect(hx + 75.0f * i - 1, hy, 2, 20, 0.02f, 0.02f, 0.05f, 0.6f);
+        snprintf(buf, sizeof buf, "%d", (int)ceilf(P.hp));
+        text(1, 30, winH - 60.0f, buf, 1, 1, 1, 1);
+
+        /* arme */
+        char wnBuf[32];
+        const AmmoDef *ad = &ammoDef[P.weapon];
+        if (P.weapon == WP_TESLA) snprintf(wnBuf, sizeof wnBuf, "TESLA %d%%", P.ammo[WP_TESLA]);
+        else if (P.weapon == WP_SAW) saw_hud_name(wnBuf, (int)sizeof wnBuf);
+        else snprintf(wnBuf, sizeof wnBuf, "%s %d/%d%s", ad->name, P.ammo[P.weapon], ad->max,
+                      P.weapon == WP_SHOTGUN && !P.ammo[WP_SHOTGUN] ? " - MELEE !" : "");   /* Eventail a sec */
+        const char *wn = wnBuf;
+        int dryW = !wp_has_ammo(P.weapon);
+        if (P.weapon == WP_SAW) dryW = saw_mine() && saw_mine()->sawState == SAW_PLANTED;   /* elle ne reviendra pas seule */
+        {                                                     /* fond du panneau d'arme (pieces, nom, emplacements) */
+            float pw = fmaxf(fontW[1] * (float)strlen(wn), fontW[0] * 40.0f) + 24;
+            hud_panel(winW - 18.0f - pw, winH - 122.0f, pw, 116);
         }
-        if (win) {                                        /* anneau magenta qui se resserre de 28 a 10 px en 12 ticks */
-            float r = 10 + 18 * (1 - clampf(P.kinDashT / KIN_DASH_WINDOW, 0, 1));
-            glLineWidth(2);
-            glColor4f(1, 0.3f, 0.9f, 0.95f);
+        text(1, winW - 30.0f - fontW[1] * (float)strlen(wn), winH - 60.0f, wn, dryW ? 1.0f : ad->r, dryW ? 0.3f : ad->g,
+             dryW ? 0.3f : ad->b, 1);
+        rect(winW - 230.0f, winH - 40.0f, 200, 8, 0.1f, 0.1f, 0.15f, 0.7f);
+        {
+            float cdMax = P.weapon == WP_SHOTGUN && P.sgPumpMax > 0 ? P.sgPumpMax : wpCd[P.weapon];   /* Eventail : recharge reelle */
+            float cdLeft = P.weapon == WP_SAW ? P.sawCd / SAW_CD : P.fireCd / cdMax;                    /* Scie : delai de lancer */
+            if (P.weapon == WP_TESLA) tesla_hud_bar(winW - 230.0f, winH - 40.0f);                      /* Tesla : batterie */
+            else rect(winW - 230.0f, winH - 40.0f, 200 * clampf(1 - cdLeft, 0, 1), 8, 1, 1, 1, 0.8f);
+        }
+        if (ad->gauge > 0) {                                  /* jauge : la melee et les cellules la remplissent */
+            float gf = P.weapon == WP_TESLA ? P.ammo[WP_TESLA] / 100.0f : gauge_frac(P.weapon);
+            int gain = ammoGainT > 0 && (ammoGainSlot == 2 || ammoGainSlot == cur_slot());
+            rect(winW - 230.0f, winH - 28.0f, 200, 5, 0.1f, 0.1f, 0.15f, 0.7f);
+            rect(winW - 230.0f, winH - 28.0f, 200 * gf, 5, gain ? 1 : ad->r, gain ? 1 : ad->g, gain ? 1 : ad->b,
+                 wp_full(P.weapon) ? 0.45f : 0.95f);
+            if (gain) {
+                snprintf(buf, sizeof buf, "+%d", ammoGainPts);
+                text(0, winW - 236.0f - fontW[0] * (float)strlen(buf), winH - 20.0f, buf, 0.4f, 1, 0.4f, clampf(ammoGainT / 0.3f, 0, 1));
+            }
+        }
+        if (P.weapon == WP_KINETIC && !P.dead) {              /* Elan : apercu des degats et fenetre du dash-tir */
+            float e, kd = kin_preview(&e), ky = compact ? winH - 250.0f : winH - 172.0f;
+            int win = kin_in_window(), late = !win && P.kinDashT < KIN_DASH_FORGET;
+            V3 c = kin_col(e);
+            if (win && fmodf((float)nowT, 0.06f) < 0.03f) c = v3(1, 1, 1);   /* fenetre ouverte : le chiffre clignote en blanc */
+            else if (late) c = v3(0.5f, 0.5f, 0.55f);         /* malus : la vitesse du dash ne compte pas */
+            snprintf(buf, sizeof buf, "%.0f dmg", kd);
+            text(1, winW - 30.0f - fontW[1] * (float)strlen(buf), ky, buf, c.x, c.y, c.z, 1);
+            if (e >= 1) text(0, winW - 230.0f, ky, "PLEIN", 1, 0.3f, 0.9f, 1);
+            rect(winW - 230.0f, ky + 12, 200, 6, 0.1f, 0.1f, 0.15f, 0.7f);
+            rect(winW - 230.0f, ky + 12, 200 * clampf(e, 0, 1), 6, c.x, c.y, c.z, 0.95f);
+            if (dmMode) {                                     /* repere "2 touches" : 50 PvP sans chaine (10,3 m/s) */
+                float e2 = ((50 / PVP_SCALE - KIN_DMG_BASE) / KIN_DMG_PER_MS) / KIN_SPEED_CAP;
+                rect(winW - 230.0f + 200 * e2 - 1, ky + 9, 2, 12, 1, 1, 1, 0.9f);
+            }
+            if (win) {                                        /* anneau magenta qui se resserre de 28 a 10 px en 12 ticks */
+                float r = 10 + 18 * (1 - clampf(P.kinDashT / KIN_DASH_WINDOW, 0, 1));
+                glLineWidth(2);
+                glColor4f(1, 0.3f, 0.9f, 0.95f);
+                glBegin(GL_LINE_LOOP);
+                for (int s = 0; s < 32; s++) glVertex2f(cx + r * cosf(s * PI / 16), cy + r * sinf(s * PI / 16));
+                glEnd();
+            } else if (late) {                                /* barre grise sous le viseur : le tir plein revient a 0,6 s */
+                float k2 = 1 - clampf((P.kinDashT - KIN_DASH_WINDOW) / (KIN_DASH_FORGET - KIN_DASH_WINDOW), 0, 1);
+                rect(cx - 30, cy + 20, 60 * k2, 3, 0.6f, 0.6f, 0.65f, 0.85f);
+            }
+        }
+        if (P.weapon == WP_SHOTGUN && !P.dead) {             /* Eventail : cercle de dispersion (moitie en slide), plombs touches */
+            float half = SG_HALF_ANGLE * (P.sliding ? SG_SLIDE_SPREAD : 1);
+            float r = tanf(half) / tanf(fminf(P.fovCur, 150.0f) * PI / 360.0f) * winW * 0.5f;
+            glLineWidth(P.sliding ? 2.0f : 1.5f);
+            glColor4f(1, 0.65f, 0.3f, P.fireCd <= 0 ? 0.75f : 0.3f);
             glBegin(GL_LINE_LOOP);
-            for (int s = 0; s < 32; s++) glVertex2f(cx + r * cosf(s * PI / 16), cy + r * sinf(s * PI / 16));
+            for (int s = 0; s < 24; s++) glVertex2f(cx + r * cosf(s * PI / 12), cy + r * sinf(s * PI / 12));
             glEnd();
-        } else if (late) {                                /* barre grise sous le viseur : le tir plein revient a 0,6 s */
-            float k2 = 1 - clampf((P.kinDashT - KIN_DASH_WINDOW) / (KIN_DASH_FORGET - KIN_DASH_WINDOW), 0, 1);
-            rect(cx - 30, cy + 20, 60 * k2, 3, 0.6f, 0.6f, 0.65f, 0.85f);
+            if (P.sgLastT > 0) {
+                snprintf(buf, sizeof buf, "%d/%d", P.sgLastPellets, SG_PELLETS);
+                text_c(0, cx, cy + r + 10, buf, 1, 0.75f, 0.35f, clampf(P.sgLastT / 0.2f, 0, 1));
+            }
         }
-    }
-    if (P.weapon == WP_SHOTGUN && !P.dead) {             /* Eventail : cercle de dispersion (moitie en slide), plombs touches */
-        float half = SG_HALF_ANGLE * (P.sliding ? SG_SLIDE_SPREAD : 1);
-        float r = tanf(half) / tanf(fminf(P.fovCur, 150.0f) * PI / 360.0f) * winW * 0.5f;
-        glLineWidth(P.sliding ? 2.0f : 1.5f);
-        glColor4f(1, 0.65f, 0.3f, P.fireCd <= 0 ? 0.75f : 0.3f);
-        glBegin(GL_LINE_LOOP);
-        for (int s = 0; s < 24; s++) glVertex2f(cx + r * cosf(s * PI / 12), cy + r * sinf(s * PI / 12));
-        glEnd();
-        if (P.sgLastT > 0) {
-            snprintf(buf, sizeof buf, "%d/%d", P.sgLastPellets, SG_PELLETS);
-            text_c(0, cx, cy + r + 10, buf, 1, 0.75f, 0.35f, clampf(P.sgLastT / 0.2f, 0, 1));
-        }
-    }
-    if (P.lanceState == LS_COUCH && !P.dead) {            /* Lance couchee : anneau du cone (plein si une cible y est armee), duree */
-        float r = tanf(acosf(LANCE_CONE)) / tanf(fminf(P.fovCur, 150.0f) * PI / 360.0f) * winW * 0.5f;
-        int armed = P.lanceVc >= LANCE_VC_MIN;
-        V3 tc = lance_tip_col(P.lanceVc);
-        if (armed) {
-            glColor4f(tc.x, tc.y, tc.z, 0.12f);
-            glBegin(GL_TRIANGLE_FAN);
-            glVertex2f(cx, cy);
-            for (int s = 0; s <= 40; s++) glVertex2f(cx + r * cosf(s * PI / 20), cy + r * sinf(s * PI / 20));
-            glEnd();
-        }
-        glLineWidth(armed ? 3.0f : 1.5f);
-        glColor4f(tc.x, tc.y, tc.z, armed ? 0.9f : 0.5f);
-        glBegin(GL_LINE_LOOP);
-        for (int s = 0; s < 40; s++) glVertex2f(cx + r * cosf(s * PI / 20), cy + r * sinf(s * PI / 20));
-        glEnd();
-        rect(cx - 40, cy + 26, 80, 4, 0.1f, 0.1f, 0.15f, 0.7f);
-        rect(cx - 40, cy + 26, 80 * clampf(1 - P.lanceT / LANCE_HOLD_MAX, 0, 1), 4, 1, 0.6f, 0.2f, 0.9f);
-        snprintf(buf, sizeof buf, "v%.0f", P.lanceVc);
-        text_c(0, cx, cy + 50, buf, tc.x, tc.y, tc.z, 0.9f);
-    }
-    draw_saw_hud(cx, cy);                                 /* Scie */
-    if (P.weapon == WP_TESLA && !P.dead) draw_tesla_hud(cx, cy);   /* Tesla */
-    draw_mine_hud(cx, cy);                                /* Ventouse */
-    for (int i = 0; i < COIN_MAX; i++) {                 /* pieces disponibles */
-        float fill = clampf(P.coins - i, 0, 1), x = winW - 30.0f - (COIN_MAX - i) * 20.0f, y = winH - 96.0f;
-        rect(x, y, 14, 14, 0.15f, 0.12f, 0.05f, 0.7f);
-        rect(x, y + 14 * (1 - fill), 14, 14 * fill, 1, 0.82f, 0.3f, fill >= 1 ? 1.0f : 0.5f);
-    }
-    {
-        char kb[40];
-        snprintf(kb, sizeof kb, "[%s]", bind_text(A_COIN));
-        text(0, winW - 36.0f - COIN_MAX * 20.0f - fontW[0] * (float)strlen(kb), winH - 83.0f, kb, 0.8f, 0.7f, 0.4f, 0.9f);
-    }
-    {                                                     /* le viseur s'allume sur une piece : doree = la mienne, rouge = adverse */
-        V3 eye = eye_pos(), vd = view_dir();
-        float tw = ray_world(eye, vd, 400, 0), t;
-        for (int i = 0; i < MAXCOIN; i++)
-            if (!P.dead && CO[i].alive && ray_sphere(eye, vd, CO[i].pos, COIN_RADIUS, tw, &t)) {
-                glLineWidth(2);
-                if (CO[i].owner == myId) glColor4f(1, 0.85f, 0.3f, 1); else glColor4f(1, 0.25f, 0.25f, 1);
-                glBegin(GL_LINE_LOOP);
-                glVertex2f(cx, cy - 11); glVertex2f(cx + 11, cy); glVertex2f(cx, cy + 11); glVertex2f(cx - 11, cy);
+        if (P.lanceState == LS_COUCH && !P.dead) {            /* Lance couchee : anneau du cone (plein si une cible y est armee), duree */
+            float r = tanf(acosf(LANCE_CONE)) / tanf(fminf(P.fovCur, 150.0f) * PI / 360.0f) * winW * 0.5f;
+            int armed = P.lanceVc >= LANCE_VC_MIN;
+            V3 tc = lance_tip_col(P.lanceVc);
+            if (armed) {
+                glColor4f(tc.x, tc.y, tc.z, 0.12f);
+                glBegin(GL_TRIANGLE_FAN);
+                glVertex2f(cx, cy);
+                for (int s = 0; s <= 40; s++) glVertex2f(cx + r * cosf(s * PI / 20), cy + r * sinf(s * PI / 20));
                 glEnd();
-                break;
             }
-    }
-    float wpFl = P.dead ? 0 : clampf(1 - (float)(nowT - wpFlashAt) / WP_FLASH_T, 0, 1);   /* changement d'arme recent */
-    if (wpFl > 0) {                                       /* nom de l'arme sous le viseur : monte et s'efface */
-        const AmmoDef *wd = &ammoDef[P.weapon];
-        float a = fminf(1, wpFl * 2.5f), y = cy + 78 + 14 * wpFl * wpFl, nw = fontW[1] * (float)strlen(wd->name);
-        rect(cx - nw * 0.5f - 14, y - 4, nw + 28, (float)fontH[1] + 8, 0.03f, 0.03f, 0.08f, 0.45f * a);
-        rect(cx - nw * 0.5f - 14, y + fontH[1] + 4.0f, (nw + 28) * wpFl, 3, wd->r, wd->g, wd->b, 0.9f * a);
-        text_c(1, cx, y, wd->name, wd->r * 0.6f + 0.4f, wd->g * 0.6f + 0.4f, wd->b * 0.6f + 0.4f, a);
-    }
-    {                                                     /* emplacements : [touche] ARME munitions, l'actif en blanc */
-        char sb[2][48];
-        for (int s = 0; s < 2; s++)
-            snprintf(sb[s], sizeof sb[s], "[%s] %s %d", bind_text(s ? A_WEAP2 : A_WEAP1), ammoDef[P.loadout[s]].name,
-                     P.ammo[P.loadout[s]]);
-        float x = winW - 30.0f - fontW[0] * (float)(strlen(sb[0]) + strlen(sb[1]) + 3);
-        for (int s = 0; s < 2; s++) {
-            int w = P.loadout[s], act0 = w == P.weapon, emp = !wp_has_ammo(w);
-            float k = act0 ? 1.0f : 0.55f;
-            text(0, x, winH - 13.0f, sb[s], emp ? 1.0f : k, emp ? 0.35f : k, emp ? 0.35f : k * 1.05f, 0.9f);
-            float gw = fontW[0] * (float)strlen(sb[s]), gf = w == WP_TESLA ? P.ammo[w] / 100.0f : gauge_frac(w);
-            if (act0 && wpFl > 0)                         /* emplacement choisi : eclat a la couleur de l'arme */
-                rect(x - 4, winH - 30.0f, gw + 8, 24, ammoDef[w].r, ammoDef[w].g, ammoDef[w].b, 0.25f * wpFl);
-            if (ammoDef[w].gauge > 0) {
-                rect(x, winH - 5.0f, gw, 3, 0.1f, 0.1f, 0.15f, 0.7f);
-                rect(x, winH - 5.0f, gw * gf, 3, ammoDef[w].r, ammoDef[w].g, ammoDef[w].b, 0.9f);
-            }
-            x += gw + fontW[0] * 3;
+            glLineWidth(armed ? 3.0f : 1.5f);
+            glColor4f(tc.x, tc.y, tc.z, armed ? 0.9f : 0.5f);
+            glBegin(GL_LINE_LOOP);
+            for (int s = 0; s < 40; s++) glVertex2f(cx + r * cosf(s * PI / 20), cy + r * sinf(s * PI / 20));
+            glEnd();
+            rect(cx - 40, cy + 26, 80, 4, 0.1f, 0.1f, 0.15f, 0.7f);
+            rect(cx - 40, cy + 26, 80 * clampf(1 - P.lanceT / LANCE_HOLD_MAX, 0, 1), 4, 1, 0.6f, 0.2f, 0.9f);
+            snprintf(buf, sizeof buf, "v%.0f", P.lanceVc);
+            text_c(0, cx, cy + 50, buf, tc.x, tc.y, tc.z, 0.9f);
         }
-        if (wantLoadout[0] != P.loadout[0] || wantLoadout[1] != P.loadout[1] || wantMelee != P.meleeKind)
-            text(0, winW - 30.0f - fontW[0] * 32, winH - 120.0f, "nouveau loadout au prochain respawn", 0.6f, 0.6f, 0.65f, 0.8f);
+        draw_saw_hud(cx, cy);                                 /* Scie */
+        if (P.weapon == WP_TESLA && !P.dead) draw_tesla_hud(cx, cy);   /* Tesla */
+        draw_mine_hud(cx, cy);                                /* Ventouse */
+        for (int i = 0; i < COIN_MAX; i++) {                 /* pieces disponibles */
+            float fill = clampf(P.coins - i, 0, 1), x = winW - 30.0f - (COIN_MAX - i) * 20.0f, y = winH - 96.0f;
+            rect(x, y, 14, 14, 0.15f, 0.12f, 0.05f, 0.7f);
+            rect(x, y + 14 * (1 - fill), 14, 14 * fill, 1, 0.82f, 0.3f, fill >= 1 ? 1.0f : 0.5f);
+        }
+        {
+            char kb[40];
+            snprintf(kb, sizeof kb, "[%s]", bind_text(A_COIN));
+            text(0, winW - 36.0f - COIN_MAX * 20.0f - fontW[0] * (float)strlen(kb), winH - 83.0f, kb, 0.8f, 0.7f, 0.4f, 0.9f);
+        }
+        {                                                     /* le viseur s'allume sur une piece : doree = la mienne, rouge = adverse */
+            V3 eye = eye_pos(), vd = view_dir();
+            float tw = ray_world(eye, vd, 400, 0), t;
+            for (int i = 0; i < MAXCOIN; i++)
+                if (!P.dead && CO[i].alive && ray_sphere(eye, vd, CO[i].pos, COIN_RADIUS, tw, &t)) {
+                    glLineWidth(2);
+                    if (CO[i].owner == myId) glColor4f(1, 0.85f, 0.3f, 1); else glColor4f(1, 0.25f, 0.25f, 1);
+                    glBegin(GL_LINE_LOOP);
+                    glVertex2f(cx, cy - 11); glVertex2f(cx + 11, cy); glVertex2f(cx, cy + 11); glVertex2f(cx - 11, cy);
+                    glEnd();
+                    break;
+                }
+        }
+        float wpFl = P.dead ? 0 : clampf(1 - (float)(nowT - wpFlashAt) / WP_FLASH_T, 0, 1);   /* changement d'arme recent */
+        if (wpFl > 0) {                                       /* nom de l'arme sous le viseur : monte et s'efface */
+            const AmmoDef *wd = &ammoDef[P.weapon];
+            float a = fminf(1, wpFl * 2.5f), y = cy + 78 + 14 * wpFl * wpFl, nw = fontW[1] * (float)strlen(wd->name);
+            rect(cx - nw * 0.5f - 14, y - 4, nw + 28, (float)fontH[1] + 8, 0.03f, 0.03f, 0.08f, 0.45f * a);
+            rect(cx - nw * 0.5f - 14, y + fontH[1] + 4.0f, (nw + 28) * wpFl, 3, wd->r, wd->g, wd->b, 0.9f * a);
+            text_c(1, cx, y, wd->name, wd->r * 0.6f + 0.4f, wd->g * 0.6f + 0.4f, wd->b * 0.6f + 0.4f, a);
+        }
+        {                                                     /* emplacements : [touche] ARME munitions, l'actif en blanc */
+            char sb[2][48];
+            for (int s = 0; s < 2; s++)
+                snprintf(sb[s], sizeof sb[s], "[%s] %s %d", bind_text(s ? A_WEAP2 : A_WEAP1), ammoDef[P.loadout[s]].name,
+                         P.ammo[P.loadout[s]]);
+            float x = winW - 30.0f - fontW[0] * (float)(strlen(sb[0]) + strlen(sb[1]) + 3);
+            for (int s = 0; s < 2; s++) {
+                int w = P.loadout[s], act0 = w == P.weapon, emp = !wp_has_ammo(w);
+                float k = act0 ? 1.0f : 0.55f;
+                text(0, x, winH - 13.0f, sb[s], emp ? 1.0f : k, emp ? 0.35f : k, emp ? 0.35f : k * 1.05f, 0.9f);
+                float gw = fontW[0] * (float)strlen(sb[s]), gf = w == WP_TESLA ? P.ammo[w] / 100.0f : gauge_frac(w);
+                if (act0 && wpFl > 0)                         /* emplacement choisi : eclat a la couleur de l'arme */
+                    rect(x - 4, winH - 30.0f, gw + 8, 24, ammoDef[w].r, ammoDef[w].g, ammoDef[w].b, 0.25f * wpFl);
+                if (ammoDef[w].gauge > 0) {
+                    rect(x, winH - 5.0f, gw, 3, 0.1f, 0.1f, 0.15f, 0.7f);
+                    rect(x, winH - 5.0f, gw * gf, 3, ammoDef[w].r, ammoDef[w].g, ammoDef[w].b, 0.9f);
+                }
+                x += gw + fontW[0] * 3;
+            }
+            if (wantLoadout[0] != P.loadout[0] || wantLoadout[1] != P.loadout[1] || wantMelee != P.meleeKind)
+                text(0, winW - 30.0f - fontW[0] * 32, winH - 120.0f, "nouveau loadout au prochain respawn", 0.6f, 0.6f, 0.65f, 0.8f);
+        }
     }
 
     /* infos de partie */
@@ -766,6 +802,9 @@ static void draw_hud(void) {
         draw_scoreboard(cx, cy);
         snprintf(buf, sizeof buf, "nouveau match dans %d s", (int)ceilf(fmaxf(matchEndT, 0)));
         text_c(1, cx, winH - 150.0f, buf, 0.9f, 0.9f, 0.9f, 1);
+    } else if (P.dead && killcam_active()) {              /* camera de mort : qui, avec quoi, combien de PV il lui reste */
+        draw_killcam_hud(cx, cy);
+        if (dmMode) draw_death_loadout(cx, winH - 260.0f);
     } else if (dmMode && P.dead) {
         rect(0, 0, (float)winW, (float)winH, 0.15f, 0, 0, 0.4f);
         if (killerOfMe >= 0 && killerOfMe != myId) snprintf(buf, sizeof buf, "ELIMINE PAR %s", pname(killerOfMe));

@@ -272,6 +272,22 @@ static void run_tests(const char *path) {
         mapsHeatN = 0; NP[1].disp = sDisp; myId = sId; spectating = sSpec;
     }
 
+    {                                                     /* camera de mort : la vue finit tournee vers le tueur */
+        int sDm = dmMode; dmMode = 0;
+        reset_game();
+        for (int i = 0; i < MAXE; i++) E[i].alive = 0;
+        E[0].alive = 1; E[0].pos = v3(-20, 2, 20);         /* couloir degage x = -20 : l'ennemi est devant (-z) */
+        P.pos = P.prevPos = v3(-20, 0, 40); P.yaw = 1.5f; P.pitch = 0;
+        killcam_start(-1, 0); P.dead = 1; P.deathT = 1.0f;
+        V3 eye; float yaw = 0, pitch = 0, zoom = 1;
+        int on = killcam_active();
+        killcam_view(&eye, &yaw, &pitch, &zoom);
+        P.deathT = KILLCAM_T + 0.1f;
+        fprintf(f, "camera de mort : active=%d cap vers le tueur=%.2f zoom=%.2f, finie apres %.1f s=%d (attendu 1, 0.00, 0.65, 1.6, 0)\n",
+                on, yaw, zoom, KILLCAM_T, killcam_active());
+        kcOn = 0; dmMode = sDm; reset_game();
+    }
+
     reset_game();                                         /* escalier -> plateforme centrale */
     P.pos = P.prevPos = v3(0, 0, ms(14) + 0.6f); P.yaw = 0;
     act[A_FWD] = 1;

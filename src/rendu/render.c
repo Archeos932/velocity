@@ -40,22 +40,24 @@ static void render(float alpha, float frameDt) {
     float hfov = fovBase + clampf((hs - RUN_SPEED) * 0.7f, 0, 20) + P.fovKick;
     P.fovCur += (hfov - P.fovCur) * fminf(1, frameDt * 6);
     float hf = fminf(P.fovCur, 150.0f);
-    float vfov = 2 * atanf(tanf(hf * PI / 360.0f) / aspect) * 180.0f / PI;
-
     V3 pos = vlerp(P.prevPos, P.pos, alpha);
     V3 eye = v3(pos.x, pos.y + P.eyeH + P.bob + P.stepOfs - P.landDip, pos.z);
+    float camYaw = P.yaw, camPitch = P.pitch, camRoll = P.roll, kcZoom = 1;
+    if (killcam_active()) { killcam_view(&eye, &camYaw, &camPitch, &kcZoom); camRoll = 0; hf *= kcZoom; }   /* camera de mort */
+    float vfov = 2 * atanf(tanf(hf * PI / 360.0f) / aspect) * 180.0f / PI;
+
     float sy = frange(-1, 1) * shake * 2, sp = frange(-1, 1) * shake * 2;
 
     set_frustum(vfov, aspect, 0.05f, 500);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    glRotatef(P.roll, 0, 0, 1);
-    glRotatef(-P.pitch * 180 / PI + sp, 1, 0, 0);
-    glRotatef(P.yaw * 180 / PI + sy, 0, 1, 0);
+    glRotatef(camRoll, 0, 0, 1);
+    glRotatef(-camPitch * 180 / PI + sp, 1, 0, 0);
+    glRotatef(camYaw * 180 / PI + sy, 0, 1, 0);
     glTranslatef(-eye.x, -eye.y, -eye.z);
 
-    V3 fwd = view_dir();
-    camR = v3(cosf(P.yaw), 0, sinf(P.yaw));
+    V3 fwd = v3(sinf(camYaw) * cosf(camPitch), sinf(camPitch), -cosf(camYaw) * cosf(camPitch));
+    camR = v3(cosf(camYaw), 0, sinf(camYaw));
     camU = vcross(camR, fwd);
     camEye = eye;
     glGetFloatv(GL_MODELVIEW_MATRIX, mvMat);
