@@ -1418,6 +1418,7 @@ typedef struct {                  /* ce que chaque joueur envoie de lui-meme */
     float pos[3], vel[3], hookPos[3];
     float yaw, pitch;
     unsigned char flags, weapon, melee, pad;
+    unsigned char skin, spare[3];                         /* skin (SKN_*) ; spare : libre */
 } NetPState;
 
 typedef struct {
@@ -1438,6 +1439,10 @@ typedef struct {
     double lastLanceT;                                    /* Lance : derniere fois vu lance couchee (hote) */
     unsigned char lanceSeen;                              /* Lance : ST_LANCE au tick precedent (front montant -> son) */
     unsigned char team;                                   /* equipe 0 (bleue) ou 1 (rouge), si teamSize > 0 */
+    float runPh, trailAcc;                                /* skins : phase de course ; trainee de vitesse */
+    V3 trail[16];
+    float trailAge[16];
+    int trailHead;
     /* --- Egide : derniere fois vu bouclier leve (hote) ; jauge, brise, arrache (hote : autorite ; clients : miroir) --- */
     double lastShieldT;
     float shieldGauge, shieldBrokenT, shieldRipT;
@@ -1605,6 +1610,9 @@ static float fovBase = BASE_HFOV;
 static int invertY, showFps = 1;
 static int impactFrames = 1, screenFx = 1;               /* options : impact frames (flashs) et effets d'ecran */
 static int gfxShadows = 1, gfxBloom = 1;                  /* graphismes : ombres des objets mobiles, halo lumineux (bloom) */
+static int gfxQuality = 2, gfxAmbiance;                   /* qualite (0 basse, 1 moyenne, 2 ultra) ; ambiance (graphismes/ambiance_*.ini) */
+static const char *qualityNames[3] = { "BASSE", "MOYENNE", "ULTRA" };
+static const char *ambianceNames[4] = { "COUCHANT", "NUIT", "JOUR", "ORAGE" };
 
 /* ------------------------------------------------------------------ */
 /* Effets visuels de combat                                            */
@@ -1723,9 +1731,13 @@ static void burst(V3 p, V3 col, int n, float speed, float life, float size) {
         add_part(p, vmul(rand_dir(), speed * frange(0.2f, 1.0f)), col, life * frange(0.5f, 1.0f), size * frange(0.6f, 1.2f), 6);
 }
 
+static void add_light(V3 p, V3 col, float r, float life);
+static void decal_at(V3 p, V3 col, float sz, float life, float reach);
 static void add_beam(V3 a, V3 b, V3 col, float life) {
     Beam *m = &BM[bmNext]; bmNext = (bmNext + 1) % MAXBM;
     m->a = a; m->b = b; m->col = col; m->life = m->max = life;
+    add_light(b, col, 5, 0.3f);                           /* le point d'impact s'eclaire et garde une marque */
+    decal_at(b, vmul(col, 0.25f), 0.35f, 6, 0.4f);
 }
 
 /* Eventail : traceur de plomb, la tete avance a SG_TRACER_SPEED puis la ligne s'eteint en 0,12 s */
@@ -1733,6 +1745,60 @@ static void add_tracer(V3 a, V3 b, V3 col) {
     Tracer *r = &TR[trNext]; trNext = (trNext + 1) % MAXTR;
     r->a = a; r->b = b; r->col = col; r->t = 0;
     r->life = vlen(vsub(b, a)) / SG_TRACER_SPEED + 0.12f;
+}
+
+/* --- effets de rendu (purement visuels, decomptes en temps reel dans render) ---
+ * lumieres dynamiques (explosions, rail, roquettes) projetees sur le decor proche, marques d'impact,
+ * ondes de choc au sol, fumee (melangee, pas additive) */
+typedef struct { V3 p, col; float r, life, max; } DynLight;
+typedef struct { V3 p, n, col; float s, life, max, rot; } Decal;
+typedef struct { V3 p, n, col; float r, life, max; } Ring;
+typedef struct { V3 p, v; float life, max, size, shade; } Smoke;
+#define MAXDL 32
+#define MAXDC 64
+#define MAXRG 16
+#define MAXSM 160
+static DynLight DL[MAXDL];
+static Decal DC[MAXDC];
+static Ring RG[MAXRG];
+static Smoke SMK[MAXSM];
+static int dlNext, dcNext, rgNext, smNext;
+static void add_light(V3 p, V3 col, float r, float life) {
+    DynLight *l = &DL[dlNext]; dlNext = (dlNext + 1) % MAXDL;
+    l->p = p; l->col = col; l->r = r; l->life = l->max = life;
+}
+static void add_decal(V3 p, V3 n, V3 col, float sz, float life) {
+    Decal *d = &DC[dcNext]; dcNext = (dcNext + 1) % MAXDC;
+    d->p = vadd(p, vmul(n, 0.02f)); d->n = n; d->col = col; d->s = sz; d->life = d->max = life; d->rot = frange(0, 2 * PI);
+}
+/* marque sur la surface la plus proche de p (a moins de reach m), si elle existe */
+static void decal_at(V3 p, V3 col, float sz, float life, float reach) {
+    static const float dirs[6][3] = { { 0, -1, 0 }, { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, 1, 0 } };
+    float best = reach; V3 bn = v3(0, 1, 0), bp = p;
+    for (int k = 0; k < 6; k++) {
+        V3 d = v3(dirs[k][0], dirs[k][1], dirs[k][2]), n;
+        float t = ray_world(p, d, best, &n);
+        if (t < best) { best = t; bn = n; bp = vadd(p, vmul(d, t)); }
+    }
+    if (best < reach) add_decal(bp, bn, col, sz, life);
+}
+static void add_smoke(V3 p, V3 v, float life, float size, float shade) {
+    Smoke *m = &SMK[smNext]; smNext = (smNext + 1) % MAXSM;
+    m->p = p; m->v = v; m->life = m->max = life; m->size = size; m->shade = shade;
+}
+/* tout ce qu'une explosion ajoute en plus des particules : flash de lumiere, onde au sol, brulure, fumee */
+static void fx_explosion(V3 c, float radius) {
+    add_light(c, v3(1.0f, 0.6f, 0.25f), radius * 2.6f, 0.45f);
+    float t = ray_world(c, v3(0, -1, 0), radius * 1.5f, 0);
+    if (t < radius * 1.5f) {
+        Ring *g = &RG[rgNext]; rgNext = (rgNext + 1) % MAXRG;
+        g->p = vadd(c, v3(0, -t + 0.04f, 0)); g->n = v3(0, 1, 0); g->col = v3(1, 0.7f, 0.35f);
+        g->r = radius * 1.4f; g->life = g->max = 0.45f;
+    }
+    decal_at(c, v3(0.05f, 0.04f, 0.04f), radius * 0.55f, 9, 1.2f);
+    for (int i = 0; i < 9; i++)
+        add_smoke(vadd(c, vmul(rand_dir(), 0.6f)), vadd(vmul(rand_dir(), 1.5f), v3(0, 1.4f, 0)), frange(1.6f, 2.8f),
+                  frange(0.9f, 1.6f), frange(0.15f, 0.3f));
 }
 
 /* ------------------------------------------------------------------ */
@@ -2194,6 +2260,8 @@ static void player_tick(float dt, int jumpPress, int dashPress) {
 static float enemy_radius(int type) { return type == EN_DRONE ? 0.9f : 0.75f; }
 static V3 enemy_color(int type) { return type == EN_DRONE ? v3(1.0f, 0.25f, 0.3f) : v3(1.0f, 0.6f, 0.15f); }
 
+#define FALL_DEATH_Y -25.0f                               /* sous cette hauteur (hors de la carte), on meurt */
+static int fellOut;                                       /* deja mort de chute pendant cette vie (une seule touche) */
 static void damage_player(float dmg) {
     if (P.dead) return;
     if (dmMode) { net_hit(myId, dmg, v3(0, 0, 0), W_SELF); return; }  /* en LAN, l'hote tient les PV */
@@ -2270,6 +2338,7 @@ static void damage_enemy(int i, float dmg, V3 knock) {
  * Renvoie le nombre d'ennemis touches. */
 static int explode_ex(V3 c, float radius, float dmg, int byPlayer, float knock, int weapon, int skipEnemy, int skipPlayer,
                       unsigned int netId) {
+    fx_explosion(c, radius);
     burst(c, v3(1.0f, 0.55f, 0.15f), 90, 14, 0.7f, 0.3f);
     burst(c, v3(1.0f, 0.9f, 0.5f), 30, 7, 0.35f, 0.5f);
     play(S_EXPLO, 0.9f, frange(0.9f, 1.1f));
@@ -2313,6 +2382,7 @@ static float atten(V3 p) { return clampf(1.2f - vlen(vsub(p, P.pos)) / 60.0f, 0.
 
 /* explosion purement visuelle : roquette d'un autre joueur (c'est son tireur qui gere les degats) */
 static void explode_fx(V3 c) {
+    fx_explosion(c, ROCKET_RADIUS);
     burst(c, v3(1.0f, 0.55f, 0.15f), 90, 14, 0.7f, 0.3f);
     burst(c, v3(1.0f, 0.9f, 0.5f), 30, 7, 0.35f, 0.5f);
     play(S_EXPLO, 0.9f * atten(c), frange(0.9f, 1.1f));
@@ -2344,7 +2414,12 @@ static void parry_feedback(V3 where) {
 /* ------------------------------------------------------------------ */
 /* le choix vit hors de P (reset_game remet P a zero) et ne s'applique qu'au (re)spawn */
 static int wantLoadout[2] = { WP_RAIL, WP_ROCKET }, wantMelee = MK_SWORD;
+/* skins : apparence du joueur ; la couleur vient de l'equipe (ou du joueur en chacun pour soi) */
+enum { SKN_ROBOT, SKN_POUSSIN, SKN_NINJA, SKN_CHAT, SKN_CHEVALIER, SKN_COUNT };
+static const char *skinNames[SKN_COUNT] = { "ROBOT", "POUSSIN", "NINJA", "CHAT", "CHEVALIER" };
+static int wantSkin = SKN_ROBOT;
 static int loadoutOpen;                                   /* ecran LOADOUT ouvert */
+static int skinOpen, skinPrevTeam = 0;                    /* ecran SKIN ouvert ; couleur montree dans l'apercu */
 static int hostOpen, hostBots = -1;                       /* ecran HEBERGER ouvert ; bots pour completer (-1 : aucun, sinon niveau) */
 static int hostFfa;                                       /* la prochaine partie hebergee est en chacun pour soi (duel du menu) */
 static float ammoGainT, dryHintT, dryT;                   /* HUD : "+50" vert, panneau de melee qui clignote ; temps a sec */
@@ -5093,7 +5168,7 @@ static void reset_game(void) {
 /* HIT. Les evenements sont renvoyes 3 fois et dedoublonnes par id.    */
 /* ------------------------------------------------------------------ */
 #define NET_MAGIC 0x564C4F43u
-#define NET_VER   12
+#define NET_VER   13
 enum { PK_QUERY = 1, PK_ANNOUNCE, PK_JOIN, PK_WELCOME, PK_STATE, PK_SNAP, PK_ROSTER, PK_EVENT, PK_LEAVE,
        PK_PUNCH, PK_KEEP };   /* PUNCH : ouvre le NAT vers un client ; KEEP : un spectateur dit qu'il est la */
 enum { EV_RAIL = 1, EV_ROCKET, EV_ROCKET_END, EV_PARRY, EV_HIT, EV_MELEE, EV_KILL, EV_RESPAWN, EV_MATCH, EV_INFO, EV_PICKUP,
@@ -5246,6 +5321,7 @@ static void pack_state(NetPState *s) {
                                (P.hook != HOOK_NONE ? NF_HOOK : 0) | (P.dead ? NF_DEAD : 0) |
                                (P.parryWin > 0 ? NF_PARRY : 0));
     s->weapon = (unsigned char)P.weapon;
+    s->skin = (unsigned char)wantSkin;
     float swingT = P.meleeKind == MK_ANVIL ? ANVIL_SWING_T : P.meleeKind == MK_LANCE ? 0.2f :   /* Lance : estoc */
                    P.meleeKind == MK_FLAIL ? FLAIL_ANIM : 0.25f;
     s->melee = (unsigned char)(clampf(P.meleeT / swingT, 0, 1) * 255);
@@ -5294,6 +5370,7 @@ static void net_queue(const NetEvent *ev) {
 
 static void apply_event(const NetEvent *ev);
 static int host_handle(const NetEvent *ev);
+static const float *pcolor(int i);
 
 /* cree un evenement local : l'hote l'arbitre tout de suite, puis il part sur le reseau
  * (sauf si l'hote l'annule : coup pare, cible morte...) */
@@ -5898,8 +5975,11 @@ static void apply_event(const NetEvent *ev) {
         if (v >= MAXP) break;
         kfeed_add(k, v, ev->sub, 0);
         V3 at = v == myId ? pcenter() : np_center(v);
-        burst(at, v3(1, 0.4f, 0.3f), 70, 12, 0.9f, 0.18f);
-        shards(at, v3(0.9f, 0.5f, 0.4f), 16, 11);
+        const float *vc0 = pcolor(v);                     /* le corps eclate dans la couleur de son equipe */
+        burst(at, v3(vc0[0], vc0[1], vc0[2]), 70, 12, 0.9f, 0.18f);
+        burst(at, v3(1, 0.4f, 0.3f), 30, 9, 0.7f, 0.14f);
+        shards(at, v3(vc0[0] * 0.8f, vc0[1] * 0.8f, vc0[2] * 0.8f), 22, 11);
+        add_light(at, v3(vc0[0], vc0[1], vc0[2]), 7, 0.5f);
         if (k == myId && v != myId) { impact_frame(at, 0.08f); killMarkT = 0.45f; }
         play(S_EXPLO, 0.7f * atten(at), 1.3f);
         NP[v].alive = 0;
@@ -8347,6 +8427,13 @@ static void game_tick(float dt) {
     }
 
     player_tick(dt, jp, dp);
+    if (!P.dead && !fellOut && P.pos.y < FALL_DEATH_Y) {  /* sorti de la carte et tombe dans le vide : mort */
+        fellOut = 1;
+        damage_player(1000);
+        netlog("chute hors de la carte");
+    }
+    if (P.pos.y > FALL_DEATH_Y + 5) fellOut = 0;          /* respawn : a nouveau sur la carte */
+    if (P.dead && P.pos.y < FALL_DEATH_Y - 40) { P.vel = v3(0, 0, 0); P.pos.y = P.prevPos.y = FALL_DEATH_Y - 40; }   /* ne tombe pas a l'infini */
 
     if (P.coins < COIN_MAX) P.coins = fminf(COIN_MAX, P.coins + dt / COIN_RECHARGE);
     if (!P.dead && coinPress && P.coins >= 1) throw_coin();
@@ -8478,6 +8565,12 @@ static float gxCity[5] = { 70, 260, 120, 30, 85 }, gxCityCol[3] = { 0.16f, 0.14f
 static float gxBloom[4] = { 0.7f, 3, 2, 1.6f };
 static float gxTexScale[3] = { 0.5f, 0.5f, 2.37f }, gxFloorTex[2] = { 64, 0.80f }, gxWallTex[3] = { 128, 64, 0.62f };
 static float gxGrain = 0.22f, gxEdges = 0.25f;
+static float gxTrail[3] = { 16, 0.55f, 0.35f }, gxOutline = 3;
+static float gxNeonC[3] = { 0.2f, 0.95f, 1.0f }, gxNeonM[3] = { 1.0f, 0.25f, 0.85f }, gxNeonO[3] = { 1.0f, 0.6f, 0.15f };
+static float gxNeon[3] = { 1.0f, 0.55f, 5.0f }, gxBleed = 0.35f;   /* neons : eclat, lueur sur le decor, portee ; rebond colore */
+static float gxLights = 1.0f;                             /* lumieres dynamiques (armes, explosions), 0 = aucune */
+static float gxClouds[2] = { 18, 0.35f }, gxCloudCol[3] = { 0.62f, 0.5f, 0.66f }, gxDust = 120, gxFlare = 0.5f;
+static float gxRain = 0, gxStorm = 0;                     /* pluie (gouttes), orage (eclairs par minute) */   /* trainees : vitesse min, opacite, largeur ; contours */
 typedef struct { const char *key; float *v; int n; } GfxKey;
 static const GfxKey gfxKeys[] = {
     { "soleil_direction", gxSunDir, 3 }, { "soleil_couleur", sunCol, 3 }, { "soleil_force", &gxSunPow, 1 },
@@ -8495,6 +8588,11 @@ static const GfxKey gfxKeys[] = {
     { "bloom", gxBloom, 4 },
     { "texture_echelle", gxTexScale, 3 }, { "sol_texture", gxFloorTex, 2 }, { "mur_texture", gxWallTex, 3 },
     { "grain_force", &gxGrain, 1 }, { "aretes_opacite", &gxEdges, 1 },
+    { "trainees", gxTrail, 3 }, { "contours", &gxOutline, 1 },
+    { "neon_cyan", gxNeonC, 3 }, { "neon_magenta", gxNeonM, 3 }, { "neon_orange", gxNeonO, 3 }, { "neon", gxNeon, 3 },
+    { "rebond_couleur", &gxBleed, 1 }, { "lumieres_dynamiques", &gxLights, 1 },
+    { "nuages", gxClouds, 2 }, { "nuages_couleur", gxCloudCol, 3 }, { "poussiere", &gxDust, 1 }, { "reflets_soleil", &gxFlare, 1 },
+    { "pluie", &gxRain, 1 }, { "orage", &gxStorm, 1 },
 };
 #define GFX_NKEYS ((int)(sizeof gfxKeys / sizeof gfxKeys[0]))
 static char gfxDir[512];                                  /* dossier graphismes trouve ("" : aucun, valeurs par defaut) */
@@ -8528,6 +8626,8 @@ static void gfx_clamp(void) {                             /* valeurs absurdes ra
     gxAoMin = clampf(gxAoMin, 0, 1); gxLmBlur = clampf(gxLmBlur, 0, 6);
     gxBloom[1] = clampf(gxBloom[1], 1, 4); gxBloom[2] = clampf(gxBloom[2], 0, 6); gxStars = clampf(gxStars, 0, 2000);
     gxCity[0] = clampf(gxCity[0], 0, 400); gxFog[1] = fmaxf(gxFog[1], gxFog[0] + 1);
+    gxClouds[0] = clampf(gxClouds[0], 0, 80); gxDust = clampf(gxDust, 0, 600); gxRain = clampf(gxRain, 0, 2000);
+    gxNeon[2] = clampf(gxNeon[2], 0.5f, 12); gxOutline = clampf(gxOutline, 0, 8);
     if (vlen(v3(gxSunDir[0], gxSunDir[1], gxSunDir[2])) < 1e-3f || gxSunDir[1] < 0.05f) gxSunDir[1] = 0.05f;   /* soleil au-dessus */
     int fp = (int)gxFloorTex[0], wx = (int)gxWallTex[0], wy = (int)gxWallTex[1];   /* motifs : diviseurs de 256 */
     if (fp < 8 || 256 % fp) gxFloorTex[0] = 64;
@@ -8589,13 +8689,35 @@ static void gfx_defaults(int restore) {
     gfxDefaultsSaved = 1;
 }
 
+/* qualite : plafonne ce qui coute (precalcul, particules, decor lointain) ; ULTRA garde les valeurs du fichier */
+static void gfx_quality_apply(void) {
+    if (gfxQuality >= 2) return;
+    int low = gfxQuality == 0;
+    gxLmDens = fminf(gxLmDens, low ? 1.5f : 2.2f); gxAoRays = fminf(gxAoRays, low ? 4.0f : 8.0f);
+    gxLmBlur = fminf(gxLmBlur, 1); gxStars = fminf(gxStars, low ? 100.0f : 200.0f);
+    gxClouds[0] = fminf(gxClouds[0], low ? 6.0f : 10.0f); gxDust = fminf(gxDust, low ? 0.0f : 60.0f);
+    gxRain = fminf(gxRain, low ? 80.0f : 200.0f); gxCity[0] = fminf(gxCity[0], low ? 25.0f : 45.0f);
+    gxBloom[2] = fminf(gxBloom[2], 1);
+    if (low) gxFlare = 0;
+}
+
 static void gfx_load_all(void) {
     char p[600];
     if (!gfxDefaultsSaved) gfx_defaults(0); else gfx_defaults(1);
     gfx_find_dir();
-    if (!gfxDir[0]) return;
-    snprintf(p, sizeof p, "%s/rendu.ini", gfxDir);
-    gfx_load(p);
+    if (gfxDir[0]) {
+        snprintf(p, sizeof p, "%s/rendu.ini", gfxDir);
+        gfx_load(p);
+        if (gfxAmbiance > 0 && gfxAmbiance < 4) {         /* l'ambiance remplace une partie des valeurs */
+            char nm[32];
+            int k = 0;
+            for (const char *q = ambianceNames[gfxAmbiance]; *q && k < 31; q++) nm[k++] = (char)(*q - 'A' + 'a');
+            nm[k] = 0;
+            snprintf(p, sizeof p, "%s/ambiance_%s.ini", gfxDir, nm);
+            gfx_load(p);
+        }
+    }
+    gfx_quality_apply();
 }
 
 /* BMP 24 ou 32 bits non compresse, carre, cote puissance de 2 (16 a 1024) : image RGB de haut en bas, ou NULL */
@@ -8874,6 +8996,202 @@ static void prism_z(V3 c, float z0, float z1, float r0, float r1, int n, int cap
     }
 }
 
+/* ---- skins : modeles des joueurs ----------------------------------------------------------
+ * Pieds en (0, 0, 0), regard vers -z, taille 1,8 m (mise a l'echelle pour l'accroupi). La couleur
+ * principale c est celle de l'equipe (ou du joueur en chacun pour soi). Les accents fixes (bec,
+ * pattes, acier) gardent leur couleur. skinFlat : tout d'une couleur (contour) ; skinFlash : touche. */
+typedef struct { float run, spd, air, slide, pitch, t; } SkinAnim;
+static int skinFlat;
+static float skinFlatCol[3], skinFlash;
+static void skc(float r, float g, float b) {
+    if (skinFlat) { glColor3f(skinFlatCol[0], skinFlatCol[1], skinFlatCol[2]); return; }
+    float k = clampf(skinFlash, 0, 1);
+    glColor3f(r + (1 - r) * k, g + (1 - g) * k, b + (1 - b) * k);
+}
+static void skcv(const float *c, float m) { skc(fminf(1, c[0] * m), fminf(1, c[1] * m), fminf(1, c[2] * m)); }
+static void skmix(const float *c, float w) { skc(c[0] + (1 - c[0]) * w, c[1] + (1 - c[1]) * w, c[2] + (1 - c[2]) * w); }
+static void bxs(float x0, float y0, float z0, float x1, float y1, float z1) { box_faces(v3(x0, y0, z0), v3(x1, y1, z1)); }
+static void emit_on(void) { if (!skinFlat) glDisable(GL_LIGHTING); }   /* parties lumineuses : sans eclairage */
+static void emit_off(void) { if (!skinFlat) glEnable(GL_LIGHTING); }
+
+/* jambe : pivot a la hanche (x, hip), angle en degres (positif = vers l'avant) */
+static void skin_leg(float x, float hip, float ang, float w, float len) {
+    glPushMatrix();
+    glTranslatef(x, hip, 0);
+    glRotatef(-ang, 1, 0, 0);
+    bxs(-w, -len, -w, w, 0, w);
+    glPopMatrix();
+}
+static float leg_angle(const SkinAnim *a, int side) {   /* course, saut, glissade */
+    if (a->slide > 0.5f) return 70;
+    if (a->air > 0.5f) return side ? 30 : -20;
+    return sinf(a->run + (side ? PI : 0)) * 38 * a->spd;
+}
+/* bras : droit vers l'avant (tient l'arme, suit la visee), gauche qui balance */
+static void skin_arms(const float *armCol, float armM, float sh, float sx, float w, const SkinAnim *a) {
+    glPushMatrix();
+    glTranslatef(sx, sh, 0);
+    glRotatef(a->pitch * 180 / PI - 8, 1, 0, 0);
+    skcv(armCol, armM);
+    bxs(-w, -w, -0.5f, w, w, 0.05f);
+    glPopMatrix();
+    glPushMatrix();
+    glTranslatef(-sx, sh, 0);
+    glRotatef(a->air > 0.5f ? 150.0f : -sinf(a->run) * 30 * a->spd, 1, 0, 0);
+    skcv(armCol, armM);
+    bxs(-w, -0.6f, -w, w, 0.04f, w);
+    glPopMatrix();
+}
+
+static void skin_robot(const float *c, const SkinAnim *a) {
+    static const float steel[3] = { 0.28f, 0.29f, 0.34f };
+    skcv(c, 0.45f);
+    skin_leg(0.14f, 0.8f, leg_angle(a, 0), 0.09f, 0.8f);
+    skin_leg(-0.14f, 0.8f, leg_angle(a, 1), 0.09f, 0.8f);
+    skcv(steel, 1); bxs(-0.25f, 0.72f, -0.16f, 0.25f, 0.86f, 0.16f);
+    skcv(c, 0.8f); bxs(-0.32f, 0.85f, -0.2f, 0.32f, 1.38f, 0.2f);
+    skcv(c, 1.0f); bxs(-0.44f, 1.22f, -0.17f, -0.3f, 1.4f, 0.17f); bxs(0.3f, 1.22f, -0.17f, 0.44f, 1.4f, 0.17f);
+    skcv(c, 1.0f); bxs(-0.22f, 1.4f, -0.22f, 0.22f, 1.8f, 0.22f);
+    skcv(steel, 1); bxs(0.11f, 1.8f, -0.02f, 0.14f, 1.98f, 0.01f);
+    emit_on();
+    skc(0.75f, 0.95f, 1.0f); bxs(-0.18f, 1.55f, -0.245f, 0.18f, 1.66f, -0.2f);   /* visiere */
+    skmix(c, 0.5f); bxs(-0.07f, 1.05f, -0.215f, 0.07f, 1.19f, -0.2f);           /* coeur lumineux */
+    bxs(0.095f, 1.97f, -0.035f, 0.155f, 2.03f, 0.025f);                           /* bout d'antenne */
+    emit_off();
+    skin_arms(c, 0.6f, 1.3f, 0.38f, 0.07f, a);
+}
+
+static void skin_poussin(const float *c, const SkinAnim *a) {
+    static const float orange[3] = { 1.0f, 0.58f, 0.1f };
+    skcv(orange, 1);
+    skin_leg(0.12f, 0.45f, leg_angle(a, 0), 0.035f, 0.42f);
+    skin_leg(-0.12f, 0.45f, leg_angle(a, 1), 0.035f, 0.42f);
+    bxs(0.04f, 0, -0.16f, 0.2f, 0.035f, 0.04f); bxs(-0.2f, 0, -0.16f, -0.04f, 0.035f, 0.04f);   /* pattes */
+    skcv(c, 1.0f);                                          /* corps rond : trois boites croisees */
+    bxs(-0.42f, 0.52f, -0.34f, 0.42f, 1.18f, 0.34f);
+    bxs(-0.35f, 0.44f, -0.42f, 0.35f, 1.26f, 0.42f);
+    bxs(-0.3f, 0.4f, -0.3f, 0.3f, 1.3f, 0.3f);
+    skmix(c, 0.55f); bxs(-0.24f, 0.56f, -0.435f, 0.24f, 1.02f, -0.41f);   /* ventre clair */
+    skcv(c, 1.08f);                                         /* tete */
+    bxs(-0.28f, 1.24f, -0.32f, 0.28f, 1.76f, 0.22f);
+    bxs(-0.23f, 1.2f, -0.36f, 0.23f, 1.8f, 0.26f);
+    for (int k = 0; k < 3; k++) {                           /* plumes du dessus */
+        glPushMatrix();
+        glTranslatef(-0.06f + k * 0.06f, 1.8f, -0.02f + k * 0.03f);
+        glRotatef(-25 + k * 25.0f, 0, 0, 1);
+        skcv(c, 1.2f); bxs(-0.025f, 0, -0.025f, 0.025f, 0.16f, 0.025f);
+        glPopMatrix();
+    }
+    skc(0.05f, 0.05f, 0.07f); bxs(-0.19f, 1.52f, -0.37f, -0.08f, 1.64f, -0.35f); bxs(0.08f, 1.52f, -0.37f, 0.19f, 1.64f, -0.35f);
+    emit_on(); skc(1, 1, 1); bxs(-0.16f, 1.6f, -0.375f, -0.13f, 1.63f, -0.365f); bxs(0.11f, 1.6f, -0.375f, 0.14f, 1.63f, -0.365f); emit_off();
+    skcv(orange, 1);                                        /* bec */
+    bxs(-0.09f, 1.42f, -0.5f, 0.09f, 1.5f, -0.34f);
+    bxs(-0.06f, 1.37f, -0.45f, 0.06f, 1.42f, -0.34f);
+    float flap = a->air > 0.5f ? sinf(a->t * 22) * 45 : sinf(a->run) * 10 * a->spd;   /* ailes : battent en l'air */
+    for (int side = -1; side <= 1; side += 2) {
+        glPushMatrix();
+        glTranslatef(side * 0.42f, 1.05f, 0.02f);
+        glRotatef(side * (15 + flap), 0, 0, 1);
+        skcv(c, 0.85f); bxs(side < 0 ? -0.08f : 0, -0.38f, -0.2f, side < 0 ? 0 : 0.08f, 0.02f, 0.22f);
+        glPopMatrix();
+    }
+    skin_arms(c, 0.85f, 1.15f, 0.46f, 0.05f, a);
+}
+
+static void skin_ninja(const float *c, const SkinAnim *a) {
+    float suit[3] = { c[0] * 0.3f + 0.05f, c[1] * 0.3f + 0.05f, c[2] * 0.3f + 0.06f };
+    static const float skin[3] = { 0.93f, 0.76f, 0.62f };
+    skcv(suit, 1);
+    skin_leg(0.12f, 0.82f, leg_angle(a, 0), 0.075f, 0.82f);
+    skin_leg(-0.12f, 0.82f, leg_angle(a, 1), 0.075f, 0.82f);
+    bxs(-0.27f, 0.82f, -0.17f, 0.27f, 1.38f, 0.17f);
+    skcv(c, 1.0f); bxs(-0.28f, 0.8f, -0.18f, 0.28f, 0.9f, 0.18f);         /* ceinture */
+    glPushMatrix(); glTranslatef(0, 1.1f, 0.19f); glRotatef(35, 0, 0, 1);  /* fourreau dans le dos */
+    skc(0.12f, 0.1f, 0.1f); bxs(-0.03f, -0.45f, -0.02f, 0.03f, 0.45f, 0.03f); glPopMatrix();
+    skcv(suit, 1); bxs(-0.2f, 1.4f, -0.2f, 0.2f, 1.78f, 0.2f);
+    skcv(skin, 1); bxs(-0.19f, 1.55f, -0.21f, 0.19f, 1.64f, -0.19f);      /* bande des yeux */
+    skc(0.05f, 0.05f, 0.05f); bxs(-0.13f, 1.58f, -0.215f, -0.06f, 1.61f, -0.205f); bxs(0.06f, 1.58f, -0.215f, 0.13f, 1.61f, -0.205f);
+    skcv(c, 1.0f); bxs(-0.21f, 1.66f, -0.21f, 0.21f, 1.72f, 0.21f);       /* bandeau */
+    float lift = 75 - 60 * a->spd;                          /* rubans : pendent a l'arret, flottent a pleine vitesse */
+    for (int k = 0; k < 2; k++) {
+        glPushMatrix();
+        glTranslatef(k ? 0.05f : -0.05f, 1.69f, 0.21f);
+        glRotatef(lift + sinf(a->t * 11 + k * 1.7f) * 9, 1, 0, 0);
+        glRotatef(k ? 8.0f : -8.0f, 0, 1, 0);
+        skcv(c, 1.0f); bxs(-0.03f, -0.01f, 0, 0.03f, 0.01f, k ? 0.5f : 0.6f);
+        glPopMatrix();
+    }
+    skin_arms(suit, 1, 1.3f, 0.34f, 0.06f, a);
+}
+
+static void skin_chat(const float *c, const SkinAnim *a) {
+    static const float pink[3] = { 1.0f, 0.55f, 0.65f };
+    skcv(c, 0.8f);
+    skin_leg(0.13f, 0.8f, leg_angle(a, 0), 0.085f, 0.8f);
+    skin_leg(-0.13f, 0.8f, leg_angle(a, 1), 0.085f, 0.8f);
+    skmix(c, 0.75f); bxs(0.04f, 0, -0.12f, 0.22f, 0.06f, 0.08f); bxs(-0.22f, 0, -0.12f, -0.04f, 0.06f, 0.08f);   /* pattes */
+    skcv(c, 1.0f); bxs(-0.3f, 0.8f, -0.2f, 0.3f, 1.34f, 0.2f);
+    skmix(c, 0.7f); bxs(-0.17f, 0.86f, -0.21f, 0.17f, 1.24f, -0.2f);      /* ventre */
+    skcv(c, 1.05f); bxs(-0.25f, 1.36f, -0.23f, 0.25f, 1.76f, 0.22f);       /* tete */
+    for (int side = -1; side <= 1; side += 2) {             /* oreilles : losanges a moitie enfonces */
+        glPushMatrix();
+        glTranslatef(side * 0.15f, 1.76f, 0);
+        glRotatef(45, 0, 0, 1);
+        skcv(c, 1.05f); bxs(-0.08f, -0.08f, -0.04f, 0.08f, 0.08f, 0.04f);
+        skcv(pink, 1); bxs(-0.045f, -0.045f, -0.045f, 0.045f, 0.045f, -0.035f);
+        glPopMatrix();
+    }
+    skmix(c, 0.8f); bxs(-0.12f, 1.4f, -0.27f, 0.12f, 1.52f, -0.22f);       /* museau */
+    skcv(pink, 1); bxs(-0.035f, 1.5f, -0.28f, 0.035f, 1.54f, -0.265f);
+    emit_on(); skc(0.45f, 1.0f, 0.4f); bxs(-0.15f, 1.58f, -0.24f, -0.06f, 1.65f, -0.225f); bxs(0.06f, 1.58f, -0.24f, 0.15f, 1.65f, -0.225f);
+    if (!skinFlat) {                                        /* moustaches */
+        glColor3f(0.95f, 0.95f, 0.95f); glLineWidth(1.5f);
+        glBegin(GL_LINES);
+        for (int s2 = -1; s2 <= 1; s2 += 2)
+            for (int k = 0; k < 3; k++) { glVertex3f(s2 * 0.1f, 1.46f, -0.28f); glVertex3f(s2 * 0.34f, 1.42f + k * 0.04f, -0.25f); }
+        glEnd();
+    }
+    emit_off();
+    for (int k = 0; k < 6; k++) {                           /* queue qui ondule, remonte en arriere */
+        float sway = sinf(a->t * 3 + k * 0.6f) * 0.06f * k;
+        skcv(c, k == 5 ? 1.2f : 0.95f);
+        float y = 0.95f + k * 0.11f, z = 0.22f + k * 0.07f - (k > 3 ? (k - 3) * 0.05f : 0);
+        bxs(sway - 0.05f, y, z, sway + 0.05f, y + 0.12f, z + 0.1f);
+    }
+    skin_arms(c, 0.85f, 1.3f, 0.37f, 0.065f, a);
+}
+
+static void skin_chevalier(const float *c, const SkinAnim *a) {
+    static const float steel[3] = { 0.62f, 0.64f, 0.7f }, dark[3] = { 0.3f, 0.31f, 0.36f };
+    skcv(steel, 0.85f);
+    skin_leg(0.14f, 0.8f, leg_angle(a, 0), 0.095f, 0.8f);
+    skin_leg(-0.14f, 0.8f, leg_angle(a, 1), 0.095f, 0.8f);
+    skcv(steel, 1); bxs(-0.33f, 0.82f, -0.21f, 0.33f, 1.38f, 0.21f);
+    skcv(c, 0.9f);                                          /* tabard de l'equipe, devant et derriere */
+    bxs(-0.24f, 0.55f, -0.235f, 0.24f, 1.32f, -0.21f); bxs(-0.24f, 0.55f, 0.21f, 0.24f, 1.32f, 0.235f);
+    skmix(c, 0.6f); bxs(-0.03f, 0.85f, -0.24f, 0.03f, 1.25f, -0.235f); bxs(-0.12f, 1.1f, -0.24f, 0.12f, 1.16f, -0.235f);   /* croix */
+    skcv(c, 1.0f); bxs(-0.5f, 1.24f, -0.21f, -0.3f, 1.44f, 0.21f); bxs(0.3f, 1.24f, -0.21f, 0.5f, 1.44f, 0.21f);   /* epaulieres */
+    skcv(steel, 1.05f); bxs(-0.23f, 1.38f, -0.23f, 0.23f, 1.82f, 0.23f);   /* heaume */
+    skcv(dark, 1); bxs(-0.18f, 1.58f, -0.24f, 0.18f, 1.62f, -0.225f); bxs(-0.02f, 1.42f, -0.24f, 0.02f, 1.58f, -0.225f);
+    skcv(c, 1.15f);                                         /* cimier en plumes, retombe derriere */
+    bxs(-0.035f, 1.82f, -0.18f, 0.035f, 1.96f, 0.22f);
+    bxs(-0.03f, 1.62f, 0.22f, 0.03f, 1.94f, 0.36f);
+    skin_arms(steel, 0.85f, 1.3f, 0.4f, 0.075f, a);
+}
+
+static void draw_skin(int skin, float h, const float *c, const SkinAnim *a) {
+    glPushMatrix();
+    glScalef(1, h / H_STAND, 1);
+    switch (skin) {
+    case SKN_POUSSIN: skin_poussin(c, a); break;
+    case SKN_NINJA: skin_ninja(c, a); break;
+    case SKN_CHAT: skin_chat(c, a); break;
+    case SKN_CHEVALIER: skin_chevalier(c, a); break;
+    default: skin_robot(c, a); break;
+    }
+    glPopMatrix();
+}
+
 /* ---- eclairage precalcule (lightmaps) ----------------------------------------------------
  * Le decor ne bouge jamais : au chargement, chaque face de boite recoit une petite texture
  * d'eclairage (soleil avec ombres portees, ciel attenue par l'occlusion ambiante, lueur des
@@ -8949,17 +9267,66 @@ static void lm_grid_build(void) {                         /* boites proches de c
             }
         }
 }
+static int lmHit;                                         /* boite touchee par le dernier ray_near (-1 : aucune) */
 static float ray_near(V3 o, V3 d, float maxt) {           /* comme ray_world, limite aux boites voisines de o */
     float org = -ms(56) - 4;
     int gx = (int)((o.x - org) / LMG_CELL), gz = (int)((o.z - org) / LMG_CELL);
-    if (gx < 0 || gz < 0 || gx >= LMG_N || gz >= LMG_N) return ray_world(o, d, maxt, 0);
+    if (gx < 0 || gz < 0 || gx >= LMG_N || gz >= LMG_N) { float t = ray_world(o, d, maxt, 0); lmHit = rayBox; return t; }
     float best = maxt;
+    lmHit = -1;
     for (int k = 0; k < lmgN[gx][gz]; k++) {
         Box *b = &boxes[lmgB[gx][gz][k]];
         float t;
-        if (ray_box(o, d, b->mn, b->mx, best, &t, NULL) && t < best) best = t;
+        if (ray_box(o, d, b->mn, b->mx, best, &t, NULL) && t < best) { best = t; lmHit = lmgB[gx][gz][k]; }
     }
     return best;
+}
+
+/* neons : bandes lumineuses sur le haut des plateformes (cyan), des murs de wall-run (magenta) et du centre (orange).
+ * Decor seulement ; leur lueur est precalculee dans les lightmaps (points tous les 2 m, listes par case) */
+typedef struct { V3 a, b; int kind; } Neon;
+#define MAXNEON 96
+#define MAXNPT 600
+#define LMN_MAX 48
+static Neon NEO[MAXNEON];
+static int nneon, nNeonPt;
+static V3 neonPt[MAXNPT];
+static unsigned char neonPtK[MAXNPT];
+static unsigned char lmnN[LMG_N][LMG_N];
+static short lmnP[LMG_N][LMG_N][LMN_MAX];
+static const float *neon_col(int k) { return k == 0 ? gxNeonC : k == 1 ? gxNeonM : gxNeonO; }
+static void build_neon(void) {
+    nneon = nNeonPt = 0;
+    for (int i = 1; i < nb; i++) {
+        Box *b = &boxes[i];
+        int k = -1;
+        if (b->kind != B_SOLID) continue;
+        if (b->col.x < 0.35f && b->col.y > 0.6f) k = 0;                       /* plateformes hautes */
+        else if (b->col.x > 0.7f && b->col.z > 0.55f && b->col.y < 0.5f) k = 1;   /* murs de wall-run */
+        else if (b->col.x > 0.75f && b->col.y > 0.5f && b->col.y < 0.6f) k = 2;   /* plateforme centrale */
+        if (k < 0) continue;
+        float y = b->mx.y + 0.01f, e = 0.04f;
+        V3 c[4] = { v3(b->mn.x - e, y, b->mn.z - e), v3(b->mx.x + e, y, b->mn.z - e), v3(b->mx.x + e, y, b->mx.z + e),
+                    v3(b->mn.x - e, y, b->mx.z + e) };
+        for (int s = 0; s < 4 && nneon < MAXNEON; s++) {
+            Neon *nn = &NEO[nneon++];
+            nn->a = c[s]; nn->b = c[(s + 1) % 4]; nn->kind = k;
+            float len = vlen(vsub(nn->b, nn->a));
+            for (float t = 1; t < len && nNeonPt < MAXNPT; t += 2) {
+                neonPt[nNeonPt] = vadd(vlerp(nn->a, nn->b, t / len), v3(0, -0.15f, 0));
+                neonPtK[nNeonPt++] = (unsigned char)k;
+            }
+        }
+    }
+    float org = -ms(56) - 4, R = gxNeon[2];               /* listes par case, pour la lueur precalculee */
+    memset(lmnN, 0, sizeof lmnN);
+    for (int gx = 0; gx < LMG_N; gx++)
+        for (int gz = 0; gz < LMG_N; gz++) {
+            float x0 = org + gx * LMG_CELL, z0 = org + gz * LMG_CELL;
+            for (int q = 0; q < nNeonPt && lmnN[gx][gz] < LMN_MAX; q++)
+                if (neonPt[q].x > x0 - R && neonPt[q].x < x0 + LMG_CELL + R && neonPt[q].z > z0 - R && neonPt[q].z < z0 + LMG_CELL + R)
+                    lmnP[gx][gz][lmnN[gx][gz]++] = (short)q;
+        }
 }
 
 /* lumiere recue en p (normale n) : RGB, environ 0 a 2 */
@@ -8968,17 +9335,40 @@ static void lm_light(V3 p, V3 n, unsigned int seed, float out[3]) {
     float ndl = vdot(n, L), sun = 0;
     if (ndl > 0 && ray_world(o, L, 400, 0) >= 399) sun = ndl;
     V3 t1 = fabsf(n.y) > 0.9f ? v3(1, 0, 0) : vnorm(vcross(v3(0, 1, 0), n)), t2 = vcross(n, t1);
-    float rot = (float)((seed * 2654435761u) >> 8) * (1.0f / 16777216.0f) * 2 * PI, occ = 0;
+    float rot = (float)((seed * 2654435761u) >> 8) * (1.0f / 16777216.0f) * 2 * PI, occ = 0, bleed[3] = { 0, 0, 0 };
     for (int k = 0; k < AO_RAYS; k++) {                   /* hemisphere, poids en cosinus (spirale doree) */
         float r = sqrtf((k + 0.5f) / AO_RAYS), ph = k * 2.39996f + rot, h = sqrtf(1 - r * r);
         V3 d = vadd(vadd(vmul(t1, r * cosf(ph)), vmul(t2, r * sinf(ph))), vmul(n, h));
         float t = ray_near(o, d, AO_RANGE);
-        if (t < AO_RANGE) occ += 1 - t / AO_RANGE;
+        if (t < AO_RANGE) {
+            occ += 1 - t / AO_RANGE;
+            if (lmHit > 0) {                              /* rebond colore : un mur rouge teinte le sol voisin */
+                float w = 1 - t / AO_RANGE;
+                bleed[0] += boxes[lmHit].col.x * w; bleed[1] += boxes[lmHit].col.y * w; bleed[2] += boxes[lmHit].col.z * w;
+            }
+        }
     }
     float ao = AO_RAYS > 0 ? 1 - occ / AO_RAYS : 1;
     ao = ao * ao * (1 - gxAoMin) + gxAoMin;
     float sky = (0.78f + 0.22f * n.y) * ao, bounce = (0.5f - 0.5f * n.y) * ao;
-    for (int c = 0; c < 3; c++) out[c] = skyCol[c] * sky + sunCol[c] * sun * gxSunPow + bounceCol[c] * bounce;
+    for (int c = 0; c < 3; c++)
+        out[c] = skyCol[c] * sky + sunCol[c] * sun * gxSunPow + bounceCol[c] * bounce +
+                 (AO_RAYS > 0 ? bleed[c] / AO_RAYS * gxBleed * (skyCol[c] + sunCol[c] * 0.5f) : 0);
+    if (gxNeon[1] > 0) {                                  /* lueur des neons proches */
+        float org = -ms(56) - 4, R = gxNeon[2];
+        int gx = (int)((o.x - org) / LMG_CELL), gz = (int)((o.z - org) / LMG_CELL);
+        if (gx >= 0 && gz >= 0 && gx < LMG_N && gz < LMG_N)
+            for (int q = 0; q < lmnN[gx][gz]; q++) {
+                V3 dv = vsub(neonPt[lmnP[gx][gz][q]], o);
+                float dist = vlen(dv);
+                if (dist > R || dist < 0.05f) continue;
+                V3 dn = vmul(dv, 1 / dist);
+                float lam = vdot(n, dn), fall = (1 - dist / R) * (1 - dist / R);
+                if (lam <= 0 || ray_near(o, dn, dist - 0.2f) < dist - 0.25f) continue;
+                const float *nc = neon_col(neonPtK[lmnP[gx][gz][q]]);
+                for (int k = 0; k < 3; k++) out[k] += nc[k] * gxNeon[1] * lam * fall;
+            }
+    }
     for (int i = 0; i < nb; i++) {                        /* jump pads : lueur cyan sur le decor proche */
         if (boxes[i].kind != B_PAD) continue;
         V3 c = vlerp(boxes[i].mn, boxes[i].mx, 0.5f);
@@ -8996,6 +9386,7 @@ static void bake_lightmaps(void) {
     LARGE_INTEGER f0, t0, t1;
     QueryPerformanceFrequency(&f0); QueryPerformanceCounter(&t0);
     lm_grid_build();
+    build_neon();
     float *buf = (float *)malloc(LM_MAXT * LM_MAXT * 3 * sizeof(float)), *tmp = (float *)malloc(LM_MAXT * LM_MAXT * 3 * sizeof(float));
     unsigned char *img = NULL;
     int imgCap = 0;
@@ -9094,6 +9485,7 @@ static void world_faces(int mask, float scale) {
 
 static GLuint skylineList;
 static void build_skyline_list(void);
+static void gfx_reload(void);
 static void build_world_list(void) {
     bake_lightmaps();
     GLfloat fogScene[4] = { gxFogCol[0], gxFogCol[1], gxFogCol[2], 1 }, fogGray[4] = { 0.5f, 0.5f, 0.5f, 1 }, fogWhite[4] = { 1, 1, 1, 1 };
@@ -10018,8 +10410,9 @@ static void cfg_save(void) {
     fprintf(f, "name=%s" "\n" "sens=%.5f" "\n" "fov=%.0f" "\n" "volume=%.2f" "\n" "music=%.2f" "\n" "invert_y=%d" "\n" "show_fps=%d" "\n" "fullscreen=%d" "\n",
             myName, sens, fovBase, masterVol, musicVol, invertY, showFps, fullscreen);
     fprintf(f, "impact_frames=%d" "\n" "screen_fx=%d" "\n" "shadows=%d" "\n" "bloom=%d" "\n", impactFrames, screenFx, gfxShadows, gfxBloom);
+    fprintf(f, "quality=%d" "\n" "ambiance=%d" "\n", gfxQuality, gfxAmbiance);
     fprintf(f, "online=%d" "\n" "teams=%d" "\n", onlineOn, wantTeams);
-    fprintf(f, "loadout=%d,%d" "\n" "melee=%d" "\n", wantLoadout[0], wantLoadout[1], wantMelee);
+    fprintf(f, "loadout=%d,%d" "\n" "melee=%d" "\n" "skin=%d" "\n", wantLoadout[0], wantLoadout[1], wantMelee, wantSkin);
     if (strcmp(lobbyAddr, LOBBY_DEFAULT)) fprintf(f, "lobby=%s" "\n", lobbyAddr);   /* le defaut peut changer avec une mise a jour */
     for (int a = 0; a < A_COUNT; a++) fprintf(f, "bind_%s=%d,%d" "\n", actId[a], binds[a][0], binds[a][1]);
     fclose(f);
@@ -10046,12 +10439,15 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
         else if (!strcmp(line, "screen_fx")) screenFx = atoi(v) != 0;
         else if (!strcmp(line, "shadows")) gfxShadows = atoi(v) != 0;
         else if (!strcmp(line, "bloom")) gfxBloom = atoi(v) != 0;
+        else if (!strcmp(line, "quality")) gfxQuality = atoi(v) < 0 ? 0 : atoi(v) > 2 ? 2 : atoi(v);
+        else if (!strcmp(line, "ambiance")) gfxAmbiance = atoi(v) < 0 ? 0 : atoi(v) > 3 ? 3 : atoi(v);
         else if (!strcmp(line, "online")) onlineOn = atoi(v) != 0;
         else if (!strcmp(line, "teams")) wantTeams = atoi(v) < 0 ? 0 : atoi(v) > TEAM_MAX ? TEAM_MAX : atoi(v);
         else if (!strcmp(line, "lobby") && v[0]) snprintf(lobbyAddr, sizeof lobbyAddr, "%s", v);
         else if (!strcmp(line, "fullscreen")) fs = atoi(v) != 0;
         else if (!strcmp(line, "loadout")) sscanf(v, "%d,%d", &wantLoadout[0], &wantLoadout[1]);
         else if (!strcmp(line, "melee")) wantMelee = atoi(v);
+        else if (!strcmp(line, "skin")) wantSkin = atoi(v) < 0 || atoi(v) >= SKN_COUNT ? 0 : atoi(v);
         else if (!strncmp(line, "bind_", 5))
             for (int a = 0; a < A_COUNT; a++)
                 if (!strcmp(line + 5, actId[a])) {
@@ -10175,26 +10571,34 @@ static void draw_settings(float cx, float cy) {
     snprintf(buf, sizeof buf, "%.0f %%", musicVol * 100);
     musicVol = slider(4, lx, y, lw, "Musique", buf, musicVol, 0, 1);
     y += 50;
-    snprintf(buf, sizeof buf, "Inverser l'axe Y : %s", invertY ? "OUI" : "NON");
-    if (button(lx, y, lw, 44, buf)) invertY = !invertY;
-    y += 53;
-    snprintf(buf, sizeof buf, "Afficher les FPS : %s", showFps ? "OUI" : "NON");
-    if (button(lx, y, lw, 44, buf)) showFps = !showFps;
-    y += 53;
+    snprintf(buf, sizeof buf, "AXE Y : %s", invertY ? "INVERSE" : "NORMAL");
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) invertY = !invertY;
+    snprintf(buf, sizeof buf, "FPS : %s", showFps ? "OUI" : "NON");
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) showFps = !showFps;
+    y += 50;
     snprintf(buf, sizeof buf, "Impact frames (flashs) : %s", impactFrames ? "OUI" : "NON");
     if (button(lx, y, lw, 44, buf)) impactFrames = !impactFrames;
-    y += 53;
+    y += 50;
     snprintf(buf, sizeof buf, "Effets d'ecran : %s", screenFx ? "OUI" : "NON");
     if (button(lx, y, lw, 44, buf)) screenFx = !screenFx;
-    y += 53;
+    y += 50;
     snprintf(buf, sizeof buf, "OMBRES : %s", gfxShadows ? "OUI" : "NON");   /* graphismes : deux demi-boutons */
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) gfxShadows = !gfxShadows;
     snprintf(buf, sizeof buf, "BLOOM : %s", gfxBloom ? "OUI" : "NON");
     if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) gfxBloom = !gfxBloom;
-    y += 53;
+    y += 50;
+    snprintf(buf, sizeof buf, "QUALITE:%s", qualityNames[gfxQuality]);   /* preregle : refait l'eclairage du decor */
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) {
+        gfxQuality = (gfxQuality + 1) % 3;
+        gfxShadows = gfxQuality > 0; gfxBloom = gfxQuality == 2;
+        gfx_reload(); popT = 0;
+    }
+    snprintf(buf, sizeof buf, "CIEL:%s", ambianceNames[gfxAmbiance]);
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) { gfxAmbiance = (gfxAmbiance + 1) % 4; gfx_reload(); popT = 0; }
+    y += 50;
     snprintf(buf, sizeof buf, "Plein ecran : %s", fullscreen ? "OUI" : "NON");
     if (button(lx, y, lw, 44, buf)) pendingAction = ACT_FULLSCREEN;
-    y += 53;
+    y += 50;
     snprintf(buf, sizeof buf, "Parties en ligne : %s", onlineOn ? "OUI" : "NON");
     if (button(lx, y, lw, 44, buf)) { onlineOn = !onlineOn; cfg_save(); }
     y += 70;
@@ -10288,6 +10692,58 @@ static void draw_death_loadout(float cx, float y) {
     text_c(1, cx, y + 32, buf, 1, 0.9f, 0.6f, 1);
 }
 
+/* ecran SKIN : 5 apparences, apercu 3D qui tourne ; la couleur reelle sera celle de l'equipe */
+static void draw_skin_menu(float cx, float cy) {
+    static const char *prevNames[3] = { "BLEU", "ROUGE", "LIBRE" };
+    char buf[96];
+    rect(0, 0, (float)winW, (float)winH, 0.02f, 0.02f, 0.06f, 0.82f);
+    text_c(2, cx, cy - 300, "SKIN", 0.5f, 0.9f, 1.0f, 1);
+    text_c(0, cx, cy - 266, "la couleur de ton perso est celle de ton equipe (ou la tienne en chacun pour soi)", 0.7f, 0.75f, 0.85f, 1);
+    float bx = cx - 520, y = cy - 220;
+    for (int k = 0; k < SKN_COUNT; k++) {
+        if (button(bx, y, 320, 54, skinNames[k])) { wantSkin = k; cfg_save(); }
+        if (wantSkin == k) {
+            rect(bx, y, 320, 3, 1, 0.85f, 0.4f, 1); rect(bx, y + 51, 320, 3, 1, 0.85f, 0.4f, 1);
+            rect(bx, y, 3, 54, 1, 0.85f, 0.4f, 1); rect(bx + 317, y, 3, 54, 1, 0.85f, 0.4f, 1);
+        }
+        y += 64;
+    }
+    y += 16;
+    text(0, bx, y, "APERCU DE LA COULEUR", 0.7f, 0.75f, 0.85f, 1);
+    y += 14;
+    for (int k = 0; k < 3; k++) if (button(bx + k * 108, y, 100, 44, prevNames[k])) skinPrevTeam = k;
+    y += 70;
+    if (button(bx, y, 320, 52, "VALIDER")) { skinOpen = 0; cfg_save(); }
+    float px = cx - 140, py = cy - 230, pw = 640, ph = 520;   /* apercu 3D */
+    rect(px, py, pw, ph, 0.05f, 0.06f, 0.1f, 0.7f);
+    rect(px, py + ph - 3, pw, 3, 0.5f, 0.9f, 1.0f, 0.5f);
+    {
+        static const float freeCol[3] = { 1.0f, 0.85f, 0.3f };
+        const float *c = skinPrevTeam < 2 ? teamCol[skinPrevTeam] : freeCol;
+        SkinAnim an;
+        an.spd = 0.6f; an.run = (float)nowT * 7; an.air = 0; an.slide = 0; an.pitch = 0; an.t = (float)nowT;
+        glViewport((int)px, winH - (int)(py + ph), (int)pw, (int)ph);
+        set_frustum(32, pw / ph, 0.1f, 50);
+        glMatrixMode(GL_MODELVIEW); glLoadIdentity();
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST); glDisable(GL_BLEND);
+        set_dyn_light(1);
+        glTranslatef(0, -1.0f, -4.6f);
+        glRotatef(-10, 1, 0, 0);
+        glRotatef(180 + (float)nowT * 40, 0, 1, 0);      /* de face au depart */
+        glEnable(GL_LIGHTING);
+        draw_skin(wantSkin, H_STAND, c, &an);
+        glDisable(GL_LIGHTING);
+        glViewport(0, 0, winW, winH);                     /* retour au HUD */
+        glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, winW, winH, 0, -1, 1);
+        glMatrixMode(GL_MODELVIEW); glLoadIdentity();
+        glDisable(GL_DEPTH_TEST); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    snprintf(buf, sizeof buf, "%s", skinNames[wantSkin]);
+    text_c(1, px + pw * 0.5f, py + ph - 20, buf, 1, 0.9f, 0.6f, 1);
+    if (uiClick) uiClick = 0;
+}
+
 /* ecran HEBERGER UNE PARTIE : nombre de joueurs (chacun pour soi ou equipes 1v1 a 4v4), bots pour completer */
 static void draw_host_menu(float cx, float cy) {
     static const char *modeNames[TEAM_MAX + 1] = { "LIBRE", "1V1", "2V2", "3V3", "4V4" };
@@ -10374,7 +10830,8 @@ static void draw_main_menu(float cx, float cy) {
     y += 54;
     if (button(bx, y, bw, 46, "REJOINDRE / REGARDER")) pendingAction = ACT_BROWSE;
     y += 54;
-    if (button(bx, y, bw, 46, "LOADOUT")) loadoutOpen = 1;
+    if (button(bx, y, bw * 0.5f - 5, 46, "LOADOUT")) loadoutOpen = 1;
+    if (button(bx + bw * 0.5f + 5, y, bw * 0.5f - 5, 46, "SKIN")) skinOpen = 1;
     y += 54;
     if (button(bx, y, bw, 46, "PARAMETRES")) settingsOpen = 1;
     y += 54;
@@ -10628,6 +11085,80 @@ static void draw_mine_glow(const Proj *p) {
 }
 /* --- fin Ventouse : rendu --- */
 
+static SkinAnim np_anim(int i) {
+    NetPlayer *n = &NP[i];
+    SkinAnim a;
+    float hs = sqrtf(n->st.vel[0] * n->st.vel[0] + n->st.vel[2] * n->st.vel[2]);
+    a.spd = clampf(hs / 10, 0, 1);
+    a.run = n->runPh;
+    a.air = fabsf(n->st.vel[1]) > 2.5f && !(n->st.flags & NF_WALLRUN) ? 1.0f : 0.0f;
+    a.slide = (n->st.flags & NF_SLIDE) ? 1.0f : 0.0f;
+    a.pitch = n->st.pitch;
+    a.t = (float)nowT + i * 1.3f;
+    return a;
+}
+
+/* trainee de vitesse : ruban colore derriere les joueurs rapides (passe additive) */
+static void trail_tick(int i, float dt) {
+    NetPlayer *n = &NP[i];
+    float hs = sqrtf(n->st.vel[0] * n->st.vel[0] + n->st.vel[2] * n->st.vel[2] + n->st.vel[1] * n->st.vel[1]);
+    for (int k = 0; k < 16; k++) n->trailAge[k] += dt;
+    n->runPh += dt * clampf(sqrtf(n->st.vel[0] * n->st.vel[0] + n->st.vel[2] * n->st.vel[2]), 0, 14) * 1.25f;
+    if ((n->trailAcc += dt) < 0.025f) return;
+    n->trailAcc = 0;
+    n->trailHead = (n->trailHead + 1) % 16;
+    n->trail[n->trailHead] = vadd(n->disp, v3(0, np_height(i) * 0.55f, 0));
+    n->trailAge[n->trailHead] = hs > gxTrail[0] ? 0.0f : 99.0f;   /* trop lent : pas de ruban */
+}
+static void draw_trails(void) {
+    if (gxTrail[1] <= 0) return;
+    for (int i = 0; dmMode && i < MAXP; i++) {
+        if (!np_present(i)) continue;
+        NetPlayer *n = &NP[i];
+        const float *c = pcolor(i);
+        glBegin(GL_QUADS);
+        for (int k = 0; k < 15; k++) {
+            int a0 = (n->trailHead - k + 16) % 16, a1 = (n->trailHead - k - 1 + 16) % 16;
+            float al0 = clampf(1 - n->trailAge[a0] / 0.4f, 0, 1) * (1 - k / 15.0f), al1 = clampf(1 - n->trailAge[a1] / 0.4f, 0, 1) * (1 - (k + 1) / 15.0f);
+            if (al0 <= 0 || al1 <= 0) continue;
+            V3 p0 = n->trail[a0], p1 = n->trail[a1], d = vsub(p0, p1);
+            if (vlen(d) < 0.01f || vlen(d) > 6) continue;
+            V3 side = vmul(vnorm(vcross(d, vsub(camEye, p0))), gxTrail[2] * 0.5f);
+            glColor4f(c[0], c[1], c[2], al0 * gxTrail[1]);
+            glVertex3f(p0.x - side.x, p0.y - side.y, p0.z - side.z); glVertex3f(p0.x + side.x, p0.y + side.y, p0.z + side.z);
+            glColor4f(c[0], c[1], c[2], al1 * gxTrail[1]);
+            glVertex3f(p1.x + side.x, p1.y + side.y, p1.z + side.z); glVertex3f(p1.x - side.x, p1.y - side.y, p1.z - side.z);
+        }
+        glEnd();
+    }
+}
+
+/* contour de chaque joueur dans sa couleur, lisible de loin : le modele un peu agrandi, faces arriere seules
+ * (coque inversee ; pas de glPolygonMode : sur macOS, un mode different avant/arriere passe en rendu logiciel) */
+static void draw_outlines(void) {
+    if (gxOutline <= 0) return;
+    glDisable(GL_LIGHTING); glDisable(GL_TEXTURE_2D);
+    glEnable(GL_CULL_FACE); glCullFace(GL_FRONT);
+    skinFlat = 1;
+    for (int i = 0; dmMode && i < MAXP; i++) {
+        if (!np_present(i)) continue;
+        NetPlayer *n = &NP[i];
+        const float *c = pcolor(i);
+        SkinAnim a = np_anim(i);
+        skinFlatCol[0] = c[0]; skinFlatCol[1] = c[1]; skinFlatCol[2] = c[2];
+        glPushMatrix();
+        glTranslatef(n->disp.x, n->disp.y, n->disp.z);
+        glRotatef(-n->st.yaw * 180 / PI, 0, 1, 0);
+        if (n->st.flags & NF_SLIDE) glRotatef(-25, 1, 0, 0);
+        float k = 1 + 0.025f * gxOutline, hh = np_height(i) * 0.5f;   /* grossi autour du centre du corps */
+        glTranslatef(0, hh, 0); glScalef(k, 1 + 0.012f * gxOutline, k); glTranslatef(0, -hh, 0);
+        draw_skin(n->st.skin < SKN_COUNT ? n->st.skin : 0, np_height(i), c, &a);
+        glPopMatrix();
+    }
+    skinFlat = 0;
+    glCullFace(GL_BACK); glDisable(GL_CULL_FACE);
+}
+
 static void draw_remote_players(void) {
     glEnable(GL_LIGHTING);
     for (int i = 0; i < MAXP; i++) {
@@ -10641,14 +11172,12 @@ static void draw_remote_players(void) {
         glRotatef(-n->st.yaw * 180 / PI, 0, 1, 0);
         if (n->st.flags & NF_SLIDE) glRotatef(-25, 1, 0, 0);
         if (n->st.pad & ST_SLAM) glRotatef(-15, 1, 0, 0);  /* pique de l'Enclume : penche vers l'avant */
-        if (n->flashT > 0) glColor3f(1, 1, 1); else glColor3f(c[0] * 0.75f, c[1] * 0.75f, c[2] * 0.75f);
-        box_faces(v3(-0.36f, 0, -0.24f), v3(0.36f, h - 0.48f, 0.24f));
-        if (n->flashT > 0) glColor3f(1, 1, 1); else glColor3f(c[0], c[1], c[2]);
-        box_faces(v3(-0.23f, h - 0.46f, -0.23f), v3(0.23f, h, 0.23f));
-        glDisable(GL_LIGHTING);
-        glColor3f(1, 1, 1);                               /* visiere : montre ou il regarde */
-        box_faces(v3(-0.19f, h - 0.3f, -0.26f), v3(0.19f, h - 0.18f, -0.22f));
-        glEnable(GL_LIGHTING);
+        {                                                 /* le skin choisi par le joueur, a la couleur de son equipe */
+            SkinAnim an = np_anim(i);
+            skinFlash = n->flashT > 0 ? 1.0f : 0.0f;
+            draw_skin(n->st.skin < SKN_COUNT ? n->st.skin : 0, h, c, &an);
+            skinFlash = 0;
+        }
         glPushMatrix();
         glTranslatef(0.42f, h - 0.6f, -0.1f);
         glRotatef(n->st.pitch * 180 / PI, 1, 0, 0);
@@ -10987,6 +11516,33 @@ static void draw_mine_hud(float cx, float cy) {
 }
 /* --- fin Ventouse : HUD --- */
 
+/* radar des allies (mode equipes) : carte vue de dessus, nord en haut, moi = fleche, allies = points */
+static void draw_radar(float x, float y, float sz) {
+    float W = ms(56), k = sz / (2 * W);
+    rect(x, y, sz, sz, 0.02f, 0.03f, 0.07f, 0.6f);
+    rect(x, y, sz, 2, 0.5f, 0.9f, 1.0f, 0.5f);
+    for (int i = 1; i < nb; i++) {                        /* reperes : grandes structures seulement */
+        Box *b = &boxes[i];
+        if (b->mx.y - b->mn.y < 0.9f || (b->mx.x - b->mn.x) * (b->mx.z - b->mn.z) < 30) continue;
+        rect(x + (b->mn.x + W) * k, y + (b->mn.z + W) * k, (b->mx.x - b->mn.x) * k, (b->mx.z - b->mn.z) * k, 0.4f, 0.45f, 0.6f, 0.35f);
+    }
+    for (int i = 0; i < MAXP; i++) {
+        if (i == myId || !NP[i].active || !NP[i].alive || !same_team(i, myId)) continue;
+        const float *c = pcolor(i);
+        float px = x + (NP[i].disp.x + W) * k, py = y + (NP[i].disp.z + W) * k;
+        rect(px - 3, py - 3, 7, 7, c[0], c[1], c[2], 1);
+    }
+    if (!P.dead) {
+        float px = x + (P.pos.x + W) * k, py = y + (P.pos.z + W) * k, s1 = sinf(P.yaw), c1 = -cosf(P.yaw);
+        glColor4f(1, 1, 1, 1);
+        glBegin(GL_TRIANGLES);
+        glVertex2f(px + s1 * 8, py + c1 * 8);
+        glVertex2f(px - s1 * 4 + c1 * 5, py - c1 * 4 - s1 * 5);
+        glVertex2f(px - s1 * 4 - c1 * 5, py - c1 * 4 + s1 * 5);
+        glEnd();
+    }
+}
+
 static void draw_hud(void) {
     glMatrixMode(GL_PROJECTION); glLoadIdentity();
     glOrtho(0, winW, winH, 0, -1, 1);
@@ -11001,6 +11557,7 @@ static void draw_hud(void) {
         if (settingsOpen && appState == APP_MENU) draw_settings(cx, cy);
         else if (loadoutOpen && appState == APP_MENU) draw_loadout(cx, cy);
         else if (hostOpen && appState == APP_MENU) draw_host_menu(cx, cy);
+        else if (skinOpen && appState == APP_MENU) draw_skin_menu(cx, cy);
         else if (appState == APP_MENU) draw_main_menu(cx, cy);
         else draw_join_menu(cx, cy);
         glDisable(GL_BLEND);
@@ -11429,6 +11986,7 @@ static void draw_hud(void) {
             }
             snprintf(buf, sizeof buf, "%d", fragLimit);
             text_c(0, cx, by + bh + 20, buf, 0.6f, 0.6f, 0.7f, 0.9f);
+            draw_radar(30, 84, winH < 800 ? 120.0f : 160.0f);
         } else {
             snprintf(buf, sizeof buf, "DEATHMATCH LAN   %d joueur%s   %d:%02d", count, count > 1 ? "s" : "", left / 60, left % 60);
             text(0, 30, 40, buf, 0.85f, 0.85f, 0.95f, 1);
@@ -11467,7 +12025,7 @@ static void draw_hud(void) {
     } else if (dmMode && P.dead) {
         rect(0, 0, (float)winW, (float)winH, 0.15f, 0, 0, 0.4f);
         if (killerOfMe >= 0 && killerOfMe != myId) snprintf(buf, sizeof buf, "ELIMINE PAR %s", pname(killerOfMe));
-        else snprintf(buf, sizeof buf, killerOfMe == myId ? "TU T'ES FAIT SAUTER" : "EN ATTENTE DU SPAWN");
+        else snprintf(buf, sizeof buf, fellOut ? "TOMBE DANS LE VIDE" : killerOfMe == myId ? "TU T'ES FAIT SAUTER" : "EN ATTENTE DU SPAWN");
         text_c(2, cx, cy - 40, buf, 1, 0.35f, 0.3f, 1);
         snprintf(buf, sizeof buf, "respawn dans %.1f s", fmaxf(0, RESPAWN_TIME - P.deathT));
         if (killerOfMe >= 0) text_c(1, cx, cy + 10, buf, 0.9f, 0.9f, 0.9f, 1);
@@ -11578,6 +12136,25 @@ static void draw_sky_dome(V3 eye) {
     glEnd();
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, texDot);
+    if (gxClouds[0] > 0) {                                /* nuages : amas de taches douces qui derivent lentement */
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glBegin(GL_QUADS);
+        unsigned int cs = 0xC10Du;
+        for (int k = 0; k < (int)gxClouds[0]; k++) {
+            float az = tnoise(&cs) * 2 * PI + (float)nowT * 0.004f, el = 0.12f + tnoise(&cs) * 0.45f, sz = 18 + tnoise(&cs) * 26;
+            V3 d = v3(cosf(el) * cosf(az), sinf(el), cosf(el) * sinf(az));
+            V3 side = vnorm(v3(-d.z, 0, d.x));
+            float lit = 0.6f + 0.4f * fmaxf(0, vdot(d, sun_dir()));
+            for (int q = 0; q < 6; q++) {
+                float o = (tnoise(&cs) - 0.5f) * sz * 2.2f, oy = (tnoise(&cs) - 0.5f) * sz * 0.35f, s2 = sz * (0.5f + tnoise(&cs) * 0.6f);
+                V3 p = vadd(vadd(eye, vmul(d, 270)), vadd(vmul(side, o), v3(0, oy, 0)));
+                glColor4f(gxCloudCol[0] * lit, gxCloudCol[1] * lit, gxCloudCol[2] * lit, gxClouds[1] * 0.5f);
+                billboard(p, s2);
+            }
+        }
+        glEnd();
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    }
     V3 sun = vadd(eye, vmul(sun_dir(), 280));
     glBegin(GL_QUADS);
     glColor4f(sunCol[0], sunCol[1] * 0.65f, sunCol[2] * 0.58f, 0.16f); billboard(sun, gxSunSize[2]);
@@ -11769,6 +12346,214 @@ static void bloom_apply(void) {
     glEnable(GL_DEPTH_TEST);
 }
 
+/* ---- effets du monde : neons, lumieres dynamiques, marques, ondes, fumee, meteo, reflets du soleil ---- */
+static void surf_axes(V3 n, V3 *t1, V3 *t2) {             /* deux axes dans le plan de normale n */
+    *t1 = fabsf(n.y) > 0.9f ? v3(1, 0, 0) : vnorm(vcross(v3(0, 1, 0), n));
+    *t2 = vcross(n, *t1);
+}
+static void surf_quad(V3 p, V3 n, float s, float rot) {   /* quad texture (texDot) pose sur une surface */
+    V3 t1, t2;
+    surf_axes(n, &t1, &t2);
+    float c = cosf(rot) * s, sn = sinf(rot) * s;
+    V3 u = vadd(vmul(t1, c), vmul(t2, sn)), v = vadd(vmul(t1, -sn), vmul(t2, c));
+    glTexCoord2f(0, 0); glVertex3f(p.x - u.x - v.x, p.y - u.y - v.y, p.z - u.z - v.z);
+    glTexCoord2f(1, 0); glVertex3f(p.x + u.x - v.x, p.y + u.y - v.y, p.z + u.z - v.z);
+    glTexCoord2f(1, 1); glVertex3f(p.x + u.x + v.x, p.y + u.y + v.y, p.z + u.z + v.z);
+    glTexCoord2f(0, 1); glVertex3f(p.x - u.x + v.x, p.y - u.y + v.y, p.z - u.z + v.z);
+}
+/* lumiere ponctuelle posee sur le sol et les murs proches (5 rayons), en additif */
+static void light_splat(V3 p, V3 col, float r, float inten) {
+    static const float dirs[5][3] = { { 0, -1, 0 }, { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+    for (int k = 0; k < 5; k++) {
+        V3 d = v3(dirs[k][0], dirs[k][1], dirs[k][2]), n;
+        float t = ray_world(p, d, r, &n);
+        if (t >= r) continue;
+        float f = (1 - t / r) * inten;
+        glColor4f(col.x * f, col.y * f, col.z * f, 1);
+        surf_quad(vadd(vadd(p, vmul(d, t)), vmul(n, 0.03f)), n, r * (1 - t / r * 0.5f), 0);
+    }
+}
+
+static void fx_world_tick(float dt) {                     /* temps reel : les effets s'eteignent meme en pause */
+    for (int i = 0; i < MAXDL; i++) if (DL[i].life > 0) DL[i].life -= dt;
+    for (int i = 0; i < MAXDC; i++) if (DC[i].life > 0) DC[i].life -= dt;
+    for (int i = 0; i < MAXRG; i++) if (RG[i].life > 0) RG[i].life -= dt;
+    for (int i = 0; i < MAXSM; i++) {
+        Smoke *m = &SMK[i];
+        if (m->life <= 0) continue;
+        m->life -= dt;
+        m->p = vadd(m->p, vmul(m->v, dt));
+        m->v = vmul(m->v, expf(-dt * 1.2f));
+        m->v.y += dt * 0.6f;
+    }
+}
+
+/* passe opaque/melangee apres le monde : marques d'impact puis fumee */
+static void draw_world_marks(void) {
+    glDisable(GL_LIGHTING); glDisable(GL_CULL_FACE);
+    glEnable(GL_TEXTURE_2D); glBindTexture(GL_TEXTURE_2D, texDot);
+    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE); glDepthFunc(GL_LEQUAL);
+    glEnable(GL_POLYGON_OFFSET_FILL); glPolygonOffset(-1, -3);
+    glBegin(GL_QUADS);
+    for (int i = 0; i < MAXDC; i++) {
+        Decal *d = &DC[i];
+        if (d->life <= 0) continue;
+        glColor4f(d->col.x, d->col.y, d->col.z, 0.85f * clampf(d->life / 2.0f, 0, 1));
+        surf_quad(d->p, d->n, d->s, d->rot);
+    }
+    glEnd();
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glBegin(GL_QUADS);                                    /* fumee : billboards gris, melanges */
+    for (int i = 0; i < MAXSM; i++) {
+        Smoke *m = &SMK[i];
+        if (m->life <= 0) continue;
+        float k = m->life / m->max, sz = m->size * (1.6f - 0.8f * k);
+        glColor4f(m->shade, m->shade * 0.95f, m->shade * 1.05f, 0.42f * k * (1 - k) * 4 * 0.6f);
+        billboard(m->p, sz);
+    }
+    glEnd();
+    glDepthFunc(GL_LESS); glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND); glDisable(GL_TEXTURE_2D);
+}
+
+/* passe additive : neons, lumieres dynamiques (explosions, rail, roquettes en vol), ondes de choc */
+static void draw_world_glow(void) {
+    if (gxNeon[0] > 0 && nneon) {                         /* bandes de neon : un coeur clair et un halo */
+        glDisable(GL_TEXTURE_2D);
+        for (int pass = 0; pass < 2; pass++) {
+            float w = pass ? 0.05f : 0.14f, a = (pass ? 1.0f : 0.35f) * gxNeon[0];
+            glBegin(GL_QUADS);
+            for (int i = 0; i < nneon; i++) {
+                const float *c = neon_col(NEO[i].kind);
+                V3 A = NEO[i].a, B = NEO[i].b;
+                glColor4f(fminf(1, c[0] + pass * 0.4f), fminf(1, c[1] + pass * 0.4f), fminf(1, c[2] + pass * 0.4f), a);
+                glVertex3f(A.x, A.y + w, A.z); glVertex3f(B.x, B.y + w, B.z); glVertex3f(B.x, B.y - w, B.z); glVertex3f(A.x, A.y - w, A.z);
+            }
+            glEnd();
+        }
+    }
+    if (gxLights > 0) {
+        glEnable(GL_TEXTURE_2D); glBindTexture(GL_TEXTURE_2D, texDot);
+        glDepthFunc(GL_LEQUAL);
+        glEnable(GL_POLYGON_OFFSET_FILL); glPolygonOffset(-1, -4);
+        glBegin(GL_QUADS);
+        for (int i = 0; i < MAXDL; i++) {
+            DynLight *l = &DL[i];
+            if (l->life <= 0) continue;
+            float k = l->life / l->max;
+            light_splat(l->p, l->col, l->r, k * k * 0.9f * gxLights);
+        }
+        for (int i = 0; i < MAXPR; i++) {                 /* roquettes, projectiles renvoyes, orbes : eclairent en vol */
+            if (!PR[i].alive || PR[i].kind == PR_SAW || PR[i].kind == PR_MINE) continue;
+            V3 c = PR[i].kind == PR_ORB ? v3(1, 0.3f, 0.9f) : v3(1, 0.6f, 0.25f);
+            light_splat(PR[i].pos, c, 4.5f, 0.45f * gxLights);
+        }
+        glEnd();
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        glDepthFunc(GL_LESS);
+        glDisable(GL_TEXTURE_2D);
+    }
+    for (int i = 0; i < MAXRG; i++) {                     /* ondes de choc : anneau qui s'elargit au sol */
+        Ring *g = &RG[i];
+        if (g->life <= 0) continue;
+        float k = 1 - g->life / g->max, r0 = g->r * k, r1 = r0 + 0.25f + 0.5f * k, a = (1 - k) * 0.8f;
+        glBegin(GL_QUAD_STRIP);
+        for (int s = 0; s <= 32; s++) {
+            float an = s * (2 * PI / 32), cs = cosf(an), sn = sinf(an);
+            glColor4f(g->col.x, g->col.y, g->col.z, 0);
+            glVertex3f(g->p.x + cs * r0, g->p.y, g->p.z + sn * r0);
+            glColor4f(g->col.x, g->col.y, g->col.z, a);
+            glVertex3f(g->p.x + cs * r1, g->p.y, g->p.z + sn * r1);
+        }
+        glEnd();
+    }
+}
+
+/* poussiere en suspension et pluie autour de la camera (passe additive, positions deterministes qui defilent) */
+static void draw_weather(V3 eye) {
+    float t = (float)nowT;
+    if (gxDust > 0) {
+        glPointSize(2);
+        glBegin(GL_POINTS);
+        for (int i = 0; i < (int)gxDust; i++) {
+            unsigned int h = (unsigned)i * 2654435761u;
+            float fx = (float)(h & 1023) / 1023, fy = (float)((h >> 10) & 1023) / 1023, fz = (float)((h >> 20) & 1023) / 1023;
+            V3 p = v3(fx * 24 + sinf(t * 0.13f + i) * 1.5f + t * 0.25f, fy * 10 + sinf(t * 0.21f + i * 0.7f) * 0.6f, fz * 24 + t * 0.15f);
+            p.x = eye.x - 12 + fmodf(fmodf(p.x - eye.x + 12, 24) + 24, 24);   /* cube de 24 m qui suit la camera */
+            p.y = eye.y - 4 + fmodf(fmodf(p.y - eye.y + 4, 10) + 10, 10);
+            p.z = eye.z - 12 + fmodf(fmodf(p.z - eye.z + 12, 24) + 24, 24);
+            float d = vlen(vsub(p, eye)), a = clampf(1 - d / 12, 0, 1) * 0.5f;
+            glColor4f(sunCol[0], sunCol[1], sunCol[2], a);
+            glVertex3f(p.x, p.y, p.z);
+        }
+        glEnd();
+    }
+    if (gxRain > 0) {
+        glLineWidth(1);
+        glBegin(GL_LINES);
+        for (int i = 0; i < (int)gxRain; i++) {
+            unsigned int h = (unsigned)(i + 7) * 2246822519u;
+            float fx = (float)(h & 1023) / 1023, fz = (float)((h >> 10) & 1023) / 1023, ph = (float)((h >> 20) & 1023) / 1023;
+            float y = fmodf(ph * 30 - t * 24 + 3000, 30) - 12;
+            V3 p = v3(eye.x - 15 + fmodf(fx * 30 - eye.x + 3000, 30), eye.y + y, eye.z - 15 + fmodf(fz * 30 - eye.z + 3000, 30));
+            glColor4f(0.6f, 0.7f, 0.9f, 0.0f); glVertex3f(p.x + 0.05f, p.y + 0.7f, p.z);
+            glColor4f(0.6f, 0.7f, 0.9f, 0.35f); glVertex3f(p.x, p.y, p.z);
+        }
+        glEnd();
+    }
+}
+
+/* orage : eclairs aleatoires (flash d'ecran + tonnerre) ; renvoie l'intensite du flash en cours */
+static float stormFlash, stormNext = 4, thunderT = -1;
+static void storm_tick(float dt) {
+    if (gxStorm <= 0) { stormFlash = 0; return; }
+    stormFlash = fmaxf(0, stormFlash - dt * 4);
+    if ((stormNext -= dt) <= 0) {
+        stormFlash = 1;
+        stormNext = frange(0.3f, 2.0f) * 60 / gxStorm;
+        thunderT = frange(0.4f, 1.6f);
+    }
+    if (thunderT > 0 && (thunderT -= dt) <= 0) play(S_EXPLO, 0.55f, 0.32f);
+}
+
+/* reflets du soleil dans l'objectif quand on le regarde (2D, additif) */
+static void draw_flare(V3 eye) {
+    if (gxFlare <= 0) return;
+    float sx, sy;
+    V3 sp = vadd(eye, vmul(sun_dir(), 250));
+    if (vdot(vsub(sp, eye), view_dir()) <= 0 || !project(sp, &sx, &sy) || viewSun < 0.05f) return;
+    float cx = winW * 0.5f, cy = winH * 0.5f, dx = cx - sx, dy = cy - sy;
+    float on = clampf(1 - sqrtf(dx * dx + dy * dy) / (winW * 0.7f), 0, 1) * viewSun * gxFlare;
+    if (on <= 0) return;
+    static const float ghosts[6][5] = {                   /* position le long de l'axe, taille, couleur */
+        { 0.0f, 140, 1.0f, 0.75f, 0.5f }, { 0.35f, 30, 0.6f, 0.9f, 1.0f }, { 0.6f, 55, 1.0f, 0.5f, 0.8f },
+        { 0.9f, 18, 0.7f, 1.0f, 0.6f }, { 1.25f, 80, 0.5f, 0.6f, 1.0f }, { 1.6f, 36, 1.0f, 0.8f, 0.4f },
+    };
+    glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, winW, winH, 0, -1, 1);
+    glMatrixMode(GL_MODELVIEW); glLoadIdentity();
+    glDisable(GL_DEPTH_TEST); glEnable(GL_TEXTURE_2D); glBindTexture(GL_TEXTURE_2D, texDot);
+    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glBegin(GL_QUADS);
+    for (int g = 0; g < 6; g++) {
+        float x = sx + dx * ghosts[g][0] * 2, y = sy + dy * ghosts[g][0] * 2, r = ghosts[g][1] * (winH / 900.0f);
+        glColor4f(ghosts[g][2], ghosts[g][3], ghosts[g][4], (g ? 0.12f : 0.3f) * on);
+        glTexCoord2f(0, 0); glVertex2f(x - r, y - r); glTexCoord2f(1, 0); glVertex2f(x + r, y - r);
+        glTexCoord2f(1, 1); glVertex2f(x + r, y + r); glTexCoord2f(0, 1); glVertex2f(x - r, y + r);
+    }
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    glBegin(GL_TRIANGLES);                                /* rayons du soleil */
+    for (int k = 0; k < 12; k++) {
+        float an = k * (PI / 6) + (float)nowT * 0.05f, w = 0.025f, len = winH * (0.25f + 0.1f * (k & 1));
+        glColor4f(1, 0.85f, 0.6f, 0.12f * on); glVertex2f(sx, sy);
+        glColor4f(1, 0.85f, 0.6f, 0);
+        glVertex2f(sx + cosf(an - w) * len, sy + sinf(an - w) * len); glVertex2f(sx + cosf(an + w) * len, sy + sinf(an + w) * len);
+    }
+    glEnd();
+    glDisable(GL_BLEND); glEnable(GL_DEPTH_TEST);
+}
+
 /* F5 : relit graphismes/rendu.ini et les textures, puis refait textures, lightmaps et ville */
 static void gfx_reload(void) {
     GLuint t[4] = { texGrid, texWall, texGrime, texDot };
@@ -11847,6 +12632,9 @@ static void render(float alpha, float frameDt) {
     BT(3);
     glCallList(worldList);
     BT(4);
+    fx_world_tick(frameDt);
+    storm_tick(frameDt);
+    draw_world_marks();
     draw_dyn_shadows();
     BT(5);
 
@@ -11875,6 +12663,8 @@ static void render(float alpha, float frameDt) {
     }
 
     for (int i = 0; i < MAXE; i++) if (E[i].alive) { set_dyn_light(sun_vis(E[i].pos)); draw_enemy(&E[i]); }
+    for (int i = 0; dmMode && i < MAXP; i++) if (np_present(i)) trail_tick(i, frameDt);
+    draw_outlines();
     if (dmMode) draw_remote_players();
     set_dyn_light(1);
     glEnable(GL_LIGHTING);
@@ -11943,7 +12733,10 @@ static void render(float alpha, float frameDt) {
         glLineWidth(2); glColor4f(1, 1, 1, a);
         glBegin(GL_LINES); glVertex3f(m->a.x, m->a.y, m->a.z); glVertex3f(m->b.x, m->b.y, m->b.z); glEnd();
     }
+    draw_world_glow();                                    /* neons, lumieres des armes, ondes de choc */
+    draw_weather(eye);                                    /* poussiere, pluie */
     draw_tesla_arcs();                                    /* Tesla : liens d'arc */
+    draw_trails();                                        /* trainees de vitesse des joueurs */
     for (int i = 0; i < MAXTR; i++) {                    /* Eventail : traceurs (tete de 2,5 m, puis trace qui s'eteint) */
         Tracer *r = &TR[i];
         if (r->t >= r->life) continue;
@@ -12035,7 +12828,15 @@ static void render(float alpha, float frameDt) {
     BT(6);
     if (appState == APP_GAME && !spectating) draw_viewmodel(aspect);
     BT(7);
+    if (appState == APP_GAME) draw_flare(eye);
     bloom_apply();
+    if (stormFlash > 0) {                                 /* eclair : tout l'ecran blanchit un instant */
+        glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, winW, winH, 0, -1, 1);
+        glMatrixMode(GL_MODELVIEW); glLoadIdentity();
+        glDisable(GL_DEPTH_TEST); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+        rect(0, 0, (float)winW, (float)winH, 0.75f, 0.8f, 1.0f, 0.45f * stormFlash);
+        glDisable(GL_BLEND); glEnable(GL_DEPTH_TEST);
+    }
     BT(8);
     if (impactT > 0 && appState == APP_GAME) {           /* IMPACT FRAME : couleurs inversees + traits radiaux */
         float sx = winW * 0.5f, sy = winH * 0.5f;
@@ -12120,6 +12921,7 @@ static int in_key_down(int sc, int repeat) {
             else if (settingsOpen) { settingsOpen = 0; cfg_save(); }
             else if (loadoutOpen) { loadoutOpen = 0; cfg_save(); }
             else if (hostOpen) { hostOpen = 0; cfg_save(); }
+            else if (skinOpen) { skinOpen = 0; cfg_save(); }
             else if (appState == APP_JOIN) pendingAction = ACT_BACK;
             else set_capture(0);
         }
@@ -14796,6 +15598,26 @@ static void run_tests(const char *path) {
         }
         botLevel = lv0;
     }
+    {                                                     /* chute hors de la carte : mort (solo) */
+        reset_game();
+        dmMode = 0; netMode = NET_OFF;
+        P.pos = P.prevPos = v3(ms(70), 30, 0);              /* au-dessus du vide, derriere le mur est */
+        int i = 0;
+        for (; i < 600 && !P.dead; i++) game_tick(TICK);
+        fprintf(f, "chute hors de la carte : mort=%d apres %.1f s, y=%.0f, PV=%.0f (attendu 1, ~2.4, < -25, 0)\n", P.dead, i * TICK, P.pos.y, P.hp);
+        reset_game();
+        fprintf(f, "chute : apres respawn, plus marque=%d (attendu 0)\n", P.pos.y > FALL_DEATH_Y + 5 ? 0 : 1);
+    }
+    {                                                     /* skin : voyage dans l'etat du joueur (NetPState), borne a l'affichage */
+        int ws = wantSkin;
+        NetPState st;
+        memset(&st, 0, sizeof st);
+        wantSkin = SKN_CHAT;
+        pack_state(&st);
+        fprintf(f, "skin : envoye=%d (%s), taille NetPState=%d, 5 skins=%d (attendu %d, CHAT, 52, 5)\n", st.skin,
+                skinNames[st.skin < SKN_COUNT ? st.skin : 0], (int)sizeof st, SKN_COUNT, SKN_CHAT);
+        wantSkin = ws;
+    }
     {                                                     /* graphismes/rendu.ini : lecture d'une ligne, cle inconnue, bornes */
         float d0 = gxSunDir[1], f0 = gxFog[1], b0 = gxBloom[1], a0 = gxAoRays;
         char l1[] = "  soleil_direction = 0.1 0.9 -0.2   # commentaire", l2[] = "cle_inconnue = 4", l3[] = "bloom = 0.5 9";
@@ -15173,26 +15995,52 @@ static int velocity_main(const char *cmd) {
         } else cfgPath[0] = 0;
 #endif
         if (!botMode && !shotMode && cfg_load()) toggle_fullscreen();
+        if (!botMode && !shotMode && (gfxAmbiance || gfxQuality != 2)) { gfx_reload(); popT = 0; }   /* ambiance / qualite du joueur */
     }
     if (!shotMode && !botHidden) { audio_init(); music_set(0, 0); }
     reset_game();
 
     if (shotMode && (strstr(shotPath, "settings") || strstr(shotPath, "menu") || strstr(shotPath, "loadout") ||
-                     strstr(shotPath, "heberger"))) {   /* captures des menus */
+                     strstr(shotPath, "heberger"))) {   /* "skinmenu" contient "menu" */   /* captures des menus */
         appState = APP_MENU;
         menu_backdrop();
         if (strstr(shotPath, "settings")) { settingsOpen = 1; waitAct = A_COIN; waitSlot = 1; }
         if (strstr(shotPath, "loadout")) loadoutOpen = 1;
         if (strstr(shotPath, "heberger")) { hostOpen = 1; wantTeams = 2; hostBots = 1; }
+        if (strstr(shotPath, "skinmenu")) { skinOpen = 1; wantSkin = SKN_POUSSIN; skinPrevTeam = 1; nowT = 0.4; }
         render(1, TICK);
         save_bmp(shotPath);
         return 0;
     }
     if (shotMode && strstr(shotPath, "sansbloom")) gfxBloom = 0;   /* captures de comparaison des graphismes */
     if (shotMode && strstr(shotPath, "sansombre")) gfxShadows = 0;
+    if (shotMode && strstr(shotPath, "skins")) {          /* les 5 skins alignes, equipes bleue / rouge */
+        appState = APP_GAME; reset_game(); dmMode = 1; myId = 7; teamSize = 2;
+        memset(NP, 0, sizeof NP);
+        for (int i = 0; i < SKN_COUNT; i++) {
+            NetPlayer *n = &NP[i];
+            n->active = n->alive = 1; n->hp = 100; n->team = (unsigned char)(i & 1);
+            snprintf(n->name, 16, "%s", skinNames[i]);
+            n->disp = v3(-ms(8) + 3.2f * i, 4, 3.5f + (i == 2 ? -1.0f : 0.0f)); vf(n->st.pos, n->disp);
+            n->st.yaw = PI + (i - 2) * 0.35f; n->st.skin = (unsigned char)i; n->st.weapon = (unsigned char)(i % 3);
+            if (strstr(shotPath, "course")) { vf(n->st.vel, v3(0, 0, 9)); n->runPh = 0.6f + i; }
+        }
+        P.pos = P.prevPos = v3(-ms(8) + 6.4f, 4, 8.6f); P.yaw = 0; P.pitch = -0.12f; P.dead = 1;
+        nowT = 2; spectating = 1;
+        render(1, TICK);
+        save_bmp(shotPath);
+        return 0;
+    }
     if (shotMode && strstr(shotPath, "arene")) {          /* vue d'ensemble de la carte (eclairage, ombres) */
         appState = APP_GAME;
         reset_game();
+        for (int k = 1; k < 4; k++) {                     /* arene_nuit / arene_jour / arene_orage : ambiance */
+            char nm[16];
+            int j = 0;
+            for (const char *q = ambianceNames[k]; *q && j < 15; q++) nm[j++] = (char)(*q - 'A' + 'a');
+            nm[j] = 0;
+            if (strstr(shotPath, nm)) { gfxAmbiance = k; gfx_reload(); popT = 0; }
+        }
         P.pos = P.prevPos = v3(-ms(46), 20, ms(46)); P.yaw = 0.75f; P.pitch = -0.38f; P.hp = 100;
         if (strstr(shotPath, "2")) { P.pos = P.prevPos = v3(ms(40), 9, -ms(20)); P.yaw = -2.2f; P.pitch = -0.25f; }
         render(1, TICK);
@@ -15401,6 +16249,11 @@ static int velocity_main(const char *cmd) {
 
     appState = APP_MENU;
     menu_backdrop();
+    if (botMode) {                                        /* chaque bot prend un skin au hasard */
+        LARGE_INTEGER q;
+        QueryPerformanceCounter(&q);
+        wantSkin = (int)((unsigned long long)q.QuadPart % SKN_COUNT);
+    }
     if (botMode == 1) pendingAction = ACT_HOST;
     if (botMode == 2) pendingAction = ACT_BROWSE;
 

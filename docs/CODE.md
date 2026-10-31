@@ -491,6 +491,37 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
   l'exe ; enfin `./graphismes`.
 - Purement visuel : rien dans ce dossier ne touche au gameplay ni au réseau.
 
+### 3.14 Skins, effets du monde, ambiances
+
+- **Skins** (`SKN_ROBOT`, `SKN_POUSSIN`, `SKN_NINJA`, `SKN_CHAT`, `SKN_CHEVALIER`) : `wantSkin` (`skin=` dans
+  `velocity.ini`, écran SKIN du menu principal avec aperçu 3D `draw_skin_menu`), envoyé dans `NetPState.skin`
+  (`NET_VER` 13). Modèles en boîtes : `draw_skin` → `skin_robot`… (pieds à l'origine, regard vers −z, échelle selon
+  la hauteur). La couleur principale vient de `pcolor` (équipe), les accents (bec, acier) sont fixes. Animation
+  `SkinAnim` (`np_anim` : course, saut, glissade, visée) ; `skc` gère le mode « tout d'une couleur » (`skinFlat`,
+  contours) et le flash de touche (`skinFlash`). Les bots prennent un skin au hasard. Ajouter un skin : un `SKN_*`
+  avant `SKN_COUNT`, son nom dans `skinNames`, sa fonction et son `case` dans `draw_skin`.
+- **Contours** (`draw_outlines`, clé `contours`) : coque inversée (modèle un peu agrandi, faces arrière seules).
+  Ne pas utiliser `glPolygonMode` avec des modes différents avant/arrière : rendu logiciel sur macOS.
+- **Traînées de vitesse** (`trail_tick`, `draw_trails`, clé `trainees`) : ruban à la couleur du joueur au-delà de
+  16 m/s.
+- **Effets d'impact** (section Effets) : `add_light` (lumières dynamiques posées sur sol et murs, `light_splat`),
+  `add_decal`/`decal_at` (marques), ondes au sol (`Ring`), fumée (`Smoke`), regroupés dans `fx_explosion` (appelé par
+  `explode_ex` et `explode_fx`) ; `add_beam` éclaire et marque son point d'arrivée ; les roquettes éclairent en vol.
+  Kill : éclats à la couleur de l'équipe. Tout est décompté en temps réel (`fx_world_tick`).
+- **Néons** (`build_neon`, `draw_world_glow`, clés `neon*`) : bandes sur le haut des plateformes (cyan), des murs de
+  wall-run (magenta) et du centre (orange), repérées par la couleur des boîtes ; leur lueur est précalculée dans les
+  lightmaps (`lmnP`, listes par case). **Rebond coloré** (`rebond_couleur`) : les rayons d'occlusion qui touchent une
+  boîte ajoutent sa couleur.
+- **Ciel et météo** : nuages (`nuages`), poussière (`poussiere`), pluie (`pluie`), orage (`orage`, `storm_tick` :
+  flash et tonnerre), reflets du soleil (`draw_flare`, `reflets_soleil`).
+- **Ambiances** : `gfxAmbiance` (PARAMETRES > CIEL, `ambiance=`) charge `graphismes/ambiance_nuit|jour|orage.ini`
+  par-dessus `rendu.ini`. **Qualité** : `gfxQuality` (PARAMETRES > QUALITE, `quality=`) plafonne les coûts
+  (`gfx_quality_apply`) et règle ombres/bloom. Captures : `--shot arene_nuit.bmp`, `skins.bmp`, `skins_course.bmp`,
+  `skinmenu.bmp`.
+- **Radar des alliés** (`draw_radar`) : mode équipes, en haut à gauche.
+- **Anticrénelage** : macOS demande un format 4x MSAA (`mac_platform.m`), sinon le format simple. Pas encore sous
+  Windows (il faudrait `wglChoosePixelFormatARB`).
+
 ## 4. Réseau LAN
 
 ### Principes
@@ -815,7 +846,7 @@ Une version différente rend simplement les parties invisibles l'une à l'autre.
 | `PVP_SCALE` | 0,7 | dégâts contre les joueurs = 70 % des dégâts contre les monstres |
 | `KILL_HEAL` | 30 PV | soin du tueur |
 | `NET_MAGIC` | `0x564C4F43` | signature des paquets (« VLOC ») |
-| `NET_VER` | 12 | version du protocole (voir §4) ; 12 = équipes dans `PkSnap` / `PkAnnounce` |
+| `NET_VER` | 13 | version du protocole (voir §4) ; 12 = équipes, 13 = skin dans `NetPState` |
 | `MAXSPEC` | 4 | spectateurs en direct sur l'hôte |
 | `MAXFOUND` | 12 | parties mémorisées (LAN + en ligne ; 7 affichées) |
 | `LOBBY_DEFAULT` | `velocity-lobby.velocity-void.workers.dev` | adresse du lobby déployé (`lobby=` dans `velocity.ini` la remplace) |

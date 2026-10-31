@@ -127,9 +127,14 @@ int mac_window_create(int w, int h, const char *title, int visible) {
         [gWin setContentView:gView];
         [gWin center];
 
+        /* anticrenelage 4x (bords des blocs lisses) si la carte le permet ; sinon, format simple. Les bots caches n'en ont pas besoin */
+        NSOpenGLPixelFormatAttribute ms[] = { NSOpenGLPFADoubleBuffer, NSOpenGLPFAColorSize, 32, NSOpenGLPFADepthSize, 24,
+                                              NSOpenGLPFAStencilSize, 8, NSOpenGLPFAMultisample, NSOpenGLPFASampleBuffers, 1,
+                                              NSOpenGLPFASamples, 4, 0 };
         NSOpenGLPixelFormatAttribute at[] = { NSOpenGLPFADoubleBuffer, NSOpenGLPFAColorSize, 32, NSOpenGLPFADepthSize, 24,
                                               NSOpenGLPFAStencilSize, 8, 0 };
-        NSOpenGLPixelFormat *pf = [[NSOpenGLPixelFormat alloc] initWithAttributes:at];
+        NSOpenGLPixelFormat *pf = visible ? [[NSOpenGLPixelFormat alloc] initWithAttributes:ms] : nil;
+        if (!pf) pf = [[NSOpenGLPixelFormat alloc] initWithAttributes:at];
         if (!pf) return 0;
         gCtx = [[NSOpenGLContext alloc] initWithFormat:pf shareContext:nil];
         if (!gCtx) return 0;
