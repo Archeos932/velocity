@@ -2752,6 +2752,14 @@ static void run_tests(const char *path) {
         teamSize = 0; matchOver = 0; fragLimit = FRAG_LIMIT;
         netMode = nm0; dmMode = dm0; myId = id0;
     }
+
+    {                                                     /* stereo : le lead et les hats ne sont pas identiques a gauche et a droite */
+        float l, r, diff = 0, tot = 0;
+        musSeed = 1; music_set(0, 5);
+        for (int i = 0; i < 20 * SR; i++) { music_frame(&l, &r); diff += fabsf(l - r); tot += fabsf(l) + fabsf(r); }
+        music_set(-1, 0);
+        fprintf(f, "musique stereo : ecart gauche/droite = %.0f %% du signal (attendu entre 5 et 80)\n", 100 * 2 * diff / (tot + 1e-9f));
+    }
     for (int lv = 0; lv <= 4; lv += 4) {                  /* musique : 4 s de kicks (niveau 0 = 172 BPM, niveau 4 = 188 BPM), signal borne */
         int kicks = 0, bad = 0; float peak = 0, prevK = 0;
         music_set(0, lv);
@@ -2781,7 +2789,33 @@ static void run_tests(const char *path) {
         memset(&sn, 0, sizeof sn);
         sn.fragLimit = FRAG_LIMIT_QUICK; apply_snap(&sn); int recu = fragLimit;
         sn.fragLimit = 0; apply_snap(&sn);
-        fprintf(f, "limite de frags : recue=%d, snapshot sans limite=%d, taille PkSnap=%d (attendu %d, %d)\n",
+        {                                                     /* diversite : 40 s au niveau max (acid, riser, crash), graine, cellules utilisees */
+        int bad = 0; float peak = 0;
+        double sum[3] = { 0 };
+        music_set(0, MUS_LVMAX);
+        for (int i = 0; i < 40 * SR; i++) {
+            float s = music_sample();
+            if (!(fabsf(s) < 8)) bad = 1;
+            peak = fmaxf(peak, fabsf(s));
+        }
+        for (int run = 0; run < 3; run++) {               /* graines 1, 1, 2 : les deux premieres sont identiques, la 3e differe */
+            musSeed = run == 2 ? 2 : 1;
+            music_set(0, 5);
+            for (int i = 0; i < 15 * SR; i++) sum[run] += (double)music_sample() * (1 + (i & 7));
+        }
+        musSeed = 1;
+        music_set(-1, 0);
+        int used = 0;
+        for (int c = 0; c < MUS_CELLS; c++) {
+            int in = 0;
+            for (int p = 0; p < tracks[0].nsong; p++) if (tracks[0].song[p] == c || tracks[0].songHi[p] == c) in = 1;
+            used += in;
+        }
+        fprintf(f, "musique diversite : niveau max 40 s pic=%.2f invalides=%d, cellules utilisees=%d, meme graine identique=%d, autre graine differente=%d "
+                   "(attendu pic entre 0.5 et 3, 0, >= 10, 1, 1)\n",
+                peak, bad, used, sum[0] == sum[1], sum[0] != sum[2]);
+    }
+    fprintf(f, "limite de frags : recue=%d, snapshot sans limite=%d, taille PkSnap=%d (attendu %d, %d)\n",
                 recu, fragLimit, (int)sizeof sn, FRAG_LIMIT_QUICK, FRAG_LIMIT);
         memset(NP, 0, sizeof NP);
     }
@@ -2790,6 +2824,28 @@ static void run_tests(const char *path) {
             music_pvp_level(10, 3, 15), music_pvp_level(14, 13, 15), music_pvp_level(14, 14, 15));
     fprintf(f, "musique PvP (limite 7) : 2-0=%d 3-0=%d 5-2=%d 6-6=%d (attendu 0 3 6 8)\n",
             music_pvp_level(2, 0, 7), music_pvp_level(3, 0, 7), music_pvp_level(5, 2, 7), music_pvp_level(6, 6, 7));
+
+    {   /* mise a jour : lecture de version.txt, comparaison des builds, SHA-256, chemins voisins de l'exe */
+        UpdInfo in, bad;
+        Sha256 sh;
+        char h1[65], h2[65], h3[65], nw[64], old[64];
+        int ok = upd_parse("build=52\r\nsha=1A2B3C4\nwin_size=1834496\nwin_sha256=9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08\n"
+                           "mac_size=2310144\nmac_sha256=60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752\n", &in);
+        int nok = upd_parse("bonjour\n<html>404</html>\n", &bad);
+        sha_init(&sh); sha_final(&sh, h1);
+        sha_init(&sh); sha_update(&sh, "abc", 3); sha_final(&sh, h2);
+        sha_init(&sh); sha_update(&sh, "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq", 56); sha_final(&sh, h3);
+        upd_paths("C:/jeu/velocity.exe", nw, old, sizeof nw);
+        fprintf(f, "mise a jour : lu=%d build=%d sha=%s win=%ld mac=%ld hash_min=%d illisible=%d (attendu 1 52 1a2b3c4 1834496 2310144 1 0)\n",
+                ok, in.build, in.sha, in.winSize, in.macSize, !strcmp(in.winHash, "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"), nok);
+        fprintf(f, "mise a jour : plus recente que build %d=%d, que build 52=%d, que build 60=%d (attendu %d 0 0)\n",
+                VELOCITY_BUILD, in.build > VELOCITY_BUILD, in.build > 52, in.build > 60, 52 > VELOCITY_BUILD);
+        fprintf(f, "sha256 : vide=%d abc=%d 2 blocs=%d (attendu 1 1 1)\n",
+                !strcmp(h1, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+                !strcmp(h2, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"),
+                !strcmp(h3, "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"));
+        fprintf(f, "mise a jour : chemins %s | %s (attendu C:/jeu/velocity.exe.new | C:/jeu/velocity.exe.old)\n", nw, old);
+    }
 
     botLog = NULL;
     netMode = NET_OFF; dmMode = 0;

@@ -5,6 +5,7 @@ Movement shooter 3D en C, sans aucune dépendance (Win32 / Cocoa + OpenGL 1.1, s
 - **Compiler** : `build.bat` (Windows, MSVC) ou `./build_mac.sh` (macOS).
 - **Changer l'aspect sans recompiler** : `graphismes/` (puis F5 en jeu).
 - **Documentation du code** : [`docs/CODE.md`](docs/CODE.md) — le §2 détaille chaque fichier.
+- **Nouveautés** (détail de chaque fonctionnalité ajoutée) : [`docs/NOUVEAUTES.md`](docs/NOUVEAUTES.md).
 
 ## Où trouver quoi
 

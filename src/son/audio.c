@@ -30,7 +30,7 @@ static Voice voices[MAXV];
 static HWAVEOUT wout;
 static WAVEHDR whdr[NBUF];
 #endif
-static short wbuf[NBUF][BUFLEN];
+static short wbuf[NBUF][BUFLEN * 2];                      /* BUFLEN images, 2 voies entrelacees */
 static int audio_ok;
 static float masterVol = 1.0f;
 #include "music.h"                                    /* design de la musique : morceaux, sequenceur, niveau d'intensite */
@@ -69,9 +69,12 @@ static void loop_stop(int v) {                            /* fin en 30 ms, sans 
 /* --- fin Tesla --- */
 
 
+/* n = nombre d'images audio ; out = n paires gauche / droite entrelacees. Les bruitages sont mono (au centre), la musique est stereo */
 static void audio_fill(short *out, int n) {
     for (int i = 0; i < n; i++) {
-        float acc = music_sample() * MUS_GAIN * musicVol;
+        float ml, mr, acc = 0;
+        music_frame(&ml, &mr);
+        ml *= MUS_GAIN * musicVol; mr *= MUS_GAIN * musicVol;
         for (int v = 0; v < MAXV; v++) {
             Voice *vo = &voices[v];
             if (!vo->active) continue;
@@ -87,7 +90,8 @@ static void audio_fill(short *out, int n) {
             acc += (s->data[p] * (1 - f) + s->data[p + 1] * f) * vo->vol;
             vo->pos += vo->step;
         }
-        out[i] = (short)(tanhf(acc / 32768.0f * 0.7f * masterVol) * 32000.0f);
+        out[2 * i] = (short)(tanhf((acc + ml) / 32768.0f * 0.7f * masterVol) * 32000.0f);
+        out[2 * i + 1] = (short)(tanhf((acc + mr) / 32768.0f * 0.7f * masterVol) * 32000.0f);
     }
 }
 
@@ -606,14 +610,14 @@ static void audio_init(void) {
     return;
 #else
     WAVEFORMATEX fmt = { 0 };
-    fmt.wFormatTag = WAVE_FORMAT_PCM; fmt.nChannels = 1; fmt.nSamplesPerSec = SR;
-    fmt.wBitsPerSample = 16; fmt.nBlockAlign = 2; fmt.nAvgBytesPerSec = SR * 2;
+    fmt.wFormatTag = WAVE_FORMAT_PCM; fmt.nChannels = 2; fmt.nSamplesPerSec = SR;
+    fmt.wBitsPerSample = 16; fmt.nBlockAlign = 4; fmt.nAvgBytesPerSec = SR * 4;
     if (waveOutOpen(&wout, WAVE_MAPPER, &fmt, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) return;
     audio_ok = 1;
     for (int i = 0; i < NBUF; i++) {
         memset(&whdr[i], 0, sizeof(WAVEHDR));
         whdr[i].lpData = (LPSTR)wbuf[i];
-        whdr[i].dwBufferLength = BUFLEN * sizeof(short);
+        whdr[i].dwBufferLength = BUFLEN * 2 * sizeof(short);
         waveOutPrepareHeader(wout, &whdr[i], sizeof(WAVEHDR));
         audio_fill(wbuf[i], BUFLEN);
         waveOutWrite(wout, &whdr[i], sizeof(WAVEHDR));

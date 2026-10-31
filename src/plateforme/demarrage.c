@@ -5,6 +5,11 @@
  * Hors partie : niveau 0. Chaque joueur le calcule seul : les frags de tous sont deja dans NP[]. */
 static void music_follow_game(void) {
     int lvl = 0;
+    if (appState != APP_GAME) { if (mus.track >= 0) music_set(-1, 0); return; }   /* menus : silence */
+    if (mus.track < 0) {                                  /* entree en partie : depart avec fondu, variations differentes a chaque partie */
+        musSeed = (unsigned)(nowT * 1000.0) * 2654435761u + 1u;
+        music_set(0, 0);
+    }
     if (appState == APP_GAME && dmMode) {
         int lead = 0, second = 0;
         for (int i = 0; i < MAXP; i++) {
@@ -174,6 +179,7 @@ static int velocity_main(const char *cmd) {
             else if (!strcmp(t, "--local")) botLocal = 1;
             else if (!strcmp(t, "--hidden")) botHidden = 1;
             else if (!strcmp(t, "--teams") && (t = strtok(NULL, " "))) wantTeams = atoi(t) < 0 ? 0 : atoi(t) > TEAM_MAX ? TEAM_MAX : atoi(t);
+            else if (!strcmp(t, "--updated")) updAfter = 1;
             else if (!strcmp(t, "--level") && (t = strtok(NULL, " "))) botLevel = atoi(t) < 0 ? 0 : atoi(t) > 2 ? 2 : atoi(t);
             else if (!strcmp(t, "--loadout") && (t = strtok(NULL, " "))) {   /* --loadout arme1,arme2[,melee] (WP_*, WP_*, MK_*) */
                 int l0, l1, mk, n = sscanf(t, "%d,%d,%d", &l0, &l1, &mk);
@@ -264,13 +270,27 @@ static int velocity_main(const char *cmd) {
         if (!botMode && !shotMode && cfg_load()) toggle_fullscreen();
         if (!botMode && !shotMode && (gfxAmbiance || gfxQuality != 2)) { gfx_reload(); popT = 0; }   /* ambiance / qualite du joueur */
     }
-    if (!shotMode && !botHidden) { audio_init(); music_set(0, 0); }
+    if (!botMode && !shotMode) {                          /* mise a jour : restes de la precedente, puis verification discrete */
+        upd_cleanup();
+        if (updAfter) {
+            char ub[64];
+            snprintf(ub, sizeof ub, "mise a jour installee : build %d", VELOCITY_BUILD);
+            set_status(ub);
+        }
+        if (updCheck) { updQuiet = 1; upd_start(upd_check_th, UPD_CHECKING); }
+    }
+    if (!shotMode && !botHidden) audio_init();
     reset_game();
 
     if (shotMode && (strstr(shotPath, "settings") || strstr(shotPath, "menu") || strstr(shotPath, "loadout") ||
-                     strstr(shotPath, "heberger"))) {   /* "skinmenu" contient "menu" */   /* captures des menus */
+                     strstr(shotPath, "heberger") ||
+                     strstr(shotPath, "update"))) {   /* "skinmenu" contient "menu" */   /* captures des menus */
         appState = APP_MENU;
         menu_backdrop();
+        if (strstr(shotPath, "update")) {                 /* bouton de mise a jour en plein telechargement */
+            updInfo.build = VELOCITY_BUILD + 5; updState = updSeen = UPD_DOWNLOADING; updTotal = 1000; updGot = 630;
+            set_status("nouvelle version disponible : build 5");
+        }
         if (strstr(shotPath, "settings")) { settingsOpen = 1; waitAct = A_COIN; waitSlot = 1; }
         if (strstr(shotPath, "loadout")) loadoutOpen = 1;
         if (strstr(shotPath, "heberger")) { hostOpen = 1; wantTeams = 2; hostBots = 1; }

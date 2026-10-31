@@ -9,6 +9,7 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <winhttp.h>
+#include <shellapi.h>
 #include <mmsystem.h>
 #include <GL/gl.h>
 typedef int sock_len_t;
@@ -29,6 +30,7 @@ typedef int sock_len_t;
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "winhttp.lib")
+#pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "advapi32.lib")
 #endif
 

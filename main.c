@@ -84,6 +84,7 @@
 #include "src/rendu/armes_rendu.c"               /* rendu specifique des armes (scie, tesla, lance, fleau...) */
 #include "src/rendu/viewmodel.c"                 /* arme en main (viewmodel) */
 
+#include "src/interface/mise_a_jour.c"           /* mise a jour depuis GitHub : verifier, telecharger, installer */
 #include "src/interface/config.c"                /* velocity.ini : reglages et touches du joueur */
 #include "src/interface/menus.c"                 /* boutons, menus, parametres, loadout, ecran SKIN */
 #include "src/interface/scores.c"                /* tableau des scores, killfeed, pseudos */

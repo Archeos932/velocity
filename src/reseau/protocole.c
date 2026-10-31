@@ -330,8 +330,6 @@ static void net_fx_tesla(int sub, unsigned int netId, V3 pos, int actor, int tar
     net_emit(&e);
 }
 /* --- fin Tesla --- */
-/* --- Lance : evenements --- */
-/* --- fin Lance : evenements --- */
 /* --- Ventouse : evenements --- */
 /* EV_MINE : sub = MINE_EV_*, netId de la mine, f[0..2] = a, f[3..5] = b, f[6] = x, target = joueur porteur ou pareur */
 static void net_fx_mine(int sub, unsigned int netId, V3 a, V3 b, int target, float x) {

@@ -66,13 +66,13 @@ static void draw_settings(float cx, float cy) {
     y += 30;
     snprintf(buf, sizeof buf, "%.2f", sens * 1000);
     sens = slider(1, lx, y, lw, "Sensibilite de la souris", buf, sens, 0.0003f, 0.008f);
-    y += 62;
+    y += 56;
     snprintf(buf, sizeof buf, "%.0f deg", fovBase);
     fovBase = slider(2, lx, y, lw, "Champ de vision (horizontal)", buf, fovBase, 80, 130);
-    y += 62;
+    y += 56;
     snprintf(buf, sizeof buf, "%.0f %%", masterVol * 100);
     masterVol = slider(3, lx, y, lw, "Volume", buf, masterVol, 0, 1);
-    y += 62;
+    y += 56;
     snprintf(buf, sizeof buf, "%.0f %%", musicVol * 100);
     musicVol = slider(4, lx, y, lw, "Musique", buf, musicVol, 0, 1);
     y += 50;
@@ -112,8 +112,10 @@ static void draw_settings(float cx, float cy) {
     snprintf(buf, sizeof buf, "Plein ecran : %s", fullscreen ? "OUI" : "NON");
     if (button(lx, y, lw, 44, buf)) pendingAction = ACT_FULLSCREEN;
     y += 50;
-    snprintf(buf, sizeof buf, "Parties en ligne : %s", onlineOn ? "OUI" : "NON");
-    if (button(lx, y, lw, 44, buf)) { onlineOn = !onlineOn; cfg_save(); }
+    snprintf(buf, sizeof buf, "EN LIGNE:%s", onlineOn ? "OUI" : "NON");      /* parties en ligne */
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) { onlineOn = !onlineOn; cfg_save(); }
+    snprintf(buf, sizeof buf, "MAJ AUTO:%s", updCheck ? "OUI" : "NON");     /* mises a jour automatiques */
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) { updCheck = !updCheck; cfg_save(); }
     y += 70;
     if (button(lx, y, 210, 50, "RETOUR")) { settingsOpen = 0; waitAct = -1; cfg_save(); }
     if (button(lx + 230, y, 210, 50, "PAR DEFAUT")) { memcpy(binds, bindDefault, sizeof binds); cfg_save(); }
@@ -331,9 +333,9 @@ static void draw_main_menu(float cx, float cy) {
     field(bx, y, bw, 48, "PSEUDO", myName, 1);
     y += 76;
     if (button(bx, y, bw, 52, "SOLO  -  VAGUES")) pendingAction = ACT_SOLO;
-    y += 66;
-    text(0, bx, y + 2, "JOUEUR CONTRE BOT  (duel)", 0.7f, 0.75f, 0.85f, 1);
-    y += 14;
+    y += 52 + 24;                                         /* le libelle sous le bouton, sans toucher son liseret */
+    text(0, bx, y, "JOUEUR CONTRE BOT  (duel)", 0.7f, 0.75f, 0.85f, 1);
+    y += 8;
     for (int lv = 0; lv < 3; lv++)                        /* un duel contre un bot : trois niveaux */
         if (button(bx + lv * 142, y, 136, 46, botLevelNames[lv])) { pendingAction = ACT_VSBOT; pendingArg = lv; hostFfa = 1; }
     y += 54;
@@ -343,10 +345,16 @@ static void draw_main_menu(float cx, float cy) {
     y += 54;
     if (button(bx, y, bw, 46, "REJOINDRE / REGARDER")) pendingAction = ACT_BROWSE;
     y += 54;
-    if (button(bx, y, bw * 0.5f - 5, 46, "LOADOUT")) loadoutOpen = 1;
-    if (button(bx + bw * 0.5f + 5, y, bw * 0.5f - 5, 46, "SKIN")) skinOpen = 1;
+    if (button(bx, y, bw / 3 - 6, 46, "LOADOUT")) loadoutOpen = 1;
+    if (button(bx + bw / 3 + 3, y, bw / 3 - 6, 46, "SKIN")) skinOpen = 1;
+    if (button(bx + 2 * bw / 3 + 6, y, bw / 3 - 6, 46, "PARAMETRES")) settingsOpen = 1;
     y += 54;
-    if (button(bx, y, bw, 46, "PARAMETRES")) settingsOpen = 1;
+    upd_poll();
+    if (updState == UPD_AVAILABLE || updState == UPD_READY)   /* nouvelle version : cadre dore */
+        rect(bx - 3, y - 3, bw + 6, 52, 1.0f, 0.8f, 0.3f, 0.5f + 0.4f * sinf((float)nowT * 5));
+    if (button(bx, y, bw, 46, upd_label())) upd_click();
+    if (updState == UPD_DOWNLOADING && updTotal > 0)      /* progression dans le liseret du bouton */
+        rect(bx, y + 40, bw * clampf((float)updGot / updTotal, 0, 1), 6, 1.0f, 0.8f, 0.3f, 1);
     y += 54;
     if (button(bx, y, bw, 46, "QUITTER")) pendingAction = ACT_QUIT;
     draw_status(bx, y + 72);

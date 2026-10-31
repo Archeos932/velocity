@@ -1,0 +1,202 @@
+# Nouveautés de la branche `dev`
+
+Tout ce qui a été ajouté par rapport à `origin/dev` (dernier commit commun : « Port macOS + musique »), dans l'ordre où
+c'est arrivé. Chaque fonctionnalité a été faite sur sa propre branche (colonne « Branche »), puis tout a été réuni dans
+`dev` avec les nouveautés d'`origin/dev` (bouton MISE A JOUR, musique stéréo, CI Windows et release).
+
+Pour chaque point : ce que ça change en jeu, comment le régler, où est le code, comment le vérifier.
+Le détail technique complet est dans [`CODE.md`](CODE.md) (numéros de section entre parenthèses).
+
+| # | Fonctionnalité | Branche |
+|---|---|---|
+| 1 | Rendu, jump pads, railgun, bots, aimant de visée | (avant les branches) |
+| 2 | Mode équipes 1v1 à 4v4, éclairage, ombres, bloom | (avant les branches) |
+| 3 | Réglages graphiques modifiables sans recompiler | `graphismes-modifiables` |
+| 4 | Skins, effets du monde, néons, météo, ambiances, qualité | `skins-effets-ambiances` |
+| 5 | Molette : un geste = un changement d'arme | `molette-changement-arme` |
+| 6 | Code rangé en dossiers (`src/`) | `arborescence-fichiers` |
+| 7 | Changement d'arme visible | `retour-changement-arme` |
+| 8 | Barre de vie avec traînée des dégâts | `hud-barre-de-vie` |
+| 9 | Vrai modèle de lance-roquettes | `modele-lance-roquettes` |
+| 10 | Second écran : carte et statistiques en direct | `second-ecran-carte` |
+| 11 | Carte : seulement soi et ses équipiers | `carte-equipiers` |
+| 12 | Carte en 3D inclinée (ou de dessus) | `carte-vue-3d` |
+| 13 | Courbe de vitesse | `courbe-vitesse` |
+| 14 | Carte de chaleur de fin de match | `carte-chaleur` |
+| 15 | Fonds sous les textes du HUD | `hud-fonds` |
+| 16 | Caméra de mort | `camera-de-mort` |
+| 17 | Réunion avec `origin/dev` (mise à jour, stéréo, CI) | `dev` |
+
+---
+
+## 1. Rendu, jump pads, railgun, bots, aimant de visée
+
+- **Décor** : textures générées plus riches (sol et murs séparés, joints biseautés, boulons, salissures, grain fin) ;
+  les faces cachées des blocs ne sont plus dessinées.
+- **Menu principal** : fond en dégradé (le décor se voit en bas), halo sur le titre, panneau derrière les boutons.
+- **Jump pads** : vrai bug corrigé. En bhop on arrive sur le pad en l'air, et le pad (0,3 m) se comportait comme un
+  mur au lieu de propulser. Deux tests de régression (au sol et en l'air à grande vitesse).
+- **Railgun en main** : canon octogonal, frein de bouche, bague d'énergie, lunette (générateur de prismes réutilisable,
+  `prism_z`).
+- **Bots** : le niveau facile est vraiment plus imprécis et réagit plus lentement ; son bhop n'est plus parfait.
+- **Aimant de visée** (joueur humain seulement) : correction très douce vers une cible proche du viseur (cône d'environ
+  4°, ligne de vue vérifiée), jamais de verrouillage.
+
+## 2. Mode équipes 1v1 à 4v4, éclairage, ombres, bloom
+
+- **Équipes** (§3.11) : l'hôte choisit 1v1 à 4v4 dans HEBERGER ; équipes équilibrées à l'arrivée et rééquilibrées entre
+  deux matchs, pas de tir allié, score et victoire par équipe, couleurs bleue / rouge, radar des alliés.
+- **Éclairage** (§3.12) : lightmaps précalculées avec occlusion ambiante, ombres dynamiques des joueurs, ciel dégradé
+  avec soleil et étoiles, ville au loin, bloom autour de ce qui brille.
+
+## 3. Réglages graphiques modifiables sans recompiler
+
+- Tout l'aspect visuel se règle dans **`graphismes/rendu.ini`** : une trentaine de clés commentées (soleil, ombres,
+  occlusion, brouillard, ciel, ville, bloom, textures…). `sol.bmp`, `mur.bmp`, `grain.bmp` (facultatifs) remplacent les
+  textures générées.
+- **F5 en jeu** relit tout et refait l'éclairage sans relancer (« GRAPHISMES RECHARGES »).
+- Le gameplay et le réseau ne lisent jamais ce dossier : deux joueurs avec des réglages différents jouent ensemble.
+- Code : `src/graphismes/rendu_ini.c` (§3.13). Mode d'emploi : `graphismes/README.md`.
+
+## 4. Skins, effets du monde, néons, météo, ambiances, qualité
+
+- **5 skins** (ROBOT, POUSSIN, NINJA, CHAT, CHEVALIER) : écran SKIN du menu avec aperçu 3D, couleur de l'équipe,
+  animation de course, de saut, de glissade et de visée. Envoyé aux autres joueurs (`NET_VER` 13). Code :
+  `src/perso/skins.c`.
+- **Effets du monde** : lumières dynamiques (explosions, rail, roquettes en vol), marques d'impact, ondes au sol, fumée,
+  éclats à la couleur de l'équipe au kill.
+- **Néons** sur les plateformes, les murs de wall-run et le centre, avec leur lueur sur le décor ; **rebond coloré** de
+  la lumière.
+- **Ciel et météo** : nuages, poussière, pluie, orage (éclairs et tonnerre), reflets du soleil.
+- **Ambiances** (PARAMETRES > CIEL) : couchant, nuit, jour, orage (`graphismes/ambiance_*.ini`).
+- **Qualité** (PARAMETRES > QUALITE) : BASSE / MOYENNE / ULTRA pour les petites machines.
+- **Contours** colorés autour des joueurs et **traînées de vitesse** au-delà de 16 m/s.
+- Détails : §3.14.
+
+## 5. Molette : un geste = un changement d'arme
+
+- **Avant** : une rotation de molette envoie des dizaines d'événements (roue libre, inertie du pavé tactile ou de la
+  Magic Mouse) et chacun inversait les deux armes : l'arme clignotait pendant environ 2 s.
+- **Maintenant** : une rafale d'événements ne compte qu'une fois. Il faut 0,15 s de repos entre deux gestes
+  (`WHEEL_QUIET`) et 0,3 s entre deux changements (`WHEEL_COOLDOWN`) ; sur macOS la phase d'inertie est ignorée.
+- Code : `wheel_accept` dans `src/plateforme/fenetre.c`. Test : « molette : rafale de 2 s=1 ».
+
+## 6. Code rangé en dossiers
+
+- `main.c` (16 000 lignes) est devenu une **table des matières** qui inclut, dans l'ordre, les fichiers de `src/`
+  rangés par thème : `armes/` (une arme = un fichier), `perso/` (skins), `reglages/` (tous les `#define`), `rendu/`,
+  `interface/`, `reseau/`, `son/`, `plateforme/` (dont `mac/`), `tests/`…
+- Le code compilé est **identique** (sortie du préprocesseur comparée avant / après). Les scripts de compilation ne
+  compilent toujours que `main.c`.
+- Arborescence complète et rôle de chaque fichier : §2 de `CODE.md` et `README.md`.
+
+## 7. Changement d'arme visible
+
+- Le **nom de l'arme** apparaît sous le viseur (à sa couleur, avec une barre qui se vide) puis s'efface en 0,9 s
+  (`WP_FLASH_T`).
+- L'**emplacement** choisi s'allume dans la barre des armes en bas à droite.
+- L'**arme remonte en pivotant** au lieu d'apparaître d'un coup.
+- Code : `weapon_select` (`wpFlashAt`), `draw_hud`, `draw_viewmodel`. Capture : `--shot changearme.bmp`.
+
+## 8. Barre de vie avec traînée des dégâts
+
+- Après un coup, la partie perdue reste affichée **en blanc**, devient rouge et **se vide** après 0,4 s
+  (`HP_GHOST_HOLD`, `HP_GHOST_RATE`) : on voit combien le coup a retiré.
+- **Éclat vert** quand on se soigne, **graduations** tous les 25 PV, reflet sur le haut de la barre.
+- Code : `hp_ghost_tick` dans `src/interface/hud.c`. Capture : `--shot vie.bmp`.
+
+## 9. Vrai modèle de lance-roquettes
+
+- Ce n'était qu'une boîte verte. Il a maintenant un tube à facettes, une bouche évasée, une tuyère, des colliers, un
+  viseur lumineux, des poignées, des bandes chaudes, et l'ogive de la roquette chargée dans la bouche.
+- **Une LED par roquette** sur le dessus : on voit ses munitions sans regarder le HUD.
+- Code : `draw_viewmodel` dans `src/rendu/viewmodel.c`.
+
+## 10. Second écran : carte et statistiques en direct
+
+- Si **un deuxième écran est branché**, une fenêtre plein écran s'y ouvre toute seule. Elle ne prend jamais la souris
+  ni le clavier du jeu. Le jeu recompte les écrans chaque seconde : brancher ou débrancher en cours de partie est suivi.
+- **À gauche, la carte** : blocs (plus clairs quand ils sont hauts), jump pads, recharges, pièces, roquettes en vol,
+  ennemis en solo ; chaque joueur est une flèche à sa couleur, avec son nom, ses PV et 2 s de trajet ; toi, avec ton
+  cône de vision.
+- **À droite, les stats** : mode, chrono, limite de frags, scores d'équipe, classement (frags, morts, ratio), ta vitesse
+  et ta vitesse max, chaîne de tir, arme et munitions, derniers kills. En solo : vague, score, kills, ennemis restants.
+- Hors partie : « la carte de la partie s'affichera ici ».
+- Réglage : PARAMETRES > 2e ECRAN (`second_ecran=` dans `velocity.ini`).
+- Technique : contexte OpenGL partagé avec le jeu (police et textures communes), 30 images par seconde, sans synchro
+  verticale pour ne pas ralentir le jeu. Code : `src/interface/carte_ecran.c` (dessin) et `src/plateforme/second_ecran.c`
+  (fenêtre, Windows et macOS). Captures : `--shot carte.bmp`, `carte_dm.bmp`, `carte_dm_equipes.bmp` (§3.15).
+
+## 11. Carte : seulement soi et ses équipiers
+
+- La carte ne sert pas de radar contre l'adversaire. Pendant la partie on n'y voit que **soi et ses équipiers**, avec
+  leurs projectiles et leurs pièces ; en chacun pour soi, seulement soi.
+- **Tout le monde** apparaît en spectateur et une fois le match fini.
+- Code : `maps_sees`. Test : « joueurs visibles en equipes=2, chacun pour soi=1, partie finie=4 ».
+
+## 12. Carte en 3D inclinée (ou de dessus)
+
+- Au choix, la carte se voit **de dessus** ou **en 3D**, vue en plongée depuis le sud.
+- En 3D, les **hauteurs** se lisent : chaque joueur est un pion à sa couleur avec la flèche de son regard sur la tête,
+  une **ombre au sol** sous lui et un **poteau pointillé** jusqu'au sol quand il est en l'air ; les traînées suivent les
+  sauts. Les murs extérieurs sont rabotés pour ne rien cacher.
+- Réglage : PARAMETRES > 2e ECRAN, qui fait défiler **NON → HAUT → 3D** (`carte_vue=` dans `velocity.ini`). Angle,
+  recul et champ de vision : `carte_3d` dans `graphismes/rendu.ini`.
+- Code : `maps_draw_3d`. Captures : `--shot carte3d.bmp`, `carte3d_dm.bmp`.
+
+## 13. Courbe de vitesse
+
+- Dans le panneau des stats, la **vitesse de chaque joueur visible** au fil du temps (toi en trait épais) : les
+  60 dernières secondes pendant le match, **tout le match** une fois fini. La courbe s'interrompt pendant les morts.
+- Un point toutes les 0,5 s ; remise à zéro à chaque nouveau match.
+- Code : `maps_speed_tick`, `maps_draw_speed`. Test : « courbe de vitesse : points en 2 s=4 ».
+
+## 14. Carte de chaleur de fin de match
+
+- À la fin du match, la carte montre **où l'on est mort** (taches rouges) et **d'où l'on a tiré** (taches jaunes). Les
+  taches se cumulent : les zones chaudes sautent aux yeux. Elle s'affiche toujours vue de dessus.
+- Chaque kill est enregistré au moment où il arrive (`maps_heat_add`, appelé sur `EV_KILL`) ; rayon d'une tache :
+  `MAPS_HEAT_R`.
+- Capture : `--shot carte_dm_equipes_fin.bmp`. Test : « carte de chaleur : 2 points ».
+
+## 15. Fonds sous les textes du HUD
+
+- Des **plaques sombres** avec un liseré clair sous les infos de partie, la mêlée, la vitesse, la chaîne de tir, le
+  panneau d'arme, et sous chaque ligne de killfeed : tout reste lisible sur un ciel clair ou une explosion.
+- Opacité réglable sans recompiler : `hud_fonds` dans `graphismes/rendu.ini` (0 = aucun fond).
+- Code : `hud_panel` dans `src/interface/texte.c`.
+
+## 16. Caméra de mort
+
+- Quand on est tué, la caméra **recule, monte et pivote vers le tueur** en zoomant, pendant 1,6 s (`KILLCAM_T`) ; elle
+  ne traverse pas les murs.
+- À l'écran : bandes noires de cinéma, « **ELIMINE PAR** Rival », l'**arme** utilisée, les **PV qu'il lui reste**, et
+  des crochets autour de lui qui se resserrent. Le bas du HUD s'efface pour laisser voir la scène ; le choix du loadout
+  reste disponible. Le respawn garde son délai (2,5 s).
+- En solo, la caméra se tourne vers l'ennemi vivant le plus proche qui te voyait (« TUE PAR UN DRONE »).
+- Pas de caméra pour un suicide ni une chute.
+- Réglage : PARAMETRES > CAM. MORT (`camera_mort=` dans `velocity.ini`).
+- Code : `src/effets/camera_mort.c`, `draw_killcam_hud` (§3.16). Capture : `--shot dm_mort.bmp`.
+
+## 17. Réunion avec `origin/dev`
+
+Les nouveautés d'`origin/dev` sont intégrées et rangées dans l'arborescence :
+
+- **Bouton MISE A JOUR** : vérifie, télécharge (SHA-256 vérifié) et installe la dernière version de la branche
+  `release`. Il a maintenant son fichier, `src/interface/mise_a_jour.c` (§3.17). Le menu principal affiche LOADOUT,
+  SKIN et PARAMETRES sur une ligne, puis MISE A JOUR ; « MAJ AUTO » est dans PARAMETRES.
+- **Musique stéréo** (`src/son/music.h`), **CI Windows** (build MSVC et `--test` à chaque push) et **CI release**
+  (binaires Windows et macOS construits depuis `stable`).
+- Le code fusionné a été vérifié de la même façon que pour le point 6 : sortie du préprocesseur identique entre le
+  fichier fusionné à plat et l'arborescence.
+
+---
+
+## Vérifications faites
+
+- Compilation macOS sans avertissement ; tous les tests `--test` conformes, y compris ceux d'`origin/dev` (stéréo,
+  mise à jour, SHA-256) et une ligne de test par nouvelle mécanique.
+- Captures de chaque nouveauté et match bot contre bot en réseau réel.
+- Fenêtre du second écran essayée en vrai sur un Mac (contexte partagé, police, partie solo en direct).
+- **Pas encore vérifié sous Windows** : la CI Windows d'`origin/dev` compilera et testera `dev` à chaque push ; reste
+  à essayer le second écran avec deux moniteurs.
