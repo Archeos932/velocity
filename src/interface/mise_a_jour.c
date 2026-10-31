@@ -11,9 +11,12 @@
 #ifndef VELOCITY_BUILD
 #define VELOCITY_BUILD 0                                  /* compilation locale ; la CI de release passe son numero */
 #endif
+#ifndef UPD_REPO
+#define UPD_REPO "Archeos932/velocity"                    /* depot GitHub dont la branche release fournit les mises a jour */
+#endif
 #define UPD_HOST "raw.githubusercontent.com"
-#define UPD_DIR  "/void19845/velocity/release/"
-#define UPD_PAGE "https://github.com/void19845/velocity/tree/release"
+#define UPD_DIR  "/" UPD_REPO "/release/"
+#define UPD_PAGE "https://github.com/" UPD_REPO "/tree/release"
 #ifdef _WIN32
 #define UPD_BIN "velocity.exe"
 #else

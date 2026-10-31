@@ -537,9 +537,9 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
 
 Fichier `src/interface/mise_a_jour.c`, inclus juste avant `interface/config.c`.
 
-- **Source** : la branche `release` du dépôt public `void19845/velocity`, remplie par `.github/workflows/release.yml`
+- **Source** : la branche `release` du dépôt public `Archeos932/velocity` (`UPD_REPO` dans `src/interface/mise_a_jour.c`), remplie par `.github/workflows/release.yml`
   à chaque push sur `stable` : `velocity.exe`, `Velocity-macOS.zip` et **`version.txt`** (`build`, `sha`,
-  `win_size`, `win_sha256`, `mac_size`, `mac_sha256`). Lu à `https://raw.githubusercontent.com/void19845/velocity/release/`
+  `win_size`, `win_sha256`, `mac_size`, `mac_sha256`). Lu à `https://raw.githubusercontent.com/Archeos932/velocity/release/`
   (`UPD_HOST`, `UPD_DIR`).
 - **Numéro de build** : `VELOCITY_BUILD`, passé par `build.bat` / `build_mac.sh` si la variable d'environnement
   existe (la CI y met `github.run_number`, le même numéro que `version.txt`). Absent = `0` = « dev ».
