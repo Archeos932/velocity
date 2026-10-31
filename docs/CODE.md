@@ -597,6 +597,8 @@ Si un deuxième écran est branché, une fenêtre sans bordure le couvre et affi
 couleur avec nom, PV et traînée de 2 s ; mon cône de vision) et **les statistiques** (mode, chrono, scores d'équipe,
 classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, arme, derniers kills).
 
+- **Pas de radar contre l'adversaire** (`maps_sees`) : pendant une partie on ne voit que soi et ses équipiers (en
+  chacun pour soi : soi seul), avec leurs projectiles et pièces. Tout le monde apparaît en spectateur et à la fin.
 - Dessin : `src/interface/carte_ecran.c` (`draw_map_screen(w, h)`, ne dépend d'aucun état laissé par `render`).
 - Fenêtre : `src/plateforme/second_ecran.c`. `second_screen_frame(dt)` est appelé après chaque image : toutes les
   `SCREEN_POLL_T` (1 s) `map_update` recompte les écrans (branché, débranché, fenêtre du jeu déplacée), puis la carte

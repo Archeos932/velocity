@@ -234,6 +234,23 @@ static void run_tests(const char *path) {
         mapsTrailN[0] = 0; nowT = 0; mapsTrailT = 0;
     }
 
+    {                                                     /* second ecran : en partie, seulement moi et mes equipiers */
+        NetPlayer save[MAXP];
+        memcpy(save, NP, sizeof save);
+        int sDm = dmMode, sTs = teamSize, sId = myId, sOver = matchOver;
+        for (int i = 0; i < MAXP; i++) NP[i].active = 0;
+        for (int i = 0; i < 4; i++) { NP[i].active = 1; NP[i].team = i & 1; }   /* 0 et 2 bleus, 1 et 3 rouges */
+        dmMode = 1; myId = 0; matchOver = 0; spectating = 0;
+        MapsPl pl[MAXP + 1];
+        teamSize = 2; int team = maps_players(pl);
+        teamSize = 0; int ffa = maps_players(pl);
+        matchOver = 1; int over = maps_players(pl);
+        fprintf(f, "carte 2e ecran : joueurs visibles en equipes=%d, chacun pour soi=%d, partie finie=%d (attendu 2, 1, 4)\n",
+                team, ffa, over);
+        memcpy(NP, save, sizeof save);
+        dmMode = sDm; teamSize = sTs; myId = sId; matchOver = sOver;
+    }
+
     reset_game();                                         /* escalier -> plateforme centrale */
     P.pos = P.prevPos = v3(0, 0, ms(14) + 0.6f); P.yaw = 0;
     act[A_FWD] = 1;

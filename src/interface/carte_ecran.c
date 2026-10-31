@@ -21,6 +21,13 @@ static void maps_pt(const MapView *v, V3 p, float *sx, float *sy) {
     *sy = v->y0 + (p.z - mapsMnZ) * v->k;
 }
 
+/* La carte ne doit pas servir de radar contre l'adversaire : pendant une partie on n'y voit que soi et ses equipiers
+   (en chacun pour soi : soi seul). Tout le monde apparait en spectateur et une fois la partie finie. */
+static int maps_sees(int i) {
+    if (!dmMode || spectating || matchOver) return 1;
+    return i == myId || same_team(i, myId);
+}
+
 /* un joueur affiche : position, cap, vivant, couleur, nom, PV */
 typedef struct { V3 pos; float yaw, hp; int alive, self, id; const float *col; const char *name; } MapsPl;
 
@@ -33,7 +40,7 @@ static int maps_players(MapsPl *out) {
         return n;
     }
     for (int i = 0; i < MAXP; i++) {
-        if (!NP[i].active) continue;
+        if (!NP[i].active || !maps_sees(i)) continue;
         int me = i == myId && !spectating;
         out[n].pos = me ? P.pos : NP[i].disp; out[n].yaw = me ? P.yaw : NP[i].st.yaw;
         out[n].hp = me ? P.hp : NP[i].hp; out[n].alive = me ? !P.dead : NP[i].alive; out[n].self = me;
@@ -118,9 +125,9 @@ static void maps_draw_map(const MapView *v, float S, const MapsPl *pl, int n) {
         glEnd();
     }
     for (int i = 0; i < MAXCOIN; i++)                     /* pieces en vol */
-        if (CO[i].alive) { maps_pt(v, CO[i].pos, &sx, &sy); glColor4f(1, 0.9f, 0.4f, 1); maps_disc(sx, sy, 3, 8); }
+        if (CO[i].alive && maps_sees(CO[i].owner)) { maps_pt(v, CO[i].pos, &sx, &sy); glColor4f(1, 0.9f, 0.4f, 1); maps_disc(sx, sy, 3, 8); }
     for (int i = 0; i < MAXPR; i++) {                     /* projectiles : roquettes oranges, le reste blanc */
-        if (!PR[i].alive) continue;
+        if (!PR[i].alive || !maps_sees(PR[i].owner)) continue;
         maps_pt(v, PR[i].pos, &sx, &sy);
         if (PR[i].kind == PR_ROCKET) glColor4f(1, 0.55f, 0.15f, 1); else glColor4f(0.9f, 0.9f, 1, 0.9f);
         maps_disc(sx, sy, PR[i].kind == PR_ROCKET ? 4.5f : 3.5f, 10);
