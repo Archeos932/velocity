@@ -384,6 +384,7 @@ enum { AP_HIT, AP_KILL, AP_PARRY, AP_CELL, AP_LOST, AP_COUNT };   /* origine des
 #define WP_FLASH_T         0.9     /* nom de l'arme affiche (s) apres un changement */
 #define SCREEN_POLL_T      1.0f    /* second ecran : on recompte les moniteurs toutes les secondes */
 #define SCREEN_MAP_FPS     30.0f   /* images par seconde de la carte sur le second ecran */
+#define MAPS_HEAT_R        9.0f    /* carte de chaleur : rayon d'une tache (m) */
 #define HP_GHOST_HOLD      0.4     /* barre de vie : la partie perdue reste affichee (s)... */
 #define HP_GHOST_RATE      80.0f   /* ...puis se vide a cette vitesse (PV/s) */
 #define DRYFIRE_CD         0.35f   /* delai entre deux clics a sec */

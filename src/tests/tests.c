@@ -262,6 +262,16 @@ static void run_tests(const char *path) {
         maps_speed_reset(); dmMode = sDm; nowT = 0; P.vel = v3(0, 0, 0);
     }
 
+    {                                                     /* carte de chaleur : position du mort et du tireur */
+        V3 sDisp = NP[1].disp; int sId = myId, sSpec = spectating;
+        myId = 0; spectating = 0; mapsHeatN = 0;
+        reset_game(); P.pos = v3(5, 0, 7); NP[1].disp = v3(-20, 4, 30);
+        maps_heat_add(0, 1); maps_heat_add(1, 1);            /* un kill, puis un suicide */
+        fprintf(f, "carte de chaleur : %d points, mort x=%.0f tireur x=%.0f, suicide sans tireur=%d (attendu 2, -20, 5, 1)\n",
+                mapsHeatN, mapsHeat[0].death.x, mapsHeat[0].kill.x, mapsHeat[1].self);
+        mapsHeatN = 0; NP[1].disp = sDisp; myId = sId; spectating = sSpec;
+    }
+
     reset_game();                                         /* escalier -> plateforme centrale */
     P.pos = P.prevPos = v3(0, 0, ms(14) + 0.6f); P.yaw = 0;
     act[A_FWD] = 1;

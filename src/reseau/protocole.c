@@ -817,6 +817,7 @@ static void apply_event(const NetEvent *ev) {
         int k = ev->actor, v = ev->target;
         if (v >= MAXP) break;
         kfeed_add(k, v, ev->sub, 0);
+        maps_heat_add(k, v);                              /* avant que la victime ne disparaisse */
         V3 at = v == myId ? pcenter() : np_center(v);
         const float *vc0 = pcolor(v);                     /* le corps eclate dans la couleur de son equipe */
         burst(at, v3(vc0[0], vc0[1], vc0[2]), 70, 12, 0.9f, 0.18f);

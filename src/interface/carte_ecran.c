@@ -344,6 +344,49 @@ static void maps_draw_3d(float x0, float y0, float S, int scrW, int scrH, const 
     }
 }
 
+/* ---- carte de chaleur : ou l'on tue, ou l'on meurt (affichee a la fin du match) ---- */
+#define MAPS_HEAT_N 400
+typedef struct { V3 kill, death; int self; } MapsHeat;   /* kill : position du tueur (absente si suicide) */
+static MapsHeat mapsHeat[MAPS_HEAT_N];
+static int mapsHeatN;
+
+static V3 maps_pos_of(int i) { return i == myId && !spectating ? P.pos : NP[i].disp; }
+
+static void maps_heat_add(int killer, int victim) {
+    if (mapsHeatN >= MAPS_HEAT_N || victim < 0 || victim >= MAXP) return;
+    MapsHeat *h = &mapsHeat[mapsHeatN++];
+    h->death = maps_pos_of(victim);
+    h->self = killer < 0 || killer >= MAXP || killer == victim;
+    h->kill = h->self ? h->death : maps_pos_of(killer);
+}
+
+static void maps_blob(float x, float y, float r, float cr, float cg, float cb, float a) {   /* tache degradee */
+    glBegin(GL_TRIANGLE_FAN);
+    glColor4f(cr, cg, cb, a);
+    glVertex2f(x, y);
+    glColor4f(cr, cg, cb, 0);
+    for (int s = 0; s <= 24; s++) glVertex2f(x + r * cosf(s * PI / 12), y + r * sinf(s * PI / 12));
+    glEnd();
+}
+
+static void maps_draw_heat(const MapView *v, float S) {
+    float sx, sy, r = MAPS_HEAT_R * v->k;
+    char buf[64];
+    rect(v->x0, v->y0, S, S, 0, 0, 0.02f, 0.45f);         /* le decor s'efface un peu sous la chaleur */
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);                    /* additif : les taches qui se recouvrent chauffent */
+    for (int i = 0; i < mapsHeatN; i++) {
+        maps_pt(v, mapsHeat[i].death, &sx, &sy); maps_blob(sx, sy, r, 1, 0.22f, 0.15f, 0.45f);
+        if (!mapsHeat[i].self) { maps_pt(v, mapsHeat[i].kill, &sx, &sy); maps_blob(sx, sy, r * 0.8f, 1, 0.8f, 0.25f, 0.35f); }
+    }
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    rect(v->x0, v->y0 + S - 40, S, 40, 0.02f, 0.02f, 0.05f, 0.8f);
+    snprintf(buf, sizeof buf, "CARTE DE CHALEUR - %d kills", mapsHeatN);
+    text(0, v->x0 + 14, v->y0 + S - 14, buf, 1, 1, 1, 1);
+    float lx = v->x0 + S - 330;
+    rect(lx, v->y0 + S - 28, 14, 14, 1, 0.3f, 0.2f, 1);  text(0, lx + 22, v->y0 + S - 14, "morts", 1, 0.6f, 0.5f, 1);
+    rect(lx + 130, v->y0 + S - 28, 14, 14, 1, 0.8f, 0.3f, 1); text(0, lx + 152, v->y0 + S - 14, "tireurs", 1, 0.85f, 0.5f, 1);
+}
+
 /* ---- courbe de vitesse : un point toutes les MAPS_SPD_DT s par joueur, toute la partie ---- */
 #define MAPS_SPD_DT 0.5
 #define MAPS_SPD_N  1300                                  /* 650 s : un match (MATCH_TIME) et sa fin */
@@ -525,6 +568,13 @@ static void maps_draw_panel(float x, float y, float w, float h) {
 
 static void maps_shot_fill(void) {                       /* --shot carte*.bmp : une minute de vitesses inventees */
     mapsSpdN = 120; mapsSpdT = nowT + 1e6;
+    mapsHeatN = 0;                                        /* ...et des kills autour du centre et des pads */
+    for (int i = 0; i < 46; i++) {
+        float a = i * 2.4f, d = i % 3 ? 14 + 25 * frand() : 50 + 10 * frand();
+        mapsHeat[mapsHeatN].death = v3(cosf(a) * d, 0, sinf(a) * d);
+        mapsHeat[mapsHeatN].kill = v3(cosf(a + 0.5f) * (d + 15), 0, sinf(a + 0.5f) * (d + 15));
+        mapsHeat[mapsHeatN++].self = i % 9 == 0;
+    }
     for (int i = 0; i <= MAXP; i++)
         for (int k = 0; k < mapsSpdN; k++) {
             float v = 14 + 9 * sinf(k * 0.11f + i * 1.7f) + 6 * sinf(k * 0.37f + i) + (k % 40 > 34 ? 18 : 0);
@@ -547,13 +597,14 @@ static void draw_map_screen(int w, int h) {
         mapsMaxSpeed = 0;
         for (int i = 0; i <= MAXP; i++) mapsTrailN[i] = 0;
         maps_speed_reset();
+        mapsHeatN = 0;
         text_c(2, w * 0.5f, h * 0.5f, "VELOCITY", 1, 1, 1, 1);
         text_c(0, w * 0.5f, h * 0.5f + 50, "la carte de la partie s'affichera ici", 0.6f, 0.7f, 0.85f, 0.6f + 0.4f * sinf((float)nowT * 2));
         return;
     }
     {                                                     /* nouveau match : chrono revenu en arriere */
         static float lastMatchT;
-        if (dmMode && matchT + 1 < lastMatchT) { maps_speed_reset(); mapsMaxSpeed = 0; }
+        if (dmMode && matchT + 1 < lastMatchT) { maps_speed_reset(); mapsMaxSpeed = 0; mapsHeatN = 0; }
         lastMatchT = matchT;
     }
     if (!P.dead) mapsMaxSpeed = fmaxf(mapsMaxSpeed, hlen(P.vel));
@@ -569,8 +620,10 @@ static void draw_map_screen(int w, int h) {
     mapsMnX = boxes[0].mn.x; mapsMnZ = boxes[0].mn.z;
     float span = fmaxf(boxes[0].mx.x - boxes[0].mn.x, boxes[0].mx.z - boxes[0].mn.z);
     MapView v = { m, wide ? (h - S) * 0.5f : m, S / fmaxf(span, 1) };
-    if (mapView3d) maps_draw_3d(v.x0, v.y0, S, w, h, pl, n);
+    int heat = dmMode && matchOver;                       /* fin de match : carte de chaleur, toujours vue de dessus */
+    if (mapView3d && !heat) maps_draw_3d(v.x0, v.y0, S, w, h, pl, n);
     else maps_draw_map(&v, S, pl, n);
+    if (heat) maps_draw_heat(&v, S);
     if (wide) maps_draw_panel(m + S + 60, m, w - S - 3 * m - 60, h - 2 * m);
     else maps_draw_panel(m, m + S + 60, w - 2 * m, h - S - 3 * m - 60);
 }

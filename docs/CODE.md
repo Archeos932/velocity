@@ -612,6 +612,9 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
 - **Courbe de vitesse** (`maps_speed_tick`, `maps_draw_speed`) : un point toutes les 0,5 s par joueur (`mapsSpd`,
   vitesse ×4 sur un octet), interrompue pendant les morts ; 60 dernières secondes en partie, toute la partie à la fin.
   Seulement les joueurs visibles (`maps_sees`). Remise à zéro hors partie et quand le chrono du match repart.
+- **Carte de chaleur** (`maps_heat_add` appelé par `apply_event` sur `EV_KILL`, `maps_draw_heat`) : position de la
+  victime (rouge) et du tireur (jaune) à chaque kill ; taches additives de rayon `MAPS_HEAT_R`. Affichée à la fin du
+  match (`matchOver`), toujours en vue de dessus. Capture : `--shot carte_dm_equipes_fin.bmp`.
 - Réglage : PARAMETRES > « 2e ECRAN : NON / HAUT / 3D » (`second_ecran=`, `carte_vue=` dans `velocity.ini`).
   Jamais en `--bot`/`--shot`. Capture de la vue 3D : `--shot carte3d.bmp`, `carte3d_dm.bmp`…
 - Capture : `--shot carte.bmp` (solo), `carte_dm.bmp`, `carte_dm_equipes.bmp` dessinent cet écran dans la fenêtre du jeu.

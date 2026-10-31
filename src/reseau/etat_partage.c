@@ -161,6 +161,7 @@ static int saw_parry(Proj *p, V3 eye, V3 f, float range, float speedMult);
 static void saw_remove_owner(int id);
 /* Tesla : EV_TESLA (definie avec les autres net_fx_*) */
 static void net_fx_tesla(int sub, unsigned int netId, V3 pos, int actor, int target);
+static void maps_heat_add(int killer, int victim);         /* carte de chaleur du 2e ecran (interface/carte_ecran.c) */
 /* --- Ventouse : definies apres la Scie (mines) et avec les autres net_fx_* (reseau) --- */
 static int mine_explode(Proj *p, int boosted, int byShot);
 static int mine_shootable(const Proj *p);
