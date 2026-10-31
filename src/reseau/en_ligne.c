@@ -337,7 +337,7 @@ static void lb_room(const char *id, int players, int maxp, int spec, const char 
     snprintf(found[k].id, sizeof found[k].id, "%s", id);
     snprintf(found[k].name, sizeof found[k].name, "%s", name);
     found[k].addr = a; found[k].players = players; found[k].maxp = maxp; found[k].spec = spec;
-    found[k].online = 1; found[k].seen = nowT;
+    found[k].online = 1; found[k].seen = nowT; found[k].map = -1;
 }
 
 static void lb_line(const char *s) {

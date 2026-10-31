@@ -218,10 +218,10 @@ static void draw_mine_hud(float cx, float cy) {
 
 /* radar des allies (mode equipes) : carte vue de dessus, nord en haut, moi = fleche, allies = points */
 static void draw_radar(float x, float y, float sz) {
-    float W = ms(56), k = sz / (2 * W);
+    float W = fmaxf(fmaxf(-mapBox.mn.x, mapBox.mx.x), fmaxf(-mapBox.mn.z, mapBox.mx.z)), k = sz / (2 * W);
     rect(x, y, sz, sz, 0.02f, 0.03f, 0.07f, 0.6f);
     rect(x, y, sz, 2, 0.5f, 0.9f, 1.0f, 0.5f);
-    for (int i = 1; i < nb; i++) {                        /* reperes : grandes structures seulement */
+    for (int i = mapFirst; i < nb; i++) {                 /* reperes : grandes structures seulement */
         Box *b = &boxes[i];
         if (b->mx.y - b->mn.y < 0.9f || (b->mx.x - b->mn.x) * (b->mx.z - b->mn.z) < 30) continue;
         rect(x + (b->mn.x + W) * k, y + (b->mn.z + W) * k, (b->mx.x - b->mn.x) * k, (b->mx.z - b->mn.z) * k, 0.4f, 0.45f, 0.6f, 0.35f);
@@ -352,6 +352,23 @@ static void draw_hud(void) {
         rect(0, 0, (float)winW, (float)winH, 0.6f, 0, 0, 0.12f + 0.06f * sinf(gameTime * 6));
     }
     if (P.hurtFlash > 0) rect(0, 0, (float)winW, (float)winH, 0.8f, 0.0f, 0.05f, P.hurtFlash * 0.35f);
+    if (maps[curMap].killY > -999 && !P.dead && !spectating && P.vel.y < 0 && P.pos.y < maps[curMap].killY + VOID_WARN_H) {
+        float k = clampf(1 - (P.pos.y - maps[curMap].killY) / VOID_WARN_H, 0, 1), W = (float)winW, H = (float)winH, m = H * 0.3f;
+        glBegin(GL_QUADS);                                /* kill zone : vignette rouge, on a encore le temps d'un grappin */
+        for (int e = 0; e < 4; e++) {                     /* bord haut, bas, gauche, droite : rouge au bord, transparent vers le centre */
+            float x0 = e == 3 ? W - m : 0, y0 = e == 1 ? H - m : 0, x1 = e == 2 ? m : W, y1 = e == 0 ? m : H;
+            float ao[4] = { k * 0.7f, k * 0.7f, k * 0.7f, k * 0.7f };   /* alpha des coins : (x0,y0) (x1,y0) (x1,y1) (x0,y1) */
+            if (e == 0) ao[2] = ao[3] = 0;
+            if (e == 1) ao[0] = ao[1] = 0;
+            if (e == 2) ao[1] = ao[2] = 0;
+            if (e == 3) ao[0] = ao[3] = 0;
+            glColor4f(0.9f, 0, 0.05f, ao[0]); glVertex2f(x0, y0);
+            glColor4f(0.9f, 0, 0.05f, ao[1]); glVertex2f(x1, y0);
+            glColor4f(0.9f, 0, 0.05f, ao[2]); glVertex2f(x1, y1);
+            glColor4f(0.9f, 0, 0.05f, ao[3]); glVertex2f(x0, y1);
+        }
+        glEnd();
+    }
     for (int i = 0; i < MAXDN; i++) {                     /* chiffres de degats */
         DmgNum *d = &DN[i];
         float sx, sy;
@@ -682,23 +699,49 @@ static void draw_hud(void) {
         draw_saw_hud(cx, cy);                                 /* Scie */
         if (P.weapon == WP_TESLA && !P.dead) draw_tesla_hud(cx, cy);   /* Tesla */
         draw_mine_hud(cx, cy);                                /* Ventouse */
-        for (int i = 0; i < COIN_MAX; i++) {                 /* pieces disponibles */
-            float fill = clampf(P.coins - i, 0, 1), x = winW - 30.0f - (COIN_MAX - i) * 20.0f, y = winH - 96.0f;
-            rect(x, y, 14, 14, 0.15f, 0.12f, 0.05f, 0.7f);
-            rect(x, y + 14 * (1 - fill), 14, 14 * fill, 1, 0.82f, 0.3f, fill >= 1 ? 1.0f : 0.5f);
-        }
-        {
-            char kb[40];
-            snprintf(kb, sizeof kb, "[%s]", bind_text(A_COIN));
-            text(0, winW - 36.0f - COIN_MAX * 20.0f - fontW[0] * (float)strlen(kb), winH - 83.0f, kb, 0.8f, 0.7f, 0.4f, 0.9f);
+        {                                                     /* Competences : charges, nom, etat */
+            const SkillDef *sd = &skillDef[P.skill];
+            char kb[64];
+            for (int i = 0; i < sd->max; i++) {
+                float fill = clampf(P.skillCh - i, 0, 1), x = winW - 30.0f - (sd->max - i) * 20.0f, y = winH - 96.0f;
+                rect(x, y, 14, 14, sd->r * 0.15f, sd->g * 0.15f, sd->b * 0.15f, 0.7f);
+                rect(x, y + 14 * (1 - fill), 14, 14 * fill, sd->r, sd->g, sd->b, fill >= 1 ? 1.0f : 0.5f);
+            }
+            snprintf(kb, sizeof kb, "%s [%s]", sd->name, bind_text(A_SKILL));
+            text(0, winW - 36.0f - sd->max * 20.0f - fontW[0] * (float)strlen(kb), winH - 83.0f, kb, sd->r * 0.8f, sd->g * 0.8f, sd->b * 0.8f, 0.9f);
+            const char *st = P.ricArmed ? "RICOCHET ARME" : P.chargeT > 0 ? "CHARGE PRETE x1,5" : NULL;
+            if (st) text_c(0, cx, cy + 74, st, sd->r, sd->g, sd->b, 0.6f + 0.4f * sinf(gameTime * 12));
+            if (P.chargeHold > 0) {                           /* CHARGE : jauge de maintien */
+                rect(cx - 40, cy + 62, 80, 4, 0.1f, 0.1f, 0.15f, 0.7f);
+                rect(cx - 40, cy + 62, 80 * clampf(P.chargeHold / CHARGE_HOLD, 0, 1), 4, sd->r, sd->g, sd->b, 0.9f);
+            }
+            if (markedMeT > 0) text_c(1, cx, 120, "MARQUE : TU ES VISIBLE", 0.85f, 0.35f, 1, 0.5f + 0.5f * sinf(gameTime * 10));
+            for (int i = 0; i < MAXP + MAXE; i++) {          /* MARQUE : losange au-dessus des cibles, a travers les murs */
+                float sx, sy, mt = i < MAXP ? markP[i] : markE[i - MAXP];
+                if (mt <= 0) continue;
+                if (i < MAXP && !np_target(i)) continue;
+                V3 at = i < MAXP ? vadd(np_center(i), v3(0, 1.4f, 0)) : vadd(E[i - MAXP].pos, v3(0, 1.2f, 0));
+                if (!project(at, &sx, &sy)) continue;
+                float r = 10 + 2 * sinf(gameTime * 8);
+                if (i < MAXP) sy -= 26;                       /* au-dessus du nom du joueur */
+                for (int k = 0; k < 2; k++) {                 /* losange violet, coeur blanc */
+                    float q = k ? r * 0.45f : r;
+                    if (k) glColor4f(1, 1, 1, 0.95f); else glColor4f(0.85f, 0.35f, 1, 0.9f);
+                    glBegin(GL_QUADS);
+                    glVertex2f(sx, sy - q); glVertex2f(sx + q, sy); glVertex2f(sx, sy + q); glVertex2f(sx - q, sy);
+                    glEnd();
+                }
+            }
         }
         {                                                     /* le viseur s'allume sur une piece : doree = la mienne, rouge = adverse */
             V3 eye = eye_pos(), vd = view_dir();
             float tw = ray_world(eye, vd, 400, 0), t;
             for (int i = 0; i < MAXCOIN; i++)
-                if (!P.dead && CO[i].alive && ray_sphere(eye, vd, CO[i].pos, COIN_RADIUS, tw, &t)) {
+                if (!P.dead && CO[i].alive && !(CO[i].decoy && CO[i].owner != myId) && !decoy_skip(i, eye) &&
+                    ray_sphere(eye, vd, CO[i].pos, COIN_RADIUS, tw, &t)) {   /* MIRAGE adverse : le viseur ne le trahit pas */
                     glLineWidth(2);
-                    if (CO[i].owner == myId) glColor4f(1, 0.85f, 0.3f, 1); else glColor4f(1, 0.25f, 0.25f, 1);
+                    if (CO[i].decoy) glColor4f(0.4f, 0.85f, 1, 1);    /* mon leurre : cyan */
+                    else if (CO[i].owner == myId) glColor4f(1, 0.85f, 0.3f, 1); else glColor4f(1, 0.25f, 0.25f, 1);
                     glBegin(GL_LINE_LOOP);
                     glVertex2f(cx, cy - 11); glVertex2f(cx + 11, cy); glVertex2f(cx, cy + 11); glVertex2f(cx - 11, cy);
                     glEnd();
@@ -732,7 +775,7 @@ static void draw_hud(void) {
                 }
                 x += gw + fontW[0] * 3;
             }
-            if (wantLoadout[0] != P.loadout[0] || wantLoadout[1] != P.loadout[1] || wantMelee != P.meleeKind)
+            if (wantLoadout[0] != P.loadout[0] || wantLoadout[1] != P.loadout[1] || wantMelee != P.meleeKind || wantSkill != P.skill)
                 text(0, winW - 30.0f - fontW[0] * 32, winH - 120.0f, "nouveau loadout au prochain respawn", 0.6f, 0.6f, 0.65f, 0.8f);
         }
     }

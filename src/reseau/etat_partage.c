@@ -17,7 +17,7 @@
 enum { NET_OFF, NET_HOST, NET_CLIENT };
 enum { APP_MENU, APP_JOIN, APP_GAME };
 enum { W_RAIL, W_ROCKET, W_MELEE, W_HOOK, W_PARRY, W_SELF, W_COIN, W_SLAM, W_LANCE, W_FLAIL, W_FIST,
-       W_SHIELD, W_SHOTGUN, W_KINETIC, W_SAW, W_MINE, W_TESLA, W_COUNT };
+       W_SHIELD, W_SHOTGUN, W_KINETIC, W_SAW, W_MINE, W_TESLA, W_VOID, W_COUNT };   /* W_VOID : chute sous killY */
 enum { NF_CROUCH = 1, NF_SLIDE = 2, NF_WALLRUN = 4, NF_HOOK = 8, NF_DEAD = 16, NF_PARRY = 32 };
 
 typedef struct {                  /* ce que chaque joueur envoie de lui-meme */
@@ -52,6 +52,7 @@ typedef struct {
     /* --- Egide : derniere fois vu bouclier leve (hote) ; jauge, brise, arrache (hote : autorite ; clients : miroir) --- */
     double lastShieldT;
     float shieldGauge, shieldBrokenT, shieldRipT;
+    int lastHitBy; double lastHitT;                       /* kill zone (hote) : dernier attaquant et heure de sa touche */
     struct sockaddr_in addr;      /* hote seulement */
 } NetPlayer;
 
@@ -115,6 +116,27 @@ static V3 shield_front_ofs(int i) {                       /* devant le torse de 
     return v3(sinf(yaw) * 0.55f, 1.05f, -cosf(yaw) * 0.55f);
 }
 /* --- fin Egide --- */
+
+/* --- Competences : bonus de degats du joueur local (MARQUE, CHARGE), applique a chaque point d'entree des degats --- */
+static float markP[MAXP], markE[MAXE];                   /* cibles que j'ai marquees : temps restant */
+static float markedMeT;                                   /* un adversaire m'a marque (HUD) */
+static int skillUse[SK_COUNT], skillBonus;                /* journal : utilisations, touches bonifiees */
+static float lastHpSeen = 100;                            /* CHARGE : PV du tick precedent (perdue si touche) */
+static int allinActive;                                   /* ALL IN ONE en cours : un seul armement de RICOCHET pour l'eventail */
+static float skill_out(int player, int enemy, float dmg) {
+    float m = 1;
+    if (player >= 0 && player < MAXP && markP[player] > 0) m *= MARK_MULT;
+    if (enemy >= 0 && enemy < MAXE && markE[enemy] > 0) m *= MARK_MULT;
+    if (P.chargeT > 0) { m *= CHARGE_MULT; if (P.chargeT > CHARGE_GRACE) P.chargeT = CHARGE_GRACE; }
+    if (m > 1) skillBonus++;
+    return dmg * m;
+}
+static int ric_take(void) {                               /* RICOCHET arme : rebonds du projectile tire maintenant */
+    if (!P.ricArmed) return 0;
+    if (!allinActive) P.ricArmed = 0;
+    return RIC_BOUNCES;
+}
+/* --- fin Competences --- */
 
 static int botMode;                                       /* 1 = bot hote, 2 = bot client (tests reseau) */
 static int botLevel = 1;                                  /* difficulte du bot : 0 facile, 1 normal, 2 difficile */

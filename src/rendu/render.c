@@ -29,6 +29,51 @@ static void BT(int k) {
     if (k) benchT[k] += (double)(n.QuadPart - last.QuadPart) * 1000.0 / (double)fq.QuadPart;
     last = n;
 }
+/* elements animes des cartes, hors liste d'affichage : chevrons des bandes d'acceleration, plan de mort rouge */
+static void draw_map_fx(void) {
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glLineWidth(4);
+    glBegin(GL_LINES);
+    for (int i = 0; i < nb; i++) {
+        if (boxes[i].kind != B_SPEED) continue;
+        Box *b = &boxes[i];
+        V3 d = vnorm(b->launch), s = v3(-d.z, 0, d.x);
+        V3 c = vlerp(b->mn, b->mx, 0.5f);
+        float len = fabsf(vdot(vsub(b->mx, b->mn), d)), wid = fabsf(vdot(vsub(b->mx, b->mn), s)), y = b->mx.y + 0.03f;
+        float ofs = fmodf(gameTime * 9, 3);
+        for (float u = -len * 0.5f + ofs; u < len * 0.5f - 1; u += 3) {   /* chevrons qui defilent dans le sens de la poussee */
+            V3 tip = vadd(c, vmul(d, u + 1)), l = vadd(vadd(c, vmul(d, u)), vmul(s, wid * 0.35f)), r = vsub(vadd(c, vmul(d, u)), vmul(s, wid * 0.35f));
+            float a = 0.35f + 0.5f * clampf(1 - fabsf(u) / (len * 0.5f), 0, 1);
+            glColor4f(1.0f, 0.35f, 0.85f, a);
+            glVertex3f(l.x, y, l.z); glVertex3f(tip.x, y, tip.z);
+            glVertex3f(tip.x, y, tip.z); glVertex3f(r.x, y, r.z);
+        }
+    }
+    glEnd();
+    float ky = maps[curMap].killY;
+    if (ky > -999) {                                      /* plan de mort : grille rouge qui respire, 3 m sous killY */
+        float py = ky - 3, R = 150, pulse = 0.5f + 0.5f * sinf(gameTime * 2.2f), sc = fmodf(gameTime * 2, 6);
+        glDisable(GL_FOG);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glBegin(GL_QUADS);
+        glColor4f(0.25f, 0.0f, 0.02f, 0.75f);
+        glVertex3f(-R, py - 0.05f, -R); glVertex3f(R, py - 0.05f, -R); glVertex3f(R, py - 0.05f, R); glVertex3f(-R, py - 0.05f, R);
+        glEnd();
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+        glLineWidth(2);
+        glBegin(GL_LINES);
+        for (float u = -R + sc; u <= R; u += 6) {
+            glColor4f(1.0f, 0.15f, 0.1f, 0.25f + 0.25f * pulse);
+            glVertex3f(u, py, -R); glVertex3f(u, py, R);
+            glVertex3f(-R, py, u); glVertex3f(R, py, u);
+        }
+        glEnd();
+        glEnable(GL_FOG);
+    }
+    glLineWidth(1);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+}
+
 static void render(float alpha, float frameDt) {
     if (shotMap) { maps_shot_fill(); draw_map_screen(winW, winH); return; }   /* --shot carte*.bmp : capture du second ecran */
     BT(0);
@@ -63,7 +108,8 @@ static void render(float alpha, float frameDt) {
     glGetFloatv(GL_MODELVIEW_MATRIX, mvMat);
     glGetFloatv(GL_PROJECTION_MATRIX, prMat);
 
-    GLfloat fogc[4] = { gxFogCol[0], gxFogCol[1], gxFogCol[2], 1 };
+    const float *fgc = map_fog_col();
+    GLfloat fogc[4] = { fgc[0], fgc[1], fgc[2], 1 };
     glEnable(GL_FOG);
     glFogi(GL_FOG_MODE, GL_LINEAR);
     glFogfv(GL_FOG_COLOR, fogc);
@@ -78,7 +124,7 @@ static void render(float alpha, float frameDt) {
     BT(1);
     draw_sky_dome(eye);
     BT(2);
-    glCallList(skylineList);
+    if (curMap == 0) glCallList(skylineList);             /* la ville entoure l'Arene ; les autres cartes ont leur ciel seul */
     BT(3);
     glCallList(worldList);
     BT(4);
@@ -132,6 +178,18 @@ static void render(float alpha, float frameDt) {
     glDisable(GL_LIGHTING);
     for (int i = 0; i < MAXCOIN; i++) {                  /* pieces : disques dores qui tournent */
         if (!CO[i].alive) continue;
+        if (CO[i].decoy) {                                /* MIRAGE : silhouette du lanceur, qui clignote en se dissipant */
+            const float *pc = pcol[CO[i].owner < MAXP ? CO[i].owner : 0];
+            float k = CO[i].life < 0.6f && fmodf(CO[i].life * 12, 1) < 0.5f ? 0.4f : 0.85f;
+            glPushMatrix();
+            glTranslatef(CO[i].pos.x, CO[i].pos.y, CO[i].pos.z);
+            glRotatef(-CO[i].spin * 180 / PI, 0, 1, 0);
+            glColor3f(pc[0] * k, pc[1] * k, pc[2] * k);
+            box_faces(v3(-HW, -0.9f, -HW * 0.6f), v3(HW, 0.55f, HW * 0.6f));
+            box_faces(v3(-0.22f, 0.55f, -0.22f), v3(0.22f, 0.9f, 0.22f));
+            glPopMatrix();
+            continue;
+        }
         glPushMatrix();
         glTranslatef(CO[i].pos.x, CO[i].pos.y, CO[i].pos.z);
         glRotatef(CO[i].spin * 900, 0, 1, 0);
@@ -243,6 +301,7 @@ static void render(float alpha, float frameDt) {
     }
     for (int i = 0; i < MAXCOIN; i++) {                  /* reflet des pieces */
         if (!CO[i].alive) continue;
+        if (CO[i].decoy) { glColor4f(0.4f, 0.85f, 1, 0.25f + 0.15f * sinf(gameTime * 20)); billboard(CO[i].pos, 2.4f); continue; }
         if (CO[i].teslaT > 0) glColor4f(0.45f, 0.7f, 1, 0.6f + 0.4f * sinf(CO[i].spin * 40));   /* Tesla : lueur bleue */
         else glColor4f(1, 0.85f, 0.4f, 0.5f + 0.4f * sinf(CO[i].spin * 25));
         billboard(CO[i].pos, 0.7f);
@@ -270,6 +329,7 @@ static void render(float alpha, float frameDt) {
     }
     glEnd();
     glDisable(GL_TEXTURE_2D);
+    draw_map_fx();                                        /* bandes d'acceleration, plan de mort */
     draw_slam_marker();
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);

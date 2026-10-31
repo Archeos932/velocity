@@ -63,7 +63,7 @@ static int tesla_trace(V3 eye, V3 d, float range, int shooter, TeslaTgt out[3], 
     if (nc) {
         *nc = 0;
         for (int i = 0; i < MAXCOIN; i++)
-            if (CO[i].alive && CO[i].teslaT <= 0 && ray_sphere(eye, d, CO[i].pos, COIN_RADIUS, tw, &t)) coins[(*nc)++] = i;
+            if (CO[i].alive && !CO[i].decoy && CO[i].teslaT <= 0 && ray_sphere(eye, d, CO[i].pos, COIN_RADIUS, tw, &t)) coins[(*nc)++] = i;   /* MIRAGE : pas de relais */
     }
     if (n && out[0].kind == TK_PLAYER && shield_faces(out[0].idx, d, SHB_DIRECT)) return n;   /* Egide : pas de chaine depuis un bouclier */
     for (int k = 0; n && k < TESLA_CHAIN_N; k++) {

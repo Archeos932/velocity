@@ -29,8 +29,10 @@ static void host_kill(int killer, int victim, int kind) {
 }
 
 static int hitCount[W_COUNT], parryCount;                       /* statistiques pour le journal du bot */
+static int voidCredited, voidSuicides;                    /* kill zone (hote) : chutes creditees a un attaquant / suicides */
 static double lifeFirstHitT[MAXP], ttkSum;                /* temps pour tuer : du premier degat (a pleine vie) au kill */
 static int ttkN, oneShots, meleeParries, clashes;
+static int burstKills;                                    /* tue depuis la pleine vie en moins de 0,1 s mais en plusieurs touches (ALL IN ONE) */
 static int slamParried, slamRailCombos;                   /* Enclume : ondes parees, onde puis rail sur la meme cible */
 static int sawHostStat[6], sawHostBounceHits;             /* Scie : EV_SAW par sous-type, touches apres renvoi */
 static double slamLastHitT[MAXP];
@@ -153,7 +155,8 @@ static void host_take_pickup(int i, int who) {
 /* degats arbitres : PV, plafond par touche, temps pour tuer, kill (EV_HIT, et les decisions du bouclier) */
 static void host_apply_damage(int from, int v, float dmgIn, int w) {
     float before = NP[v].hp;
-    float dmg = w == W_SELF ? dmgIn : fminf(dmgIn, PVP_HIT_CAP);   /* plafond par touche */
+    float dmg = (w == W_SELF || w == W_VOID) ? dmgIn : fminf(dmgIn, PVP_HIT_CAP);   /* plafond par touche */
+    if (w != W_SELF && w != W_VOID && from != v && from < MAXP) { NP[v].lastHitBy = from; NP[v].lastHitT = nowT; }   /* kill zone */
     if (before >= 99.9f) lifeFirstHitT[v] = nowT;
     if (w == W_SLAM) { slamLastHitT[v] = nowT; slamLastBy[v] = from; }   /* onde puis rail : le combo vise */
     else if (w == W_RAIL && slamLastHitT[v] > 0 && slamLastBy[v] == from && nowT - slamLastHitT[v] < 1.5) {
@@ -161,9 +164,18 @@ static void host_apply_damage(int from, int v, float dmgIn, int w) {
     }
     NP[v].hp -= dmg;
     if (NP[v].hp <= 0 && NP[v].alive) {
+        if (w == W_VOID) {                                /* chute : kill au dernier attaquant s'il a touche moins de 4 s avant */
+            int k = NP[v].lastHitBy;
+            int credit = NP[v].lastHitT > 0 && nowT - NP[v].lastHitT < VOID_CREDIT_T && k >= 0 && k < MAXP && k != v && NP[k].active;
+            if (credit) voidCredited++; else voidSuicides++;
+            netlog("vide : %s tombe%s%s", pname(v), credit ? ", kill a " : " (suicide)", credit ? pname(k) : "");
+            host_kill(credit ? k : v, v, W_VOID);
+            return;
+        }
         if (w != W_SELF) {
             ttkSum += nowT - lifeFirstHitT[v]; ttkN++;
             if (before >= 99.9f) oneShots++;              /* tue d'un seul coup a pleine vie */
+            else if (nowT - lifeFirstHitT[v] < 0.1) burstKills++;   /* une salve (ALL IN ONE) */
         }
         host_kill(from, v, w);
     }
@@ -313,7 +325,7 @@ static int host_handle(const NetEvent *ev) {
         if (v >= MAXP || !NP[v].active || !NP[v].alive || matchOver) return 1;
         if (ev->sub == W_TESLA && ev->from < MAXP && tesla_host_reflect(v, ev->from)) return 1;   /* Tesla : decharge renvoyee */
         int shieldFace = 1;                               /* --- Egide : face exigee pour parer, renvoi du hitscan, conversion --- */
-        if ((NP[v].st.pad & 0x0F) == MK_SHIELD && ev->sub != W_SELF && ev->from < MAXP) {
+        if ((NP[v].st.pad & 0x0F) == MK_SHIELD && ev->sub != W_SELF && ev->sub != W_VOID && ev->from < MAXP) {
             V3 sd = vnorm(vsub(np_center(v), np_center(ev->from)));   /* ligne attaquant -> victime vue par l'hote */
             int perfect = host_shield_perfect(v), face = vdot(sd, np_face(v)) < SHIELD_COS;
             if (is_parryable_w(ev->sub) && ev->sub != W_SLAM) shieldFace = face;   /* l'onde se pare toujours au timing */
@@ -343,23 +355,27 @@ static int host_handle(const NetEvent *ev) {
 }
 
 static V3 pick_spawn(int who) {
-    static const float pts[][3] = {
-        { 0, 0, 24 }, { 0, 0, -24 }, { 24, 0, 0 }, { -24, 0, 0 }, { -30, 0, -30 }, { 30, 0, -30 }, { 30, 0, 30 },
-        { -30, 0, 30 }, { 36, 7, 0 }, { -36, 7, 0 }, { 0, 7, 36 }, { 0, 7, -36 }, { 5, 4, 5 }, { -46, 0, 0 }, { 46, 0, 0 },
-    };
-    /* equipes : chaque camp a sa moitie de carte (bleus au nord, z < 0 ; rouges au sud, miroir en z) */
-    static const float teamPts[][3] = {
+    static const float teamPts[][3] = {                  /* Arene en equipes : chaque camp a sa moitie (bleus au nord, z < 0) */
         { 0, 0, -24 }, { -30, 0, -30 }, { 30, 0, -30 }, { 0, 7, -36 }, { -14, 0, -46 }, { 14, 0, -46 },
         { -24, 0, -10 }, { 24, 0, -10 }, { -46, 0, -14 }, { 46, 0, -14 },
     };
+    const MapDef *md = &maps[curMap];                    /* points de depart de la carte (coordonnees du monde) */
     int team = teamSize > 0 && who >= 0 && who < MAXP;
-    int n = team ? (int)(sizeof teamPts / sizeof teamPts[0]) : (int)(sizeof pts / sizeof pts[0]);
+    int areneTeam = team && curMap == 0;
+    int n = areneTeam ? (int)(sizeof teamPts / sizeof teamPts[0]) : md->nspawns;
     float zs = team && NP[who].team == 1 ? -1.0f : 1.0f;
+    /* autres cartes en equipes : chaque camp prend les departs de son cote (axe le plus long de la carte) */
+    float ex = 0, ez = 0;
+    for (int k = 0; k < md->nspawns; k++) { ex = fmaxf(ex, fabsf(md->spawns[k][0])); ez = fmaxf(ez, fabsf(md->spawns[k][2])); }
+    int axis = ex > ez ? 0 : 2, sideN = 0;
+    if (team && !areneTeam)
+        for (int k = 0; k < md->nspawns; k++) sideN += md->spawns[k][axis] * -zs > 0.5f;
     float best = -1;
-    V3 bp = team ? v3(0, 0, ms(-24 * zs)) : v3(0, 0, 24);
+    V3 bp = areneTeam ? v3(0, 0, ms(-24 * zs)) : md->start;
     for (int k = 0; k < n; k++) {
-        const float *q = team ? teamPts[k] : pts[k];
-        V3 p = v3(ms(q[0]), q[1], ms(q[2] * (team ? zs : 1.0f)));
+        V3 p = areneTeam ? v3(ms(teamPts[k][0]), teamPts[k][1], ms(teamPts[k][2] * zs))
+                         : v3(md->spawns[k][0], md->spawns[k][1], md->spawns[k][2]);
+        if (team && !areneTeam && sideN > 0 && md->spawns[k][axis] * -zs <= 0.5f) continue;   /* pas de son cote */
         if (!pos_free(p, H_STAND)) continue;
         float md = 200;                                   /* le plus loin possible des autres (des ennemis en equipes) */
         for (int i = 0; i < MAXP; i++) {
@@ -376,6 +392,7 @@ static V3 pick_spawn(int who) {
 static void host_respawn(int i) {
     V3 p = pick_spawn(i);
     NP[i].alive = 1; NP[i].hp = 100;
+    NP[i].lastHitT = 0; NP[i].lastHitBy = -1;            /* kill zone : une nouvelle vie ne doit rien a personne */
     NetEvent e = ev_new(EV_RESPAWN);
     e.target = (unsigned char)i; vf(e.f, p);
     net_emit(&e);
@@ -398,6 +415,7 @@ static void host_start_match(void) {
     host_balance_teams();
     for (int i = 0; i < MAXP; i++) NP[i].kills = NP[i].deaths = 0;
     NetEvent e = ev_new(EV_MATCH);
+    e.target = (unsigned char)(mapRotate ? (curMap + 1) % NMAPS : curMap);   /* ROTATION : carte suivante a chaque match */
     net_emit(&e);
     apply_event(&e);
     for (int i = 0; i < MAXP; i++) if (NP[i].active) host_respawn(i);
@@ -457,7 +475,7 @@ static void host_on_join(const PkJoin *pj, const struct sockaddr_in *from) {
         for (int i = 0; i < MAXSPEC; i++) if (SP[i].active && same_addr(&SP[i].addr, from)) k = i;
         for (int i = 0; i < MAXSPEC && k < 0; i++) if (!SP[i].active) k = i;
         PkWelcome w;
-        head(&w.h, PK_WELCOME); w.id = MAXP; w.refused = k < 0; w.pad[0] = w.pad[1] = 0;
+        head(&w.h, PK_WELCOME); w.id = MAXP; w.refused = k < 0; w.pad[0] = (unsigned char)curMap; w.pad[1] = 0;
         net_send(&w, sizeof w, from);
         if (k >= 0) {
             if (!SP[k].active) netlog("spectateur %d arrive", k);
@@ -473,7 +491,7 @@ static void host_on_join(const PkJoin *pj, const struct sockaddr_in *from) {
         for (int i = 1; i < MAXP && count < host_max_players(); i++) if (!NP[i].active) { id = i; break; }
         if (id < 0) {
             PkWelcome w;
-            head(&w.h, PK_WELCOME); w.id = 0; w.refused = 1; w.pad[0] = w.pad[1] = 0;
+            head(&w.h, PK_WELCOME); w.id = 0; w.refused = 1; w.pad[0] = (unsigned char)curMap; w.pad[1] = 0;
             net_send(&w, sizeof w, from);
             return;
         }
@@ -492,7 +510,7 @@ static void host_on_join(const PkJoin *pj, const struct sockaddr_in *from) {
         apply_event(&e);
     }
     PkWelcome w;
-    head(&w.h, PK_WELCOME); w.id = (unsigned char)id; w.refused = 0; w.pad[0] = w.pad[1] = 0;
+    head(&w.h, PK_WELCOME); w.id = (unsigned char)id; w.refused = 0; w.pad[0] = (unsigned char)curMap; w.pad[1] = 0;
     net_send(&w, sizeof w, from);
     host_send_roster();
 }
@@ -518,7 +536,7 @@ static void host_recv(PkHead *h, int n, struct sockaddr_in *from) {
         for (int i = 0; i < MAXP; i++) count += NP[i].active;
         head(&a.h, PK_ANNOUNCE);
         memcpy(a.name, myName, 16);
-        a.players = (unsigned char)count; a.maxp = (unsigned char)host_max_players(); a.teams = (unsigned char)teamSize; a.pad = 0;
+        a.players = (unsigned char)count; a.maxp = (unsigned char)host_max_players(); a.teams = (unsigned char)teamSize; a.map = (unsigned char)curMap;
         net_send(&a, sizeof a, from);
         break;
     }

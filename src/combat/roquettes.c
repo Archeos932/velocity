@@ -19,6 +19,7 @@ static unsigned int rocketCounter;
 static void fire_rocket(void) {
     if (P.ammo[WP_ROCKET] > 0) P.ammo[WP_ROCKET]--;      /* limitees : un rocket jump coute une roquette */
     Proj *p = spawn_proj(PR_ROCKET, eye_pos(), vmul(view_dir(), ROCKET_SPEED));
+    if (p) p->ricLeft = ric_take();                       /* RICOCHET */
     if (p && dmMode) {
         p->netId = ((unsigned int)(myId + 1) << 24) | (++rocketCounter & 0xFFFFFF);
         net_fx_rocket(p->pos, p->vel, p->netId);

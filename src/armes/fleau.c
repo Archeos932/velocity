@@ -49,7 +49,7 @@ static int flail_strike_coin(V3 eye) {
     float bestAx = -2, best = PARRY_AIM_COS;
     for (int i = 0; i < MAXCOIN; i++) {
         Coin *c = &CO[i];
-        if (!c->alive || c->owner != myId || c->flailStruck || c->teslaT > 0) continue;   /* seulement mes pieces */
+        if (!c->alive || c->owner != myId || c->flailStruck || c->teslaT > 0 || c->decoy) continue;   /* seulement mes pieces */
         if (!flail_in_arc(eye, c->pos, COIN_RADIUS, rel_speed(c->vel), 1)) continue;
         float ax = vdot(vnorm(vsub(c->pos, eye)), f);
         if (ax > bestAx) { bestAx = ax; ci = i; }

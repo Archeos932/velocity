@@ -16,6 +16,7 @@ static void set_frustum(float vfovDeg, float aspect, float zn, float zf) {
     glFrustum(-r, r, -t, t, zn, zf);
 }
 
+
 static void draw_enemy(Enemy *e) {
     V3 col = e->flash > 0 ? v3(1, 1, 1) : enemy_color(e->type);
     glPushMatrix();

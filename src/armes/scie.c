@@ -121,7 +121,7 @@ static void saw_coins(Proj *p, V3 dir, float t) {
     for (int i = 0; i < MAXCOIN && i < 32; i++) {
         Coin *c = &CO[i];
         float tc;
-        if (!c->alive || ((p->sawCoins >> i) & 1u)) continue;
+        if (!c->alive || c->decoy || ((p->sawCoins >> i) & 1u)) continue;   /* MIRAGE : le leurre ne se relance pas */
         if (!ray_sphere(p->pos, dir, c->pos, SAW_COIN_R, t, &tc)) continue;
         c->vel = v3(c->vel.x * 0.3f, SAW_COIN_KICK, c->vel.z * 0.3f);
         c->life += SAW_COIN_LIFE;
@@ -292,7 +292,7 @@ static void saw_tick(Proj *p, float dt) {
         }
         p->pos = vadd(p->pos, step);
         if (mine && p->sawState == SAW_PARRIED && vlen(vsub(p->pos, home)) < SAW_CATCH_R) { saw_catch(p, SAW_HOW_PARRIED); return; }
-        if (p->pos.y < SAW_LOST_Y || p->sawT > SAW_FLY_MAX) {
+        if (p->pos.y < map_lost_y() || p->sawT > SAW_FLY_MAX) {
             p->sawState = SAW_LOST; p->sawT = 0;
             if (mine) { sawStat[SS_LOST]++; if (botMode) netlog("scie : perdue"); }
             return;

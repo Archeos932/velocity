@@ -164,47 +164,90 @@ static void loadout_pick(int slot, int w) {               /* choisir pour un emp
 }
 
 static void draw_loadout(float cx, float cy) {
-    char buf[128];
+    char buf[160];
     rect(0, 0, (float)winW, (float)winH, 0.02f, 0.02f, 0.06f, 0.85f);
-    text_c(2, cx, cy - 300, "LOADOUT", 0.5f, 0.9f, 1.0f, 1);
-    text_c(0, cx, cy - 266, "1 arme de melee + 2 armes a distance ; la melee remplit les jauges de munitions",
+    /* mise en page du haut vers le bas : 4 rangees (etiquette 22 px, boutons 44 px, 18 px d'air), centree, jamais
+     * au-dessus du bord (fenetre reduite : 640 px de haut suffisent) */
+    const float R = 84;
+    float top = fmaxf(10, cy - (370 + 3 * R) * 0.5f), y;
+    text_c(2, cx, top + 50, "LOADOUT", 0.5f, 0.9f, 1.0f, 1);
+    text_c(0, cx, top + 80, "1 arme de melee + 1 competence + 2 armes a distance ; la melee remplit les jauges de munitions",
            0.7f, 0.75f, 0.85f, 1);
     float bw = winW < 1300 ? 118.0f : 150.0f, step = bw + 10, x0 = cx - step * WP_COUNT * 0.5f;
-    text(1, x0, cy - 215, "MELEE", 0.5f, 0.9f, 1.0f, 1);
+    y = top + 128;
+    text(1, x0, y - 8, "MELEE", 0.5f, 0.9f, 1.0f, 1);
     for (int m = 0; m < MK_COUNT; m++)
-        if (sel_button(x0 + m * step, cy - 195, bw, 44, meleeNames[m], m == wantMelee, mkReady[m], v3(1, 0.85f, 0.4f)))
+        if (sel_button(x0 + m * step, y, bw, 44, meleeNames[m], m == wantMelee, mkReady[m], v3(1, 0.85f, 0.4f)))
             wantMelee = m;
+    y += R;
+    text(1, x0, y - 8, "COMPETENCE", 0.5f, 0.9f, 1.0f, 1);
+    for (int k = 0; k < SK_COUNT; k++)                    /* Competences : la piece est l'une d'elles */
+        if (sel_button(x0 + k * step, y, bw, 44, skillDef[k].name, k == wantSkill, 1,
+                       v3(skillDef[k].r, skillDef[k].g, skillDef[k].b)))
+            wantSkill = k;
     for (int s = 0; s < 2; s++) {
-        float y = cy - 70 + s * 112.0f;
-        text(1, x0, y - 22, s ? "ARME 2" : "ARME 1", 0.5f, 0.9f, 1.0f, 1);
+        y += R;
+        text(1, x0, y - 8, s ? "ARME 2" : "ARME 1", 0.5f, 0.9f, 1.0f, 1);
         for (int w = 0; w < WP_COUNT; w++)
             if (sel_button(x0 + w * step, y, bw, 44, ammoDef[w].name, w == wantLoadout[s], wpReady[w],
                            v3(ammoDef[w].r, ammoDef[w].g, ammoDef[w].b)))
                 loadout_pick(s, w);
     }
-    for (int s = 0; s < 2; s++) {
+    y += 72;
+    for (int s = 0; s < 2; s++, y += 22) {
         const AmmoDef *d = &ammoDef[wantLoadout[s]];
         if (d->gauge <= 0) snprintf(buf, sizeof buf, "%s : objet unique, a recuperer", d->name);
         else snprintf(buf, sizeof buf, "%s : %d au spawn, %d max, %.0f pts par tir (%.1f coups d'epee)", d->name, d->start,
                       d->max, d->gauge, d->gauge / meleePts[MK_SWORD]);
-        text(0, x0, cy + 120 + s * 24.0f, buf, 0.8f, 0.82f, 0.9f, 1);
+        text(0, x0, y, buf, 0.8f, 0.82f, 0.9f, 1);
     }
     snprintf(buf, sizeof buf, "%s : %d pts par coup qui touche%s, +%d par kill, +%d par parry ; cellules : %d ou %d pts",
              meleeNames[wantMelee], meleePts[wantMelee], wantMelee == MK_FIST ? " (50 max par combo)" : "",   /* Poings */
              PTS_MELEE_KILL, PTS_PARRY, PICKUP_SMALL, PICKUP_BIG);
-    text(0, x0, cy + 168, buf, 1, 0.85f, 0.5f, 1);
-    if (appState == APP_GAME) text(0, x0, cy + 194, "pris en compte au prochain respawn", 0.6f, 0.6f, 0.7f, 1);
-    if (button(cx - 105, cy + 220, 210, 50, "VALIDER")) { loadoutOpen = 0; cfg_save(); }
+    text(0, x0, y, buf, 1, 0.85f, 0.5f, 1);
+    y += 22;
+    {                                                     /* Competences : description, charges sur la meme ligne si elle tient */
+        const SkillDef *sd = &skillDef[wantSkill];
+        char ch[48];
+        snprintf(ch, sizeof ch, "%d charge%s, %.0f s par charge", sd->max, sd->max > 1 ? "s" : "", sd->recharge);
+        snprintf(buf, sizeof buf, "%s : %s ; %s", sd->name, sd->desc, ch);
+        if (x0 + fontW[0] * (float)strlen(buf) > winW - 10) {
+            snprintf(buf, sizeof buf, "%s : %s", sd->name, sd->desc);
+            text(0, x0, y, buf, sd->r, sd->g, sd->b, 1);
+            y += 22;
+            snprintf(buf, sizeof buf, "%*s%s", (int)strlen(sd->name) + 3, "", ch);
+        }
+        text(0, x0, y, buf, sd->r, sd->g, sd->b, 1);
+        y += 22;
+    }
+    if (appState == APP_GAME) text(0, x0, y, "pris en compte au prochain respawn", 0.6f, 0.6f, 0.7f, 1);
+    if (button(cx - 105, y + 14, 210, 50, "VALIDER")) { loadoutOpen = 0; cfg_save(); }
     if (uiClick) uiClick = 0;
 }
 
 /* ecran de mort : les touches d'arme et de melee font defiler le loadout du prochain respawn */
 static void draw_death_loadout(float cx, float y) {
     char buf[160];
-    snprintf(buf, sizeof buf, "[%s] < %s >    [%s] < %s >    [%s] < %s >", bind_text(A_WEAP1), ammoDef[wantLoadout[0]].name,
-             bind_text(A_WEAP2), ammoDef[wantLoadout[1]].name, bind_text(A_MELEE), meleeNames[wantMelee]);
+    snprintf(buf, sizeof buf, "[%s] < %s >    [%s] < %s >    [%s] < %s >    [%s] < %s >", bind_text(A_WEAP1),
+             ammoDef[wantLoadout[0]].name, bind_text(A_WEAP2), ammoDef[wantLoadout[1]].name, bind_text(A_MELEE),
+             meleeNames[wantMelee], bind_text(A_SKILL), skillDef[wantSkill].name);
     text_c(0, cx, y, "LOADOUT DU PROCHAIN RESPAWN", 0.5f, 0.9f, 1.0f, 1);
     text_c(1, cx, y + 32, buf, 1, 0.9f, 0.6f, 1);
+}
+
+static void map_cycle(int d) {                            /* menu : carte suivante / precedente, montree en fond */
+    menuMap = (menuMap + d + NMAPS) % NMAPS;
+    if (appState == APP_MENU) menu_backdrop();
+    cfg_save();
+}
+static void draw_map_row(float bx, float y, float bw) {   /* ligne CARTE  < NOM >  ROTATION */
+    float aw = 46, rw = 128, mw = bw - rw - 8;
+    text(0, bx, y - 8, "CARTE", 0.7f, 0.75f, 0.85f, 1);
+    if (button(bx, y, aw, 46, "<")) map_cycle(-1);
+    rect(bx + aw + 4, y, mw - 2 * aw - 8, 46, 0.05f, 0.06f, 0.1f, 0.9f);
+    text_c(1, bx + mw * 0.5f, y + 23 + fontH[1] * 0.3f, maps[menuMap].name, 1, 0.9f, 0.6f, 1);
+    if (button(bx + mw - aw, y, aw, 46, ">")) map_cycle(1);
+    if (sel_button(bx + mw + 8, y, rw, 46, "ROTATION", mapRotate, 1, v3(1, 0.85f, 0.4f))) { mapRotate ^= 1; cfg_save(); }
 }
 
 /* ecran SKIN : 5 apparences, apercu 3D qui tourne ; la couleur reelle sera celle de l'equipe */
@@ -266,9 +309,12 @@ static void draw_host_menu(float cx, float cy) {
     char buf[128];
     rect(0, 0, (float)winW, (float)winH, 0.02f, 0.02f, 0.06f, 0.78f);
     text_c(2, cx, cy - 300, "HEBERGER UNE PARTIE", 0.5f, 0.9f, 1.0f, 1);
-    float bw = 620, bx = cx - bw * 0.5f, y = cy - 210;
-    rect(bx - 30, y - 40, bw + 60, 470, 0.03f, 0.04f, 0.08f, 0.6f);
+    float bw = 620, bx = cx - bw * 0.5f, y = cy - 230;
+    rect(bx - 30, y - 40, bw + 60, 540, 0.03f, 0.04f, 0.08f, 0.6f);
     rect(bx - 30, y - 40, bw + 60, 2, 0.5f, 0.9f, 1.0f, 0.5f);
+    y -= 6;
+    draw_map_row(bx, y, bw);                              /* carte de la partie (ROTATION : la suivante a chaque manche) */
+    y += 76;
     text(1, bx, y, "NOMBRE DE JOUEURS", 0.5f, 0.9f, 1.0f, 1);
     y += 18;
     for (int m = 0; m <= TEAM_MAX; m++) {                 /* chacun pour soi, puis 1v1 a 4v4 */
@@ -327,12 +373,16 @@ static void draw_main_menu(float cx, float cy) {
     text_c(0, cx, cy - 268, "movement shooter en C", 0.7f, 0.7f, 0.8f, 1);
     rect(cx - 220, cy - 252, 440, 2, 0.5f, 0.9f, 1.0f, 0.5f);   /* trait d'accent sous le sous-titre */
     float bx = cx - 620, bw = 420, y = cy - 205;
-    rect(bx - 30, y - 30, bw + 60, 556, 0.03f, 0.04f, 0.08f, 0.55f);        /* panneau derriere les boutons */
+    rect(bx - 30, y - 30, bw + 60, 610, 0.03f, 0.04f, 0.08f, 0.55f);        /* panneau derriere les boutons */
     rect(bx - 30, y - 30, bw + 60, 2, 0.5f, 0.9f, 1.0f, 0.5f);
-    rect(bx - 30, y + 524, bw + 60, 2, 0.5f, 0.9f, 1.0f, 0.25f);
+    rect(bx - 30, y + 578, bw + 60, 2, 0.5f, 0.9f, 1.0f, 0.25f);
     field(bx, y, bw, 48, "PSEUDO", myName, 1);
     y += 76;
-    if (button(bx, y, bw, 52, "SOLO  -  VAGUES")) pendingAction = ACT_SOLO;
+    draw_map_row(bx, y, bw);                              /* carte : solo (cartes solo seulement), duel, heberger */
+    y += 54;
+    char soloLbl[48];
+    snprintf(soloLbl, sizeof soloLbl, maps[menuMap].solo ? "SOLO  -  VAGUES" : "SOLO  -  VAGUES  (%s)", maps[0].name);
+    if (button(bx, y, bw, 52, soloLbl)) pendingAction = ACT_SOLO;
     y += 52 + 24;                                         /* le libelle sous le bouton, sans toucher son liseret */
     text(0, bx, y, "JOUEUR CONTRE BOT  (duel)", 0.7f, 0.75f, 0.85f, 1);
     y += 8;
@@ -383,7 +433,8 @@ static void draw_join_menu(float cx, float cy) {
         else {
             char mode[16];
             if (found[i].teams > 0) snprintf(mode, sizeof mode, "%dV%d", found[i].teams, found[i].teams); else snprintf(mode, sizeof mode, "LIBRE");
-            snprintf(buf, sizeof buf, "[LAN %s]  %s    %d/%d joueurs    %s", mode, found[i].name, found[i].players, found[i].maxp,
+            snprintf(buf, sizeof buf, "[LAN %s]  %s  -  %s    %d/%d    %s", mode, found[i].name,
+                     found[i].map >= 0 ? maps[found[i].map].name : "?", found[i].players, found[i].maxp,
                      inet_ntoa(found[i].addr.sin_addr));
         }
         if (button(bx, y, bw - 170, 46, buf)) { pendingAction = ACT_JOIN_FOUND; pendingArg = i; }

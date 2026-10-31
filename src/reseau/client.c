@@ -43,9 +43,10 @@ static void net_shutdown(void) {
 }
 
 static void menu_backdrop(void) {
+    if (curMap != menuMap) load_map(menuMap);             /* le menu montre la carte choisie */
     reset_game();
-    P.pos = P.prevPos = v3(0, 7, ms(36));
-    P.pitch = -0.12f;
+    P.pos = P.prevPos = maps[curMap].menuCam;
+    P.pitch = maps[curMap].menuPitch;
 }
 
 static void net_disconnect_to_menu(const char *why) {
@@ -63,7 +64,9 @@ static void on_welcome(int id) {
     lastSnapT = nowT;
     memset(NP, 0, sizeof NP);
     dm_local_start();
-    if (spectating) { P.pos = P.prevPos = v3(0, 12, ms(36)); P.pitch = -0.2f; P.yaw = 0; }   /* vue d'ensemble de la carte */
+    if (spectating) {                                     /* vue d'ensemble de la carte */
+        P.pos = P.prevPos = vadd(maps[curMap].menuCam, v3(0, maps[curMap].specUp, 0)); P.pitch = maps[curMap].menuPitch - 0.08f; P.yaw = 0;
+    }
     appState = APP_GAME;
 #ifdef _WIN32
     if (!botMode && GetForegroundWindow() == hwnd) set_capture(1);
@@ -109,6 +112,7 @@ static void found_add(const PkAnnounce *a, const struct sockaddr_in *from) {
     found[k].name[15] = 0;
     found[k].addr = *from;
     found[k].players = a->players; found[k].maxp = a->maxp; found[k].teams = a->teams;
+    found[k].map = a->map < NMAPS ? a->map : -1;
     found[k].seen = nowT;
 }
 
@@ -122,7 +126,10 @@ static void client_recv(PkHead *h, int n, struct sockaddr_in *from) {
         if (joining && n >= (int)sizeof(PkWelcome)) {
             const PkWelcome *w = (const PkWelcome *)h;
             if (w->refused) { joining = 0; set_status(joinSpec ? "plus de place pour les spectateurs" : "partie pleine"); }
-            else on_welcome(w->id);
+            else {
+                if (w->pad[0] < NMAPS && w->pad[0] != curMap) load_map(w->pad[0]);   /* la carte de l'hote, avant de demarrer */
+                on_welcome(w->id);
+            }
         }
         break;
     case PK_SNAP:
@@ -277,6 +284,7 @@ static int net_host_start(void) {
     NP[0].active = 1;
     memcpy(NP[0].name, myName, 16);
     find_local_ip();
+    if (curMap != menuMap) load_map(menuMap);             /* carte choisie dans le menu (ou --map) */
     dm_local_start();
     matchOver = 0; matchT = 0;
     teamSize = hostQuick || hostFfa ? 0 : wantTeams;      /* partie rapide et duel du menu : chacun pour soi */

@@ -47,7 +47,8 @@ static void cfg_save(void) {
     fprintf(f, "second_ecran=%d" "\n" "carte_vue=%d" "\n" "camera_mort=%d" "\n", secondScreen, mapView3d, killcamOn);
     fprintf(f, "quality=%d" "\n" "ambiance=%d" "\n", gfxQuality, gfxAmbiance);
     fprintf(f, "online=%d" "\n" "teams=%d" "\n" "update_check=%d" "\n", onlineOn, wantTeams, updCheck);
-    fprintf(f, "loadout=%d,%d" "\n" "melee=%d" "\n" "skin=%d" "\n", wantLoadout[0], wantLoadout[1], wantMelee, wantSkin);
+    fprintf(f, "loadout=%d,%d" "\n" "melee=%d" "\n" "skill=%d" "\n" "skin=%d" "\n", wantLoadout[0], wantLoadout[1], wantMelee, wantSkill, wantSkin);
+    fprintf(f, "map=%d" "\n" "map_rotate=%d" "\n", menuMap, mapRotate);
     if (strcmp(lobbyAddr, LOBBY_DEFAULT)) fprintf(f, "lobby=%s" "\n", lobbyAddr);   /* le defaut peut changer avec une mise a jour */
     for (int a = 0; a < A_COUNT; a++) fprintf(f, "bind_%s=%d,%d" "\n", actId[a], binds[a][0], binds[a][1]);
     fclose(f);
@@ -87,6 +88,9 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
         else if (!strcmp(line, "loadout")) sscanf(v, "%d,%d", &wantLoadout[0], &wantLoadout[1]);
         else if (!strcmp(line, "melee")) wantMelee = atoi(v);
         else if (!strcmp(line, "skin")) wantSkin = atoi(v) < 0 || atoi(v) >= SKN_COUNT ? 0 : atoi(v);
+        else if (!strcmp(line, "map")) menuMap = atoi(v) >= 0 && atoi(v) < NMAPS ? atoi(v) : 0;
+        else if (!strcmp(line, "map_rotate")) mapRotate = atoi(v) != 0;
+        else if (!strcmp(line, "skill")) wantSkill = atoi(v) >= 0 && atoi(v) < SK_COUNT ? atoi(v) : SK_COIN;
         else if (!strncmp(line, "bind_", 5))
             for (int a = 0; a < A_COUNT; a++)
                 if (!strcmp(line + 5, actId[a])) {
@@ -133,4 +137,4 @@ static const float *pcolor(int i) {
 }
 static const char *weaponNames[W_COUNT] = { "RAIL", "ROQUETTE", "EPEE", "GRAPPIN", "PARRY", "SOLO", "RICOCHET",
                                             "ENCLUME", "LANCE", "YOYO", "POINGS", "EGIDE", "EVENTAIL", "ELAN",
-                                            "SCIE", "VENTOUSE", "TESLA" };
+                                            "SCIE", "VENTOUSE", "TESLA", "VIDE" };

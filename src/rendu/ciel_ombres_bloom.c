@@ -6,6 +6,12 @@
 /* couleur du ciel dans la direction d (unitaire) : zenith sombre, horizon violet, lueur autour du soleil */
 static void sky_color(V3 d, float out[3]) {
     const float *zen = gxSkyZen, *mid = gxSkyMid, *hor = gxSkyHor;
+    float mmid[3];
+    if (curMap != 0) {                                    /* ciel de la carte : haut = sky, horizon = fog */
+        zen = maps[curMap].sky; hor = maps[curMap].fog;
+        for (int c = 0; c < 3; c++) mmid[c] = (zen[c] + hor[c]) * 0.5f;
+        mid = mmid;
+    }
     V3 S = sun_dir();
     float e = clampf(d.y, 0, 1), k1 = clampf(e / 0.25f, 0, 1), k2 = clampf((e - 0.25f) / 0.75f, 0, 1);
     for (int c = 0; c < 3; c++) out[c] = e < 0.25f ? hor[c] + (mid[c] - hor[c]) * k1 : mid[c] + (zen[c] - mid[c]) * sqrtf(k2);

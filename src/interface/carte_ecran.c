@@ -92,7 +92,7 @@ static void maps_draw_map(const MapView *v, float S, const MapsPl *pl, int n) {
     glEnd();
 
     int ord[MAXB], no = 0;                                /* blocs, du plus bas au plus haut : le haut recouvre le bas */
-    for (int i = 1; i < nb; i++) ord[no++] = i;
+    for (int i = mapFirst; i < nb; i++) ord[no++] = i;
     for (int a = 1; a < no; a++)
         for (int b = a; b > 0 && boxes[ord[b]].mx.y < boxes[ord[b - 1]].mx.y; b--) { int t = ord[b]; ord[b] = ord[b - 1]; ord[b - 1] = t; }
     for (int o = 0; o < no; o++) {
@@ -226,7 +226,7 @@ static void maps_box3(V3 a, V3 b, float r, float g, float bl, float al) {   /* o
 }
 
 static void maps_draw_3d(float x0, float y0, float S, int scrW, int scrH, const MapsPl *pl, int n) {
-    const Box *fl = &boxes[0];
+    const Box *fl = &mapBox;
     V3 c = v3((fl->mn.x + fl->mx.x) * 0.5f, 0, (fl->mn.z + fl->mx.z) * 0.5f);
     float span = fmaxf(fl->mx.x - fl->mn.x, fl->mx.z - fl->mn.z), sx, sy;
     rect(x0 - 10, y0 - 10, S + 20, S + 20, 0.02f, 0.025f, 0.06f, 1);
@@ -256,7 +256,7 @@ static void maps_draw_3d(float x0, float y0, float S, int scrW, int scrH, const 
     for (float g = ceilf(fl->mn.z / 10) * 10; g <= fl->mx.z; g += 10) { glVertex3f(fl->mn.x, 0.02f, g); glVertex3f(fl->mx.x, 0.02f, g); }
     glEnd();
 
-    for (int i = 1; i < nb; i++) {                        /* blocs ; les murs exterieurs, tres hauts, sont rabotes */
+    for (int i = mapFirst; i < nb; i++) {                 /* blocs ; les murs exterieurs, tres hauts, sont rabotes */
         const Box *b = &boxes[i];
         V3 a = b->mn, m = b->mx;
         int border = m.x <= fl->mn.x + 0.1f || a.x >= fl->mx.x - 0.1f || m.z <= fl->mn.z + 0.1f || a.z >= fl->mx.z - 0.1f;
@@ -287,6 +287,7 @@ static void maps_draw_3d(float x0, float y0, float S, int scrW, int scrH, const 
             V3 p = E[i].pos;
             maps_box3(v3(p.x - 0.9f, p.y - 0.9f, p.z - 0.9f), v3(p.x + 0.9f, p.y + 0.9f, p.z + 0.9f), 1, 0.25f, 0.25f, 1);
         }
+
 
     glLineWidth(3);                                       /* trainees en 3D : on voit les sauts */
     for (int k = 0; k < n; k++) {
@@ -617,8 +618,8 @@ static void draw_map_screen(int w, int h) {
     float m = 40;                                         /* carte carree a gauche, panneau a droite (ou dessous si l'ecran est etroit) */
     int wide = w >= h * 1.25f;
     float S = wide ? fminf(h - 2 * m, w * 0.62f - 2 * m) : fminf(w - 2 * m, h * 0.58f - 2 * m);
-    mapsMnX = boxes[0].mn.x; mapsMnZ = boxes[0].mn.z;
-    float span = fmaxf(boxes[0].mx.x - boxes[0].mn.x, boxes[0].mx.z - boxes[0].mn.z);
+    mapsMnX = mapBox.mn.x; mapsMnZ = mapBox.mn.z;
+    float span = fmaxf(mapBox.mx.x - mapBox.mn.x, mapBox.mx.z - mapBox.mn.z);
     MapView v = { m, wide ? (h - S) * 0.5f : m, S / fmaxf(span, 1) };
     int heat = dmMode && matchOver;                       /* fin de match : carte de chaleur, toujours vue de dessus */
     if (mapView3d && !heat) maps_draw_3d(v.x0, v.y0, S, w, h, pl, n);

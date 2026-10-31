@@ -70,6 +70,7 @@ static void draw_killfeed(void) {
         KillFeed *f = &kfeed[k];
         if (f->t <= 0) continue;
         if (f->info) snprintf(buf, sizeof buf, "%s %s", pname(f->victim), f->info == 1 ? "a rejoint" : "a quitte");
+        else if (f->killer == f->victim && f->kind == W_VOID) snprintf(buf, sizeof buf, "%s est tombe dans le vide", pname(f->victim));
         else if (f->killer == f->victim) snprintf(buf, sizeof buf, "%s s'est fait sauter", pname(f->victim));
         else snprintf(buf, sizeof buf, "%s  [%s]  %s", pname(f->killer), weaponNames[f->kind % W_COUNT], pname(f->victim));
         int mine = f->killer == myId || f->victim == myId;

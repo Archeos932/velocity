@@ -14,6 +14,8 @@ static float gxObjAmb[3] = { 0.40f, 0.40f, 0.52f }, gxObjSun[2] = { 0.25f, 0.65f
 static float gxVmAmb[3] = { 0.42f, 0.42f, 0.52f }, gxVmSun[2] = { 0.30f, 0.45f };
 static float gxShadowCol[3] = { 0.02f, 0.02f, 0.06f }, gxShadowAlpha = 0.5f, gxShadowMaxH = 30;
 static float gxFogCol[3] = { 0.34f, 0.30f, 0.44f }, gxFog[2] = { 50, 240 };
+/* couleurs de la carte : l'Arene suit rendu.ini (et ses ambiances), les autres cartes ont leur ciel (MapDef) */
+static const float *map_fog_col(void) { return curMap == 0 ? gxFogCol : maps[curMap].fog; }
 static float gxSkyZen[3] = { 0.025f, 0.035f, 0.11f }, gxSkyMid[3] = { 0.13f, 0.12f, 0.27f }, gxSkyHor[3] = { 0.36f, 0.30f, 0.45f };
 static float gxSunGlow[3] = { 0.30f, 0.55f, 0.42f }, gxStars = 260, gxSunSize[3] = { 8, 30, 120 };
 static float gxCity[5] = { 70, 260, 120, 30, 85 }, gxCityCol[3] = { 0.16f, 0.14f, 0.26f }, gxCityWin = 0.35f;

@@ -5,6 +5,7 @@ static void proj_tick(float dt) {
     for (int i = 0; i < MAXPR; i++) {
         Proj *p = &PR[i];
         if (!p->alive) continue;
+        if (p->kind != PR_SAW && p->pos.y < maps[curMap].killY - 2) { p->alive = 0; continue; }   /* tombe dans le vide */
         if (p->kind == PR_SAW) { saw_tick(p, dt); continue; }   /* Scie : sa propre machine a etats */
         if (p->kind == PR_MINE) { mine_tick(p, dt); continue; } /* Ventouse */
         p->life -= dt;
@@ -28,6 +29,16 @@ static void proj_tick(float dt) {
                     mn = vsub(mn, v3(0.2f, 0.2f, 0.2f)); mx = vadd(mx, v3(0.2f, 0.2f, 0.2f));
                 } else np_aabb(j, 0.2f, &mn, &mx);
                 if (ray_box(p->pos, dir, mn, mx, t, &te, NULL) && te < t) { t = te; hitPlayer = j; }
+            }
+            if (p->ricLeft > 0 && p->kind == PR_ROCKET && t < len && hitEnemy < 0 && hitPlayer < 0 && p->life > 0) {
+                V3 at = vadd(p->pos, vmul(dir, t));       /* RICOCHET : le decor renvoie la roquette */
+                p->vel = vmul(vsub(p->vel, vmul(n, 2 * vdot(p->vel, n))), RIC_ROCKET_SLOW);
+                p->pos = vadd(at, vmul(n, 0.05f));
+                p->ricLeft--;
+                burst(at, v3(0.4f, 1, 0.7f), 14, 5, 0.3f, 0.09f);
+                play(S_LAND, 0.5f * atten(at), 1.6f);
+                if (mine) ricStat[1]++;
+                continue;
             }
             if (t < len || p->life <= 0) {
                 V3 c = vadd(vadd(p->pos, vmul(dir, t)), vmul(n, 0.15f));

@@ -4,7 +4,7 @@
 /* ------------------------------------------------------------------ */
 /* Monde : une liste d'AABB                                            */
 /* ------------------------------------------------------------------ */
-enum { B_SOLID, B_PAD };
+enum { B_SOLID, B_PAD, B_SPEED };                        /* B_SPEED : bande d'acceleration (launch = sens x vitesse max) */
 typedef struct { V3 mn, mx, col, launch; int kind; } Box;
 #define MAXB 256
 static Box boxes[MAXB];
@@ -46,7 +46,8 @@ static void addpickup(float x, float y, float z, int pts) {
     npu++;
 }
 
-static void build_level(void) {
+/* Arene : la carte d'origine, inchangee (run_tests depend du couloir x = -20 et des coordonnees des pads) */
+static void build_map_arene(void) {
     float W = ms(56);
     nb = 0; npu = 0;
     addbox(-W, -2, -W, W, 0, W, 0.52f, 0.54f, 0.60f);              /* sol */
@@ -115,6 +116,239 @@ static void build_level(void) {
     }
     rng = (unsigned)GetTickCount();
 }
+
+/* --- elements des nouvelles cartes (coordonnees du monde, sans MAP_S) --- */
+static void addpad_at(float x, float y, float z, V3 launch) {   /* pad pose sur une plateforme de hauteur y */
+    addbox(x - 1.5f, y, z - 1.5f, x + 1.5f, y + 0.3f, z + 1.5f, 0.2f, 0.9f, 1.0f);
+    boxes[nb - 1].kind = B_PAD;
+    boxes[nb - 1].launch = launch;
+}
+/* vitesse de lancement d'un pad en `from` (dessus du pad) pour retomber sur `to` avec une vitesse verticale vy */
+static V3 pad_aim(V3 from, V3 to, float vy) {
+    float disc = vy * vy - 2 * GRAVITY * (to.y - from.y);
+    float t = (vy + sqrtf(fmaxf(disc, 0))) / GRAVITY;
+    return v3((to.x - from.x) / t, vy, (to.z - from.z) / t);
+}
+static void addpad_to(float x, float y, float z, V3 to, float vy) { addpad_at(x, y, z, pad_aim(v3(x, y + 0.3f, z), to, vy)); }
+/* bande d'acceleration au sol y : rectangle x0..x1, z0..z1, poussee vers (dx, dz) jusqu'a SPEED_MAX */
+static void addspeed(float x0, float z0, float x1, float z1, float y, float dx, float dz) {
+    addbox(x0, y, z0, x1, y + 0.12f, z1, 0.95f, 0.2f, 0.7f);
+    boxes[nb - 1].kind = B_SPEED;
+    boxes[nb - 1].launch = vmul(vnorm(v3(dx, 0, dz)), SPEED_MAX);
+}
+static void addanchor(float x, float y, float z) {      /* ancre de grappin : petit cube flottant, couleur dediee */
+    addbox(x - 0.6f, y - 0.6f, z - 0.6f, x + 0.6f, y + 0.6f, z + 0.6f, 1.0f, 0.85f, 0.2f);
+}
+static void addcell(float x, float y, float z, int pts) {   /* addpickup sans l'agrandissement MAP_S */
+    if (npu >= MAXPICK) return;
+    PU[npu].pos = v3(x, y + 0.9f, z);
+    PU[npu].t = PU[npu].pending = 0;
+    PU[npu].pts = pts;
+    npu++;
+}
+
+/* Le Puits : puits de 40 x 40 m, vide au fond (killY -30), spirale de 8 plateformes reliees par des pads,
+ * plateforme du sommet (y 50) avec les grandes cellules, 12 ancres au centre, 2 ilots de secours en bas */
+static const float puitsPlat[8][3] = {                   /* centre x, z et dessus de chaque plateforme 8 x 8 */
+    { 16, 16, 0 }, { 0, 16, 6 }, { -16, 16, 12 }, { -16, 0, 18 }, { -16, -16, 24 }, { 0, -16, 30 }, { 16, -16, 36 }, { 16, 0, 42 },
+};
+static void build_map_puits(void) {
+    addbox(-22, -34, -22, 22, 70, -20, 0.16f, 0.20f, 0.36f);   /* parois : wall-run sur toute la hauteur */
+    addbox(-22, -34, 20, 22, 70, 22, 0.16f, 0.20f, 0.36f);
+    addbox(-22, -34, -20, -20, 70, 20, 0.19f, 0.23f, 0.40f);
+    addbox(20, -34, -20, 22, 70, 20, 0.19f, 0.23f, 0.40f);
+    for (int i = 0; i < 8; i++) {
+        const float *p = puitsPlat[i];
+        float t = (float)i / 7;
+        addbox(p[0] - 4, p[2] - 1, p[1] - 4, p[0] + 4, p[2], p[1] + 4, 0.28f + 0.1f * t, 0.38f + 0.12f * t, 0.62f + 0.1f * t);
+    }
+    addbox(-6, 49, -6, 6, 50, 6, 0.55f, 0.62f, 0.88f);       /* sommet */
+    addbox(-1, 50, 3.5f, 1, 51.2f, 4.5f, 0.42f, 0.48f, 0.72f); /* couvertures du sommet */
+    addbox(-1, 50, -4.5f, 1, 51.2f, -3.5f, 0.42f, 0.48f, 0.72f);
+    for (int i = 0; i < 8; i++) {                         /* pads : chaque plateforme lance vers la suivante (la 8e vers le sommet) */
+        const float *p = puitsPlat[i];
+        V3 next = i < 7 ? v3(puitsPlat[i + 1][0], puitsPlat[i + 1][2], puitsPlat[i + 1][1]) : v3(0, 50, 0);
+        V3 d = vnorm(v3(next.x - p[0], 0, next.z - p[1]));
+        V3 land = i < 7 ? vsub(next, vmul(d, 2.5f)) : v3(3, 50, 0);
+        addpad_to(p[0] + d.x * 2, p[2], p[1] + d.z * 2, land, 24);
+    }
+    addbox(3.5f, -11, 3.5f, 8.5f, -10, 8.5f, 0.40f, 0.26f, 0.52f);     /* ilots de secours au fond, pads vers le bas de la spirale */
+    addbox(-8.5f, -11, 3.5f, -3.5f, -10, 8.5f, 0.40f, 0.26f, 0.52f);
+    addpad_to(6, -10, 6, v3(17, 0, 13), 26);
+    addpad_to(-6, -10, 6, v3(2, 6, 14), 30);
+    for (int k = 0; k < 4; k++)                           /* 12 ancres suspendues au centre */
+        for (int j = 0; j < 3; j++) {
+            float a = k * 0.5f + j * 2.0944f;
+            addanchor(cosf(a) * 6, 10 + 10.0f * k, sinf(a) * 6);
+        }
+    addcell(puitsPlat[1][0], puitsPlat[1][2], puitsPlat[1][1], PICKUP_SMALL);   /* recharges : surtout en haut */
+    addcell(puitsPlat[3][0], puitsPlat[3][2], puitsPlat[3][1], PICKUP_SMALL);
+    addcell(puitsPlat[5][0], puitsPlat[5][2], puitsPlat[5][1], PICKUP_SMALL);
+    addcell(puitsPlat[7][0], puitsPlat[7][2], puitsPlat[7][1] + 2.5f, PICKUP_SMALL);
+    addcell(3, 50, 3, PICKUP_BIG); addcell(-3, 50, -3, PICKUP_BIG);
+}
+static const float puitsSpawns[][3] = {
+    { 17.8f, 0, 17.8f }, { 0, 6, 18.5f }, { -17.8f, 12, 17.8f }, { -18.5f, 18, 0 }, { -17.8f, 24, -17.8f },
+    { 0, 30, -18.5f }, { 17.8f, 36, -17.8f }, { 18.5f, 42, 0 }, { -3, 50, 0 },
+};
+
+/* Le Canyon : deux falaises (y 20) separees par un gouffre de 70 m (killY -15), 6 ilots-piliers,
+ * des ancres espacees de 20 m au plus, des pads au bord qui lancent vers les ilots */
+static void build_map_canyon(void) {
+    for (int s = -1; s <= 1; s += 2) {                    /* s = -1 : falaise ouest, +1 : falaise est (miroir) */
+        float e = (float)s;
+        addbox(s < 0 ? -75.0f : 35.0f, -40, -30, s < 0 ? -35.0f : 75.0f, 20, 30, 0.60f, 0.40f, 0.24f);   /* falaise */
+        addbox(s < 0 ? -77.0f : 75.0f, 20, -30, s < 0 ? -75.0f : 77.0f, 28, 30, 0.50f, 0.33f, 0.20f);    /* mur du fond (wall-run) */
+        addbox(s < 0 ? -75.0f : 35.0f, 20, 29.4f, s < 0 ? -35.0f : 75.0f, 21, 30, 0.55f, 0.37f, 0.22f);  /* parapets */
+        addbox(s < 0 ? -75.0f : 35.0f, 20, -30, s < 0 ? -35.0f : 75.0f, 21, -29.4f, 0.55f, 0.37f, 0.22f);
+        addbox(e * 60 - 3, 20, -3, e * 60 + 3, 30, 3, 0.48f, 0.30f, 0.19f);                  /* tour de tir (10 m) */
+        addpad_to(e * 52.5f, 20, 0, v3(e * 58.5f, 30, 0), 24);
+        for (int z = -1; z <= 1; z += 2) {
+            float fz = (float)z;
+            addbox(s < 0 ? -52.0f : 44.0f, 20, z < 0 ? -18.0f : 12.0f, s < 0 ? -44.0f : 52.0f, 24, z < 0 ? -12.0f : 18.0f, 0.70f, 0.53f, 0.36f);  /* abris */
+            addbox(s < 0 ? -70.0f : 64.0f, 20, z < 0 ? -22.0f : 14.0f, s < 0 ? -64.0f : 70.0f, 26, z < 0 ? -14.0f : 22.0f, 0.66f, 0.49f, 0.33f);
+            addbox(e * 20 - 3, -40, fz * 12 - 3, e * 20 + 3, 16, fz * 12 + 3, 0.54f, 0.35f, 0.21f);   /* ilots exterieurs */
+            addpad_to(e * 38, 20, fz * 12, v3(e * 21.5f, 16, fz * 12), 26);                     /* bord -> ilot */
+            addpad_to(e * 18.5f, 16, fz * 12, v3(e * 1.5f, 18, fz * 12), 26);                   /* ilot -> ilot central */
+        }
+        addbox(s < 0 ? -42.0f : 41.0f, 20, -5, s < 0 ? -41.0f : 42.0f, 21.2f, 5, 0.66f, 0.49f, 0.33f);    /* muret au bord */
+    }
+    addbox(-3, -40, -15, 3, 18, -9, 0.58f, 0.38f, 0.23f);  /* ilots centraux */
+    addbox(-3, -40, 9, 3, 18, 15, 0.58f, 0.38f, 0.23f);
+    addanchor(-28, 30, 0); addanchor(28, 30, 0);           /* ancres : on traverse toujours en 3 accroches */
+    addanchor(-10, 31, 0); addanchor(10, 31, 0);
+    addanchor(0, 33, -20); addanchor(0, 33, 20);
+    for (int s = -1; s <= 1; s += 2)                      /* recharges : 6 sur les ilots, 2 par falaise */
+        for (int z = -1; z <= 1; z += 2) addcell(s * 21.5f, 16, z * 12.0f, PICKUP_BIG);
+    addcell(-1.5f, 18, -12, PICKUP_BIG); addcell(-1.5f, 18, 12, PICKUP_BIG);
+    addcell(-67, 20, 0, PICKUP_SMALL); addcell(-60.5f, 30, 0, PICKUP_SMALL);
+    addcell(67, 20, 0, PICKUP_SMALL); addcell(60.5f, 30, 0, PICKUP_SMALL);
+}
+static const float canyonSpawns[][3] = {
+    { -60, 20, 10 }, { 60, 20, -10 }, { -60, 20, -10 }, { 60, 20, 10 }, { -47, 20, 0 }, { 47, 20, 0 }, { -72, 20, 0 }, { 72, 20, 0 },
+};
+
+/* La Boucle : anneau de 120 x 60 m autour d'un bloc de 10 m (coupe au milieu), deux voies par ligne droite
+ * avec des bandes d'acceleration a contresens, passerelles a 10 m, pads de coin et pads vers le toit */
+static void build_map_boucle(void) {
+    addbox(-62, -2, -32, 62, 0, 32, 0.20f, 0.19f, 0.30f);    /* sol */
+    addbox(-62, 0, 30, 62, 8, 32, 0.22f, 0.16f, 0.36f);      /* murs exterieurs (wall-run dans les virages) */
+    addbox(-62, 0, -32, 62, 8, -30, 0.22f, 0.16f, 0.36f);
+    addbox(60, 0, -30, 62, 8, 30, 0.26f, 0.18f, 0.40f);
+    addbox(-62, 0, -30, -60, 8, 30, 0.26f, 0.18f, 0.40f);
+    addbox(-45, 0, -15, -5, 10, 15, 0.30f, 0.22f, 0.46f);    /* bloc central, coupe en x = -5..5 */
+    addbox(5, 0, -15, 45, 10, 15, 0.30f, 0.22f, 0.46f);
+    addbox(-5, 9, -15, 5, 10, 15, 0.85f, 0.55f, 0.15f);      /* toit de la coupe */
+    addbox(-3, 9, 15, 3, 10, 30, 0.90f, 0.60f, 0.15f);       /* passerelles a 10 m */
+    addbox(-3, 9, -30, 3, 10, -15, 0.90f, 0.60f, 0.15f);
+    for (int s = -1; s <= 1; s += 2) {
+        float e = (float)s;
+        for (int k = 0; k < 5; k++) {                     /* separateurs bas (1 m) entre les deux voies */
+            float x0 = -42 + 18.0f * k;
+            addbox(x0, 0, e * 22.5f - 0.3f, x0 + 12, 1, e * 22.5f + 0.3f, 0.2f, 0.85f, 0.8f);
+        }
+        /* bandes : voie exterieure vers +x au nord, -x au sud ; voie interieure a contresens */
+        addspeed(-36, s > 0 ? 24.0f : -29.0f, -16, s > 0 ? 29.0f : -24.0f, 0, e, 0);
+        addspeed(16, s > 0 ? 24.0f : -29.0f, 36, s > 0 ? 29.0f : -24.0f, 0, e, 0);
+        addspeed(-36, s > 0 ? 16.0f : -21.0f, -16, s > 0 ? 21.0f : -16.0f, 0, -e, 0);
+        addspeed(16, s > 0 ? 16.0f : -21.0f, 36, s > 0 ? 21.0f : -16.0f, 0, -e, 0);
+        addpad_to(e * 52.5f, 0, 0, v3(e * 41, 10, 0), 24);    /* pads vers le toit */
+        addbox(e * 25 - 1, 10, -3, e * 25 + 1, 11.5f, 3, 0.3f, 0.25f, 0.45f);   /* couvertures du toit */
+        addbox(e * 36 - 3, 10, -9, e * 36 + 3, 11.5f, -8, 0.3f, 0.25f, 0.45f);
+    }
+    addpad_to(53, 0, 23, v3(30, 0, 18.5f), 14);              /* pads de coin : on coupe le virage vers la voie suivante */
+    addpad_to(-53, 0, -23, v3(-30, 0, -18.5f), 14);
+    addpad_to(-53, 0, 23, v3(-30, 0, 26.5f), 14);
+    addpad_to(53, 0, -23, v3(30, 0, -26.5f), 14);
+    addcell(0, 0, 26, PICKUP_SMALL); addcell(0, 0, -26, PICKUP_SMALL);    /* milieu des lignes droites, */
+    addcell(0, 10, 22, PICKUP_BIG); addcell(0, 10, -22, PICKUP_BIG);      /* passerelles, */
+    addcell(32, 10, 0, PICKUP_BIG); addcell(-32, 10, 0, PICKUP_BIG);      /* toit, */
+    addcell(55, 0, 12, PICKUP_SMALL); addcell(-55, 0, -12, PICKUP_SMALL); /* bouts de l'anneau */
+}
+static const float boucleSpawns[][3] = {
+    { 10, 0, 26 }, { -10, 0, -26 }, { -10, 0, 26 }, { 10, 0, -26 }, { 55, 0, 5 }, { -55, 0, -5 }, { 55, 0, -5 }, { -55, 0, 5 },
+};
+
+/* Le Dojo : salle de 36 x 36 m, plafond a 7 m, 16 piliers, ring central sureleve de 0,5 m, aucune cellule */
+static void build_map_dojo(void) {
+    addbox(-20, -2, -20, 20, 0, 20, 0.52f, 0.36f, 0.21f);    /* plancher */
+    addbox(-20, 0, -20, 20, 7, -18, 0.40f, 0.27f, 0.17f);    /* murs */
+    addbox(-20, 0, 18, 20, 7, 20, 0.40f, 0.27f, 0.17f);
+    addbox(-20, 0, -18, -18, 7, 18, 0.44f, 0.30f, 0.19f);
+    addbox(18, 0, -18, 20, 7, 18, 0.44f, 0.30f, 0.19f);
+    addbox(-20, 7, -20, 20, 9, 20, 0.30f, 0.20f, 0.13f);     /* plafond : on s'y accroche au grappin */
+    addbox(-6, 0, -6, 6, 0.5f, 6, 0.78f, 0.64f, 0.42f);      /* ring */
+    for (int sx = -1; sx <= 1; sx += 2)
+        for (int sz = -1; sz <= 1; sz += 2) {
+            addbox(sx * 5.8f - 0.2f, 0.5f, sz * 5.8f - 0.2f, sx * 5.8f + 0.2f, 2.0f, sz * 5.8f + 0.2f, 0.85f, 0.2f, 0.15f);   /* poteaux du ring */
+            addbox(sx * 9.0f - 1, 0, sz * 9.0f - 1, sx * 9.0f + 1, 7, sz * 9.0f + 1, 0.34f, 0.21f, 0.13f);
+        }
+    static const float g[4] = { -13.5f, -4.5f, 4.5f, 13.5f };
+    for (int i = 0; i < 4; i++)                           /* piliers : grille 4 x 4 sans les 4 du ring, + 4 en diagonale */
+        for (int j = 0; j < 4; j++) {
+            if (fabsf(g[i]) < 5 && fabsf(g[j]) < 5) continue;
+            addbox(g[i] - 1, 0, g[j] - 1, g[i] + 1, 7, g[j] + 1, 0.34f, 0.21f, 0.13f);
+        }
+}
+static const float dojoSpawns[][3] = {
+    { 16, 0, 0 }, { -16, 0, 0 }, { 0, 0, 16 }, { 0, 0, -16 }, { 16, 0, 16 }, { -16, 0, -16 }, { -16, 0, 16 }, { 16, 0, -16 },
+};
+
+/* Arene : points de depart (anciennement dans pick_spawn, agrandis par MAP_S) */
+#define MS(v) ((v) * MAP_S)
+static const float areneSpawns[][3] = {
+    { 0, 0, MS(24) }, { 0, 0, MS(-24) }, { MS(24), 0, 0 }, { MS(-24), 0, 0 }, { MS(-30), 0, MS(-30) }, { MS(30), 0, MS(-30) },
+    { MS(30), 0, MS(30) }, { MS(-30), 0, MS(30) }, { MS(36), 7, 0 }, { MS(-36), 7, 0 }, { 0, 7, MS(36) }, { 0, 7, MS(-36) },
+    { MS(5), 4, MS(5) }, { MS(-46), 0, 0 }, { MS(46), 0, 0 },
+};
+
+/* Description d'une carte. killY : plan de mort (-1000 = carte fermee). Les drones du solo apparaissent entre
+ * enemyRMin et enemyRMax du centre, entre enemyMinY et enemyMaxY, et ne descendent jamais sous enemyFloor. */
+typedef struct {
+    const char *name;                                     /* sans accents */
+    void (*build)(void);
+    const float (*spawns)[3]; int nspawns;
+    V3 start;                                             /* depart du solo (reset_game) */
+    float killY;
+    float enemyMinY, enemyMaxY, enemyRMin, enemyRMax, enemyFloor;
+    V3 menuCam; float menuPitch, specUp;                  /* camera du menu ; spectateur : specUp plus haut */
+    int solo, music;
+    float sky[3], fog[3];                                 /* haut du ciel ; horizon et brouillard */
+} MapDef;
+#define NSP(a) (int)(sizeof a / sizeof a[0])
+static const MapDef maps[] = {
+    { "ARENE", build_map_arene, areneSpawns, NSP(areneSpawns), { 0, 0, 24 }, -1000,
+      9, 18, MS(28), MS(48), 1.0f, { 0, 7, MS(36) }, -0.12f, 5, 1, 0, { 0.04f, 0.05f, 0.12f }, { 0.34f, 0.30f, 0.44f } },
+    { "LE PUITS", build_map_puits, puitsSpawns, NSP(puitsSpawns), { 17.8f, 0, 17.8f }, -30,
+      10, 40, 4, 14, -8, { 0, 25, 0 }, -0.3f, 5, 0, 0, { 0.01f, 0.02f, 0.07f }, { 0.07f, 0.11f, 0.24f } },
+    { "LE CANYON", build_map_canyon, canyonSpawns, NSP(canyonSpawns), { -60, 20, 10 }, -15,
+      24, 34, 10, 50, 18, { 0, 30, 0 }, -0.25f, 5, 0, 0, { 0.18f, 0.11f, 0.09f }, { 0.72f, 0.46f, 0.30f } },
+    { "LA BOUCLE", build_map_boucle, boucleSpawns, NSP(boucleSpawns), { 10, 0, 26 }, -1000,
+      12, 18, 20, 50, 1.0f, { 0, 24, 0 }, -0.5f, 4, 1, 0, { 0.03f, 0.0f, 0.08f }, { 0.30f, 0.08f, 0.40f } },
+    { "LE DOJO", build_map_dojo, dojoSpawns, NSP(dojoSpawns), { 0, 0.5f, 4 }, -1000,
+      2.5f, 5.5f, 6, 15, 1.0f, { 0, 5, 15 }, -0.15f, 0, 1, 0, { 0.10f, 0.07f, 0.05f }, { 0.24f, 0.17f, 0.11f } },
+};
+#define NMAPS NSP(maps)
+static int curMap;                                        /* carte chargee */
+static int menuMap, mapRotate;                            /* choix du menu (velocity.ini : map=, map_rotate=) */
+static float map_lost_y(void) { return maps[curMap].killY > -999 ? maps[curMap].killY : SAW_LOST_Y; }
+
+/* emprise de la carte (vue de dessus) : boite englobante horizontale ; mapFirst = 1 si boxes[0] est le sol qui la couvre */
+static Box mapBox;
+static int mapFirst;
+static void build_level(int m) {
+    nb = 0; npu = 0;
+    maps[m >= 0 && m < NMAPS ? m : 0].build();
+    mapBox.mn = boxes[0].mn; mapBox.mx = boxes[0].mx;
+    for (int i = 1; i < nb; i++) {
+        mapBox.mn = v3(fminf(mapBox.mn.x, boxes[i].mn.x), fminf(mapBox.mn.y, boxes[i].mn.y), fminf(mapBox.mn.z, boxes[i].mn.z));
+        mapBox.mx = v3(fmaxf(mapBox.mx.x, boxes[i].mx.x), fmaxf(mapBox.mx.y, boxes[i].mx.y), fmaxf(mapBox.mx.z, boxes[i].mx.z));
+    }
+    mapBox.mx.y = 0;
+    mapFirst = (boxes[0].mx.x - boxes[0].mn.x) * (boxes[0].mx.z - boxes[0].mn.z) >=
+               0.9f * (mapBox.mx.x - mapBox.mn.x) * (mapBox.mx.z - mapBox.mn.z);
+}
+static void load_map(int m);                              /* reconstruit aussi la liste d'affichage (apres le rendu) */
 
 static int box_overlap(V3 mn, V3 mx, const Box *b) {
     return mn.x < b->mx.x && mx.x > b->mn.x && mn.y < b->mx.y && mx.y > b->mn.y && mn.z < b->mx.z && mx.z > b->mn.z;

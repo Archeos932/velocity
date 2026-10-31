@@ -97,7 +97,7 @@ static void game_tick(float dt) {
     input_poll();
     int jp = actP[A_JUMP], dp = actP[A_DASH];
     int w1 = actP[A_WEAP1], w2 = actP[A_WEAP2];
-    int lmbp = actP[A_FIRE], swap = actP[A_SWAP], meleePress = actP[A_MELEE], coinPress = actP[A_COIN];
+    int lmbp = actP[A_FIRE], swap = actP[A_SWAP], meleePress = actP[A_MELEE], coinPress = actP[A_SKILL];
     hookPressIn = actP[A_HOOK];
     hookHeldIn = act[A_HOOK];
 
@@ -110,6 +110,7 @@ static void game_tick(float dt) {
         if (w1) loadout_cycle(0);
         if (w2) loadout_cycle(1);
         if (meleePress) { do wantMelee = (wantMelee + 1) % MK_COUNT; while (!mkReady[wantMelee]); cfg_save(); }
+        if (coinPress) { wantSkill = (wantSkill + 1) % SK_COUNT; cfg_save(); }   /* Competences : la touche fait defiler */
     } else {
         int nw = P.weapon;
         if (w1) nw = P.loadout[0];
@@ -119,16 +120,18 @@ static void game_tick(float dt) {
     }
 
     player_tick(dt, jp, dp);
-    if (!P.dead && !fellOut && P.pos.y < FALL_DEATH_Y) {  /* sorti de la carte et tombe dans le vide : mort */
-        fellOut = 1;
-        damage_player(1000);
-        netlog("chute hors de la carte");
+    if (maps[curMap].killY < -999) {                      /* carte fermee : sortie de la carte = chute (sinon void_check) */
+        if (!P.dead && !fellOut && P.pos.y < FALL_DEATH_Y) {  /* sorti de la carte et tombe dans le vide : mort */
+            fellOut = 1;
+            damage_player(1000);
+            netlog("chute hors de la carte");
+        }
+        if (P.pos.y > FALL_DEATH_Y + 5) fellOut = 0;      /* respawn : a nouveau sur la carte */
+        if (P.dead && P.pos.y < FALL_DEATH_Y - 40) { P.vel = v3(0, 0, 0); P.pos.y = P.prevPos.y = FALL_DEATH_Y - 40; }   /* ne tombe pas a l'infini */
     }
-    if (P.pos.y > FALL_DEATH_Y + 5) fellOut = 0;          /* respawn : a nouveau sur la carte */
-    if (P.dead && P.pos.y < FALL_DEATH_Y - 40) { P.vel = v3(0, 0, 0); P.pos.y = P.prevPos.y = FALL_DEATH_Y - 40; }   /* ne tombe pas a l'infini */
+    void_check();                                         /* kill zone : sous killY = mort */
 
-    if (P.coins < COIN_MAX) P.coins = fminf(COIN_MAX, P.coins + dt / COIN_RECHARGE);
-    if (!P.dead && coinPress && P.coins >= 1) throw_coin();
+    skill_tick(dt, coinPress, act[A_SKILL]);              /* Competences (la piece en est une) */
     coin_tick(dt);
 
     P.meleeCd -= dt; P.meleeT -= dt;

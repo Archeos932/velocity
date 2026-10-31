@@ -19,7 +19,10 @@ typedef struct {
     float meleeCd, meleeT;
     float parryWin;                                       /* temps restant de la fenetre de parry */
     int swingLanded;                                      /* ce coup a-t-il touche ou pare quelque chose ? */
-    float coins;                                          /* charges de pieces (0..COIN_MAX) */
+    float skillCh;                                        /* charges de la competence (0..skillDef[skill].max) */
+    int skill;                                            /* SK_* */
+    int ricArmed;                                         /* RICOCHET : le prochain projectile rebondit */
+    float chargeHold, chargeT;                            /* CHARGE : maintien en cours, fenetre ouverte restante */
     int hookPlayer;                                       /* 0 = aucun, sinon id du joueur accroche + 1 (LAN) */
     int loadout[2];                                       /* deux WP_* distincts ; weapon = WP_* en main */
     int meleeKind;                                        /* MK_* */
@@ -77,12 +80,14 @@ enum { PR_ROCKET, PR_ORB, PR_PARRIED, PR_SAW,
 
 /* Tesla : teslaT > 0 = relais actif (temps restant), prochaine impulsion du relais, joueur qui l'a active */
 /* Fleau : flailStruck = 1 si la piece a ete frappee au fleau (vol droit, sans gravite) */
-typedef struct { V3 pos, vel; float life, spin; int alive, owner; unsigned int netId; float teslaT, teslaPulse; int teslaBy; int flailStruck; } Coin;
+typedef struct { V3 pos, vel; float life, spin; int alive, owner; unsigned int netId; float teslaT, teslaPulse; int teslaBy; int flailStruck;
+                 int decoy; } Coin;                     /* decoy : MIRAGE (leurre immobile, sans gravite) */
 #define MAXCOIN 24
 static Coin CO[MAXCOIN];
 static int lastChain;                                     /* longueur du dernier ricochet (tests, journal) */
 typedef struct {
     V3 pos, vel; float life, mult; int kind, alive, owner, parries, orb; unsigned int netId;
+    int ricLeft;                                          /* RICOCHET : rebonds restants (roquette) */
     /* Scie (kind == PR_SAW) : etat SAW_*, temps dans l'etat, rotation, normale de la face (plantee), axe du disque,
      * qui l'a paree (-1), boite ou elle est plantee (-1), renvois consecutifs, pieces relancees (bits),
      * minuterie (reemission si plantee, vrombissement en vol) */

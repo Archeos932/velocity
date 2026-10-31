@@ -53,6 +53,12 @@
 #define RAIL_CD        0.85f
 #define PICKUP_RESPAWN  12.0f
 
+/* Cartes (MapDef, docs/CODE.md) : bande d'acceleration de La Boucle, plan de mort des cartes ouvertes */
+#define SPEED_ACCEL     30.0f   /* B_SPEED : poussee (m/s2) dans le sens de la bande, sans friction */
+#define SPEED_MAX       28.0f   /* B_SPEED : vitesse jusqu'a laquelle la bande pousse */
+#define VOID_CREDIT_T   4.0f    /* chute dans le vide moins de 4 s apres une touche : kill au dernier attaquant */
+#define VOID_WARN_H     8.0f    /* vignette rouge sous killY + 8 m quand on tombe */
+
 /* Pieces facon Marksman (Ultrakill) : on lance une piece, un tir de rail qui la touche ricoche
  * tout seul vers la cible la plus proche. Pense pour viser a pleine vitesse. */
 #define COIN_MAX        4
@@ -61,6 +67,25 @@
 #define COIN_MULT       1.5f    /* chaque ricochet multiplie les degats */
 #define COIN_GRAVITY    16.0f
 #define COIN_SEEK_RANGE 90.0f
+
+/* Competences : l'emplacement de la piece (touche A_SKILL) recoit une competence au choix du LOADOUT
+ * (docs/COMPETENCES_MARKSMAN.md). Charges et recharge par competence : skillDef. */
+enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_COUNT };
+#define MARK_T            4.0f    /* MARQUE : duree de la marque */
+#define MARK_RANGE        90.0f
+#define MARK_MULT         1.25f   /* toute touche du marqueur sur une cible marquee */
+#define CHARGE_HOLD       0.6f    /* CHARGE : maintenir la touche */
+#define CHARGE_WINDOW     2.0f    /* puis fenetre ouverte pour la prochaine touche */
+#define CHARGE_MULT       1.5f
+#define CHARGE_GRACE      0.05f   /* une fois declenchee, les autres touches du meme tir en profitent (perforation, plombs) */
+#define RIC_BOUNCES       3       /* RICOCHET : rebonds du prochain projectile */
+#define RIC_MAX_LEN       120.0f  /* portee totale d'un rail reflechi */
+#define RIC_ROCKET_SLOW   0.8f    /* vitesse gardee par une roquette a chaque rebond */
+#define ALLIN_SPREAD_BASE 0.8f    /* ALL IN ONE : demi-angle de l'eventail (degres) */
+#define ALLIN_SPREAD_PER  0.7f    /* par munition au-dela de la premiere */
+#define ALLIN_SPREAD_MAX  6.0f
+#define DECOY_T           3.0f    /* MIRAGE : duree du leurre */
+#define DECOY_MULT        1.0f    /* un de mes rails qui le traverse ricoche sans bonus */
 #define RAIL_DMG       100.0f
 #define ROCKET_CD      0.75f
 #define ROCKET_SPEED   38.0f
@@ -186,7 +211,7 @@ enum { ANVIL_IDLE, ANVIL_DIVE, ANVIL_STUN };
 #define SAW_BOUNCE_CHAIN 3       /* renvois consecutifs max sans rattraper la scie */
 #define SAW_RETURN_PARRY_DMG_MULT 0.9f /* renvoi par parry : lancer + renvoi ne tue plus une cible immobile (choix du 27/10) */
 #define SAW_LOST_T       3.0f    /* sous le plan de mort : revient apres 3 s */
-#define SAW_LOST_Y       -20.0f  /* plan de mort (les cartes n'en definissent pas encore) */
+#define SAW_LOST_Y       -20.0f  /* plan de mort des cartes fermees (sinon killY de la carte, map_lost_y) */
 #define SAW_FLY_MAX      12.0f   /* garde-fou : vol trop long = perdue */
 #define SAW_RESYNC       2.0f    /* reemission periodique de l'etat plante (joueurs arrives en cours) */
 #define SAW_WHIRR        0.18f   /* vrombissement rejoue en vol */
@@ -413,4 +438,16 @@ static const AmmoDef ammoDef[WP_COUNT] = {
 static const char *meleeNames[MK_COUNT] = { "EPEE", "ENCLUME", "LANCE", "YOYO", "IMPULSION", "EGIDE" };
 static unsigned char wpReady[WP_COUNT] = { 1, 1, 1, 1, 1, 1, 1 };   /* chaque arme codee passe sa case a 1 */
 static unsigned char mkReady[MK_COUNT] = { 1, 1, 1, 1, 1, 1 };
+/* competences : nom, charges max, secondes par charge, couleur, description (LOADOUT) */
+typedef struct { const char *name; int max; float recharge; float r, g, b; const char *desc; } SkillDef;
+static const SkillDef skillDef[SK_COUNT] = {
+    { "PIECE",      COIN_MAX, COIN_RECHARGE, 1.00f, 0.82f, 0.30f, "lance une piece : le rail qui la touche ricoche (x1,5)" },
+    { "MARQUE",     2, 6,  0.85f, 0.35f, 1.00f, "marque une cible 4 s, visible a travers les murs : tes touches x1,25" },
+    { "CHARGE",     1, 8,  1.00f, 0.55f, 0.20f, "maintenir 0,6 s : ta prochaine touche dans les 2 s fait x1,5 (perdue si touche)" },
+    { "RICOCHET",   1, 15, 0.40f, 1.00f, 0.70f, "le prochain rail / elan / roquette rebondit 3 fois sur le decor" },
+    { "ALL IN ONE", 1, 20, 1.00f, 0.30f, 0.30f, "tire toute la munition de l'arme en main d'un coup, en eventail" },
+    { "MIRAGE",     2, 7,  0.40f, 0.85f, 1.00f, "leurre immobile 3 s : absorbe un tir adverse, ton rail y ricoche" },
+};
+static int wantSkill = SK_COIN;
+static int botSkillSet;                                   /* --skill / --loadout a,b,m,s : competence imposee au bot */
 static const float wpCd[WP_COUNT] = { RAIL_CD, ROCKET_CD, SG_CD, KIN_CD, 0.4f, MINE_CD, 0.1f };  /* barre de recharge du HUD */

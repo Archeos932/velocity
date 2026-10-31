@@ -66,6 +66,80 @@ static void aim_assist(float dt) {
 /* Le bot joue comme un joueur de movement shooter : bhop permanent, air-strafe en balancant
  * la vue autour de la cible (en tenant le strafe du cote ou il tourne), dash et grappin pour
  * combler la distance, visee recalee au moment de tirer, corps a corps au contact. */
+/* --- Competences du bot (la PIECE est jouee avec le rail, la Tesla et le fleau, dans bot_think) : un usage simple
+ * par competence, avec le temps de reaction et l'imprecision du bot. Appele en dernier : la visee posee ici reste --- */
+static int allin_ok(int w);
+static int bot_near_wall(V3 c) {                          /* un mur a moins de 3 m de la cible (rebond possible) */
+    static const float dx[4] = { 1, -1, 0, 0 }, dz[4] = { 0, 0, 1, -1 };
+    for (int k = 0; k < 4; k++) if (ray_world(c, v3(dx[k], 0, dz[k]), 3, 0) < 3) return 1;
+    return 0;
+}
+static void bot_skill(float dt, int best, float bd, int see, float seeT, float aimYaw, float aimPitch, float errY, float errP) {
+    static float next, hurtT = -10, lastHp = 100, hiddenT;
+    if (P.hp < lastHp - 0.5f) hurtT = botT;
+    lastHp = P.hp;
+    if (best >= 0 && !see) hiddenT += dt; else hiddenT = 0;
+    if (P.skill == SK_COIN || (P.skillCh < 1 && !P.ricArmed)) return;
+    int react = see && seeT > botReactT[botLevel];
+    switch (P.skill) {
+    case SK_MARK:                                         /* MARQUE : cible vue entre 10 et 60 m, pas deja marquee */
+        if (best >= 0 && react && bd > 10 && bd < 60 && markP[best] <= 0 && botT > next) {
+            P.yaw = aimYaw + errY; P.pitch = aimPitch + errP;
+            botPress[A_SKILL] = 1; next = botT + 1.5f;
+            netlog("competence : marque sur %s (%.1f m)", pname(best), bd);
+        }
+        break;
+    case SK_CHARGE:                                       /* CHARGE : maintenue quand une cible approche, pour le prochain tir */
+        if (best >= 0 && see && bd < 30 && P.chargeT <= 0 && wp_has_ammo(P.weapon)) botHeld[A_SKILL] = 1;
+        break;
+    case SK_RICOCHET: {
+        int gun = P.weapon == WP_RAIL || P.weapon == WP_ROCKET || P.weapon == WP_KINETIC;
+        if (!P.ricArmed) {                                /* armee si la cible est a couvert ou pres d'un mur */
+            if (best >= 0 && gun && wp_has_ammo(P.weapon) && bd < 45 && botT > next &&
+                (hiddenT > botReactT[botLevel] || bot_near_wall(np_center(best)))) {
+                botPress[A_SKILL] = 1; next = botT + 1;
+                netlog("competence : ricochet arme (%s %s)", pname(best), hiddenT > 0 ? "a couvert" : "pres d'un mur");
+            }
+        } else if (best >= 0 && !see && bd < 40 && hiddenT > botReactT[botLevel] + 0.3f && P.weapon != WP_ROCKET && gun &&
+                   wp_has_ammo(P.weapon) && P.fireCd <= 0 && P.switchT <= 0) {
+            /* cible cachee : tir par le sol, on vise son reflet sous le sol (un rebond) */
+            V3 eye = eye_pos(), t = np_center(best);
+            float down = ray_world(t, v3(0, -1, 0), 30, 0), fy = t.y - down;
+            if (down >= 30 || eye.y <= fy + 0.3f) break;
+            V3 tm = v3(t.x, 2 * fy - t.y, t.z), dm = vsub(tm, eye);
+            float s = (eye.y - fy) / (eye.y - tm.y);
+            V3 b = vadd(eye, vmul(dm, s)), up = v3(b.x, fy + 0.05f, b.z), n;
+            float lb = vlen(vsub(b, eye));
+            if (!los(eye, up) || !los(up, t) || ray_world(eye, vnorm(dm), lb + 0.2f, &n) < lb - 0.3f || n.y < 0.9f) break;
+            P.yaw = atan2f(dm.x, -dm.z) + errY;
+            P.pitch = asinf(clampf(dm.y / fmaxf(vlen(dm), 0.01f), -1, 1)) + errP;
+            botHeld[A_FIRE] = 1;
+            netlog("competence : ricochet par le sol vers %s (%.1f m)", pname(best), bd);
+        }
+        break;
+    }
+    case SK_ALLIN:                                        /* ALL IN ONE : de pres, au moins 3 munitions */
+        if (best >= 0 && react && bd > 4 && bd < 14 && allin_ok(P.weapon) && P.ammo[P.weapon] >= 3 && P.switchT <= 0 && botT > next) {
+            P.yaw = aimYaw + errY; P.pitch = aimPitch + errP;
+            botPress[A_SKILL] = 1; next = botT + 1;
+            netlog("competence : all in one sur %s (%.1f m, %d munitions)", pname(best), bd, P.ammo[P.weapon]);
+        }
+        break;
+    case SK_DECOY: {                                      /* MIRAGE : bas en PV ou sous le feu (apres le temps de reaction) */
+        float since = botT - hurtT;
+        if (best >= 0 && bd < 50 && botT > next &&
+            (P.hp < 45 || (since > botReactT[botLevel] && since < botReactT[botLevel] + 0.4f))) {
+            botPress[A_SKILL] = 1; next = botT + 2.5f;
+            if (P.dashCharge >= 1) {                      /* puis un pas de cote : le leurre reste a ma place */
+                botPress[A_DASH] = 1; botHeld[((int)(botT * 10)) % 2 ? A_LEFT : A_RIGHT] = 1; botNextDash = botT + 1.2f;
+            }
+            netlog("competence : mirage (%.0f PV%s)", P.hp, P.hp < 45 ? "" : ", sous le feu");
+        }
+        break;
+    }
+    }
+}
+
 static void bot_think(float dt) {
     botT += dt;
     if (appState == APP_JOIN && botLocal && !join_busy()) {
@@ -344,6 +418,26 @@ static void bot_think(float dt) {
     } else {
         aimYaw = (searchYaw += dt * 0.6f);                /* personne : on tourne en cherchant */
     }
+    {   /* MIRAGE adverse : comme un humain, le bot s'y laisse prendre une fois sur deux, 0,4 a 1 s puis il comprend */
+        static unsigned int decoyKey;
+        static float decoyUntil;
+        for (int i = 0; best >= 0 && i < MAXCOIN; i++) {
+            Coin *c = &CO[i];
+            if (!c->alive || !c->decoy || c->owner != best) continue;
+            if (decoyKey != c->netId) {
+                decoyKey = c->netId;
+                decoyUntil = frand() < 0.5f ? botT + frange(0.4f, 1.0f) : 0;
+                netlog("mirage de %s : %s", pname(best), decoyUntil > 0 ? "le bot vise le leurre" : "le bot n'y croit pas");
+            }
+            V3 eye = eye_pos(), d = vsub(c->pos, eye);
+            if (botT < decoyUntil && los(eye, c->pos)) {
+                aimYaw = atan2f(d.x, -d.z);
+                aimPitch = asinf(clampf(d.y / fmaxf(vlen(d), 0.01f), -1, 1));
+                see = 1;
+            }
+            break;
+        }
+    }
 
     /* une arme a sec et personne de proche : on va chercher une cellule (les grandes d'abord) */
     int seek = -1;
@@ -560,7 +654,7 @@ static void bot_think(float dt) {
      * (seulement avec les 2 rails : on ne gaspille pas le dernier) */
     if (P.weapon == WP_RAIL && P.ammo[WP_RAIL] >= 2 && P.fireCd <= 0 && P.switchT <= 0) {
         for (int i = 0; i < MAXCOIN; i++) {
-            if (!CO[i].alive || CO[i].owner == myId || CO[i].life > 3.7f) continue;   /* reaction de 0,3 s */
+            if (!CO[i].alive || CO[i].decoy || CO[i].owner == myId || CO[i].life > 3.7f) continue;   /* reaction de 0,3 s */
             if (CO[i].netId % 2) continue;                /* le bot ne contre qu'une piece sur deux */
             V3 eye = eye_pos(), d = vsub(CO[i].pos, eye);
             float l = vlen(d);
@@ -575,10 +669,10 @@ static void bot_think(float dt) {
 
     static int coinPlan;                                  /* a pleine vitesse : piece, puis tir dedans */
     static float coinPlanT, nextCoin;
-    if (!coinPlan && see && bd > 10 && bd < 55 && hs > 11 && P.coins >= 1 && P.ammo[WP_RAIL] > 0 && P.weapon == WP_RAIL &&
+    if (!coinPlan && P.skill == SK_COIN && see && bd > 10 && bd < 55 && hs > 11 && P.skillCh >= 1 && P.ammo[WP_RAIL] > 0 && P.weapon == WP_RAIL &&
         P.fireCd < 0.3f && botT > nextCoin) {
         P.yaw = aimYaw; P.pitch = aimPitch;
-        botPress[A_COIN] = 1;
+        botPress[A_SKILL] = 1;
         coinPlan = 1; coinPlanT = 0; nextCoin = botT + 2.5f;
     } else if (coinPlan) {
         coinPlanT += dt;
@@ -672,7 +766,7 @@ static void bot_think(float dt) {
         static float teslaCoinT;
         P.yaw = aimYaw + aimErrYaw; P.pitch = aimPitch + aimErrPitch;
         botHeld[A_FIRE] = 1;
-        if (bd < 12 && P.coins >= 1 && botT > teslaCoinT) { botPress[A_COIN] = 1; teslaCoinT = botT + 2.5f; netlog("tesla : piece relais lancee"); }
+        if (P.skill == SK_COIN && bd < 12 && P.skillCh >= 1 && botT > teslaCoinT) { botPress[A_SKILL] = 1; teslaCoinT = botT + 2.5f; netlog("tesla : piece relais lancee"); }
     }
 
     /* Elan : tire quand sa vitesse suffit ; sinon dash-tir, fenetre reussie une fois sur deux
@@ -746,9 +840,10 @@ static void bot_think(float dt) {
         if (best >= 0 && P.meleeCd <= 0 && bd < flail_range(rel_speed(np_vel(best))) + 0.3f && (see || bd < 2.5f)) {
             P.yaw = aimYaw; P.pitch = aimPitch;           /* au contact aussi : c'est la seule melee (jauges) */
             botPress[A_MELEE] = 1;
-        } else if (!fcPlan && !coinPlan && best >= 0 && see && bd > 8 && bd < 25 && P.coins >= 1 && P.meleeCd <= 0 && botT > fcNext) {
+        } else if (!fcPlan && !coinPlan && P.skill == SK_COIN && best >= 0 && see && bd > 8 && bd < 25 && P.skillCh >= 1 &&
+                   P.meleeCd <= 0 && botT > fcNext) {
             P.yaw = aimYaw; P.pitch = aimPitch;
-            botPress[A_COIN] = 1;
+            botPress[A_SKILL] = 1;
             fcPlan = 1; fcT = 0; fcNext = botT + 3;
         } else if (fcPlan) {
             fcT += dt;
@@ -767,6 +862,7 @@ static void bot_think(float dt) {
         /* --- fin Poings --- */
     } else if (best >= 0 && bd < bot_melee_reach(rel_speed(np_vel(best))) + 0.5f && P.meleeCd <= 0) { P.yaw = aimYaw; botPress[A_MELEE] = 1; }
     /* --- fin Lance --- */
+    bot_skill(dt, best, bd, see, seeT, aimYaw, aimPitch, aimErrYaw, aimErrPitch);   /* Competences (hors piece, plus haut) */
     static float logT;
     if ((logT += dt) > 1) {
         logT = 0;

@@ -325,7 +325,7 @@ static void player_tick(float dt, int jumpPress, int dashPress) {
     grapple_tick(dt, alive && hookPressIn && !diving && !stun, alive && hookHeldIn);
 
     /* friction (aucune quand le grappin tire) */
-    if (P.grounded && P.hook != HOOK_ATTACHED) {
+    if (P.grounded && P.hook != HOOK_ATTACHED && boxes[P.groundBox].kind != B_SPEED) {   /* bande : aucune friction */
         float sp = hlen(P.vel);
         if (sp > 1e-4f) {
             float fr = P.sliding ? SLIDE_FRICTION : (hasWish ? FRICTION * FRICTION_MOVE : FRICTION);
@@ -422,6 +422,11 @@ static void player_tick(float dt, int jumpPress, int dashPress) {
         P.fovKick += 6;
         burst(P.pos, v3(0.3f, 0.9f, 1.0f), 30, 6, 0.6f, 0.15f);
         play(S_PAD, 0.8f, 1.0f);
+    }
+    if (P.grounded && boxes[P.groundBox].kind == B_SPEED && alive) {   /* bande d'acceleration : poussee dans son sens */
+        V3 L = boxes[P.groundBox].launch, d = vnorm(L);
+        float along = vdot(P.vel, d), cap = vlen(L);
+        if (along < cap) P.vel = vadd(P.vel, vmul(d, fminf(SPEED_ACCEL * dt, cap - along)));
     }
 
     wall_check();

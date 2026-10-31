@@ -297,7 +297,8 @@ static void build_skyline_list(void);
 static void gfx_reload(void);
 static void build_world_list(void) {
     bake_lightmaps();
-    GLfloat fogScene[4] = { gxFogCol[0], gxFogCol[1], gxFogCol[2], 1 }, fogGray[4] = { 0.5f, 0.5f, 0.5f, 1 }, fogWhite[4] = { 1, 1, 1, 1 };
+    const float *fgc = map_fog_col();
+    GLfloat fogScene[4] = { fgc[0], fgc[1], fgc[2], 1 }, fogGray[4] = { 0.5f, 0.5f, 0.5f, 1 }, fogWhite[4] = { 1, 1, 1, 1 };
     worldList = glGenLists(1);
     glNewList(worldList, GL_COMPILE);
     glEnable(GL_CULL_FACE);                                   /* normales sortantes verifiees : la face interieure de
@@ -347,6 +348,7 @@ static void build_world_list(void) {
     glLineWidth(1.5f);
     for (int i = 1; i < nb; i++) {
         if (boxes[i].kind == B_PAD) glColor4f(0.6f, 1.0f, 1.0f, 0.9f);
+        else if (boxes[i].kind == B_SPEED) glColor4f(1.0f, 0.5f, 0.9f, 0.9f);
         else if (gxEdges > 0.001f) glColor4f(0.05f, 0.05f, 0.1f, gxEdges);
         else continue;
         box_edges(boxes[i].mn, boxes[i].mx);
@@ -356,3 +358,21 @@ static void build_world_list(void) {
     glEndList();
     build_skyline_list();
 }
+
+/* change de carte : boites, liste d'affichage, et plus rien de la carte precedente (projectiles, pieces, drones...) */
+static int glReady;                                       /* contexte OpenGL cree (les tests --test n'en ont pas) */
+static void load_map(int m) {
+    if (m < 0 || m >= NMAPS) m = 0;
+    for (int i = 0; i <= MAXP; i++) saw_remove_owner(i);  /* Scie : rendue a chacun */
+    curMap = m;
+    build_level(m);
+    if (glReady) {
+        if (worldList) glDeleteLists(worldList, 1);
+        build_world_list();
+    }
+    memset(PR, 0, sizeof PR); memset(CO, 0, sizeof CO); memset(E, 0, sizeof E);
+    memset(PA, 0, sizeof PA); memset(BM, 0, sizeof BM); memset(TR, 0, sizeof TR);
+    for (int i = 0; i < npu; i++) PU[i].t = PU[i].pending = 0;
+    voidPending = 0;
+}
+

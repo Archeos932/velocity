@@ -66,6 +66,9 @@
 
 #include "src/bots/bot.c"                        /* bots : visee, decisions */
 
+#include "src/combat/competences.c"              /* competences : MARQUE, CHARGE, RICOCHET, ALL IN ONE, MIRAGE (la piece en est une) */
+#include "src/jeu/kill_zone.c"                  /* kill zone : chute dans le vide (killY de la carte), bots prudents au bord */
+
 #include "src/jeu/boucle.c"                      /* ramassage, game_tick (un pas de simulation), fx_tick */
 
 #include "src/rendu/base.c"                      /* polices et matrices de camera */

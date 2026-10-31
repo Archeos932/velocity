@@ -55,6 +55,7 @@ static void sg_burst_fx(V3 o, int mine) {
 static void sg_coin_burst(int ci, int depth, SgAcc *A) {
     Coin *c = &CO[ci];
     if (!c->alive) return;                                /* deja eclatee par un autre plomb */
+    if (c->decoy) { if (!depth) decoy_absorb(ci, "plomb"); return; }   /* MIRAGE adverse : arrete le plomb, n'eclate pas */
     V3 o = c->pos;
     c->alive = 0; sgBursts++;
     if (dmMode) net_fx_coin(1, c->netId, o, v3(1, 0, 0));   /* f[3] = 1 : detruite EN ECLAT */
@@ -110,8 +111,9 @@ static void fire_shotgun(void) {
         float tw = ray_world(eye, dir[k], SG_RANGE, &nrm[k]), t;
         int ci = -1, te = -1, tp = -1;
         onWall[k] = tw < SG_RANGE;
-        for (int i = 0; i < MAXCOIN; i++)                 /* toute piece, la mienne ou non */
-            if (CO[i].alive && ray_sphere(eye, dir[k], CO[i].pos, SG_COIN_RADIUS, tw, &t)) { tw = t; ci = i; }
+        for (int i = 0; i < MAXCOIN; i++)                 /* toute piece, la mienne ou non (MIRAGE : pas mon leurre) */
+            if (CO[i].alive && !(CO[i].decoy && CO[i].owner == myId) && !decoy_skip(i, eye) &&
+                ray_sphere(eye, dir[k], CO[i].pos, SG_COIN_RADIUS, tw, &t)) { tw = t; ci = i; }
         for (int i = 0; i < MAXE; i++)
             if (E[i].alive && ray_sphere(eye, dir[k], E[i].pos, enemy_radius(E[i].type), tw, &t)) { tw = t; te = i; ci = -1; }
         for (int i = 0; i < MAXP; i++) {

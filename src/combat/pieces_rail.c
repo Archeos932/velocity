@@ -13,8 +13,8 @@ static void throw_coin(void) {
         Coin *c = &CO[i];
         if (c->alive) continue;
         V3 f = view_dir();
-        P.coins -= 1;
-        c->alive = 1; c->owner = myId; c->life = 4; c->spin = 0; c->teslaT = 0; c->flailStruck = 0;
+        P.skillCh -= 1;
+        c->alive = 1; c->owner = myId; c->life = 4; c->spin = 0; c->teslaT = 0; c->flailStruck = 0; c->decoy = 0;
         c->pos = vadd(eye_pos(), vadd(vmul(f, 0.7f), v3(0, -0.2f, 0)));
         c->vel = vadd(P.vel, vadd(vmul(f, 9), v3(0, 6, 0)));   /* la piece garde ta vitesse : elle reste devant toi */
         c->netId = ((unsigned int)(myId + 1) << 24) | (++coinCounter & 0xFFFFFF);
@@ -29,6 +29,11 @@ static void coin_tick(float dt) {
     for (int i = 0; i < MAXCOIN; i++) {
         Coin *c = &CO[i];
         if (!c->alive) continue;
+        if (c->pos.y < maps[curMap].killY - 2) { c->alive = 0; continue; }   /* tombee dans le vide */
+        if (c->decoy) {                                   /* MIRAGE : immobile, sans gravite, puis se dissipe */
+            if ((c->life -= dt) <= 0) { c->alive = 0; burst(c->pos, v3(0.4f, 0.85f, 1), 18, 4, 0.35f, 0.08f); }
+            continue;
+        }
         if (c->teslaT > 0) {                              /* --- Tesla : relais, la piece flotte et frappe tout autour --- */
             c->teslaT -= dt; c->spin += dt * 3;
             if ((c->teslaPulse -= dt) <= 0.5f * TICK) {
@@ -67,15 +72,34 @@ static void coin_tick(float dt) {
     }
 }
 
+/* MIRAGE : un tir adverse (rail, Elan, plomb) touche le leurre `ci` : il s'y arrete et le leurre disparait partout */
+static int decoyHits;                                     /* journal : tirs absorbes par un leurre adverse */
+static void decoy_absorb(int ci, const char *what) {
+    Coin *c = &CO[ci];
+    if (!c->alive) return;
+    c->alive = 0; decoyHits++;
+    if (dmMode) net_fx_coin(1, c->netId, c->pos, v3(0, 0, 0));
+    burst(c->pos, v3(0.4f, 0.85f, 1), 30, 7, 0.4f, 0.1f);
+    play(S_PARRY, 0.5f, 0.7f);
+    snprintf(popText, sizeof popText, "LEURRE !"); popT = 1.0f;
+    if (botMode) netlog("mirage : %s absorbe par le leurre de %s", what, c->owner < MAXP ? NP[c->owner].name : "?");
+}
+/* un leurre ne prend pas le tir qui part de l'interieur (MIRAGE pose sur soi : sinon chaque rail tire juste apres
+ * serait renvoye vers la cible la plus proche, une visee automatique) */
+static int decoy_skip(int ci, V3 eye) {
+    return CO[ci].decoy && vlen(vsub(eye, CO[ci].pos)) < COIN_RADIUS + (CO[ci].owner == myId ? 0.5f : 0.0f);
+}
+
 /* Le rail touche la piece `ci` : il repart vers une autre piece (chaine) ou vers la cible visible la plus proche,
  * avec des degats multiplies. Renvoie 1 si une cible a ete touchee. */
 static int ricochet(int ci, float dmg, int depth) {
     Coin *c = &CO[ci];
     V3 o = c->pos;
     int stolen = c->owner != myId;                        /* contre-jeu : la piece d'un adversaire se retourne contre lui */
+    if (c->decoy && stolen) { decoy_absorb(ci, "rail"); return 0; }   /* MIRAGE adverse : le leurre absorbe le tir */
     c->alive = 0;
     if (dmMode) net_fx_coin(1, c->netId, o, v3(0, 0, 0));
-    dmg *= stolen ? 1.0f : COIN_MULT;                     /* piece volee : renvoie le tir, mais sans bonus */
+    dmg *= c->decoy ? DECOY_MULT : stolen ? 1.0f : COIN_MULT;   /* piece volee : renvoie le tir, mais sans bonus */
     lastChain = depth + 1;
     for (int k = 0; k < 20; k++) add_part(o, vmul(rand_dir(), 6), v3(1, 0.85f, 0.3f), 0.35f, 0.1f, 0);
     play(S_PARRY, 0.55f, 1.5f + 0.15f * depth);
@@ -151,15 +175,20 @@ static int ricochet(int ci, float dmg, int depth) {
     return 1;
 }
 
+/* RICOCHET : journal (tirs reflechis, rebonds, retours sur le tireur) et trace du dernier tir (directions de chaque
+ * segment, normale du decor a son extremite) pour les tests */
+static int ricStat[3], ricSelfDone, ricSegs;
+static V3 ricDir[RIC_BOUNCES + 1], ricNrm[RIC_BOUNCES + 1];
 /* trajet hitscan perforant (rail, Elan) : piece (le tir s'y arrete), ennemis, joueurs LAN ; renvoie 1 si touche.
  * dmg : degats PvE (deja multiplies par la chaine), knockE / knockP : recul PvE / PvP, w : W_* des touches LAN */
-static int hitscan_shot(float dmg, float knockE, float knockP, int w, V3 *endOut, V3 *nOut) {
-    V3 eye = eye_pos(), d = view_dir(), n;
-    float tw = ray_world(eye, d, 400, &n);
-    int hit = 0, coinHit = -1;
+static int hitscan_seg(V3 eye, V3 d, float maxLen, int selfHit, float dmg, float knockE, float knockP, int w,
+                       V3 *endOut, V3 *nOut, int *stop) {
+    V3 n;
+    float tw = ray_world(eye, d, maxLen, &n);
+    int hit = 0, coinHit = -1, shieldStop = 0, wall = tw < maxLen - 0.01f;
     for (int i = 0; i < MAXCOIN; i++) {                   /* une de mes pieces sur la trajectoire ? le tir s'y arrete */
         float t;
-        if (CO[i].alive && ray_sphere(eye, d, CO[i].pos, COIN_RADIUS, tw, &t)) { tw = t; coinHit = i; }
+        if (CO[i].alive && !decoy_skip(i, eye) && ray_sphere(eye, d, CO[i].pos, COIN_RADIUS, tw, &t)) { tw = t; coinHit = i; }
     }
     int mineHit = -1;                                     /* --- Ventouse : une mine (meme adverse) arrete le tir --- */
     for (int i = 0; i < MAXPR; i++) {
@@ -170,7 +199,7 @@ static int hitscan_shot(float dmg, float knockE, float knockP, int w, V3 *endOut
         V3 mn, mx; float t;
         if (!np_target(i) || !shield_faces(i, d, SHB_DIRECT)) continue;
         np_aabb(i, 0.05f, &mn, &mx);
-        if (ray_box(eye, d, mn, mx, tw, &t, NULL) && t < tw) { tw = t; coinHit = mineHit = -1; }
+        if (ray_box(eye, d, mn, mx, tw, &t, NULL) && t < tw) { tw = t; coinHit = mineHit = -1; shieldStop = 1; }
     }
     for (int i = 0; i < MAXE; i++) {
         float t;
@@ -201,7 +230,41 @@ static int hitscan_shot(float dmg, float knockE, float knockP, int w, V3 *endOut
         popT = 1.0f;
         if (botMode) netlog("tir dans une mine (%s), %d touche(s)", foreign ? "volee" : "a moi", h);
     }                                                     /* --- fin Ventouse --- */
+    if (selfHit && !P.dead && !ricSelfDone) {             /* RICOCHET : a partir du 2e rebond, le tir peut revenir sur moi */
+        V3 mn, mx; float t;                               /* (une seule fois par tir : on ne se traverse qu'une fois) */
+        paabb(P.pos, pheight(), &mn, &mx);
+        if (ray_box(eye, d, mn, mx, tw, &t, NULL)) {
+            ricSelfDone = 1; ricStat[2]++;
+            damage_player(dmMode ? fminf(dmg * PVP_SCALE, PVP_HIT_CAP) : dmg * 0.5f);
+            if (botMode) netlog("ricochet : le rail revient sur le tireur");
+        }
+    }
     *endOut = vadd(eye, vmul(d, tw)); *nOut = n;
+    *stop = coinHit >= 0 || mineHit >= 0 || shieldStop || !wall;
+    return hit;
+}
+static int hitscan_shot(float dmg, float knockE, float knockP, int w, V3 *endOut, V3 *nOut) {
+    V3 o = eye_pos(), d = view_dir();
+    int stop, bounces = ric_take();
+    ricSelfDone = 0;
+    int hit = hitscan_seg(o, d, 400, 0, dmg, knockE, knockP, w, endOut, nOut, &stop);
+    V3 a = *endOut, n = *nOut;
+    float left = RIC_MAX_LEN - vlen(vsub(a, o));
+    ricSegs = 1; ricDir[0] = d; ricNrm[0] = n;
+    if (bounces) ricStat[0]++;
+    for (int b = 1; b <= bounces && !stop && left > 0.5f; b++) {   /* RICOCHET : reflexion r = d - 2 (d.n) n */
+        V3 e2, n2;
+        d = vnorm(vsub(d, vmul(n, 2 * vdot(d, n))));
+        o = vadd(a, vmul(n, 0.02f));
+        hit |= hitscan_seg(o, d, left, b >= 2, dmg, knockE, knockP, w, &e2, &n2, &stop);
+        add_beam(o, e2, v3(0.4f, 1, 0.7f), 0.5f);
+        if (dmMode) net_fx_rail(o, e2, 0);
+        for (int k = 0; k < 8; k++) add_part(a, vadd(vmul(n, 3), vmul(rand_dir(), 3)), v3(0.4f, 1, 0.7f), 0.35f, 0.08f, 8);
+        left -= vlen(vsub(e2, o));
+        a = e2; n = n2;
+        ricDir[ricSegs] = d; ricNrm[ricSegs] = n; ricSegs++;
+        ricStat[1]++;
+    }
     return hit;
 }
 

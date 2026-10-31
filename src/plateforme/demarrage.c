@@ -8,7 +8,7 @@ static void music_follow_game(void) {
     if (appState != APP_GAME) { if (mus.track >= 0) music_set(-1, 0); return; }   /* menus : silence */
     if (mus.track < 0) {                                  /* entree en partie : depart avec fondu, variations differentes a chaque partie */
         musSeed = (unsigned)(nowT * 1000.0) * 2654435761u + 1u;
-        music_set(0, 0);
+        music_set(maps[curMap].music, 0);
     }
     if (appState == APP_GAME && dmMode) {
         int lead = 0, second = 0;
@@ -36,7 +36,9 @@ static void do_action(void) {
     if (a == ACT_SOLO || a == ACT_HOST || a == ACT_BROWSE || a == ACT_QUICK || a == ACT_VSBOT) cfg_save();
     switch (a) {
     case ACT_SOLO:
-        net_shutdown(); reset_game(); appState = APP_GAME; set_capture(1);
+        net_shutdown();
+        if (curMap != (maps[menuMap].solo ? menuMap : 0)) load_map(maps[menuMap].solo ? menuMap : 0);
+        reset_game(); appState = APP_GAME; set_capture(1);
         break;
     case ACT_HOST:
         if (net_host_start()) { appState = APP_GAME; if (!botMode) set_capture(1); }
@@ -152,7 +154,16 @@ static int velocity_main(const char *cmd) {
     memcpy(binds, bindDefault, sizeof binds);
     if (cmd && strncmp(cmd, "--test ", 7) == 0) { run_tests(cmd + 7); return 0; }
     const char *shotPath = NULL;
-    if (cmd && strncmp(cmd, "--shot ", 7) == 0) { shotMode = 1; shotPath = cmd + 7; shotMap = strstr(shotPath, "carte") != NULL; if (strstr(shotPath, "carte3d")) mapView3d = 1; }
+    static char shotBuf[512];
+    float shotYaw = 0;
+    if (cmd && strncmp(cmd, "--shot ", 7) == 0) {
+        shotMode = 1;
+        snprintf(shotBuf, sizeof shotBuf, "%s", cmd + 7);
+        shotBuf[strcspn(shotBuf, " ")] = 0;               /* le nom s'arrete au premier espace (--map N, --yaw A ensuite) */
+        shotPath = shotBuf;
+        shotMap = strstr(shotPath, "carte") != NULL;      /* carte*.bmp : le second ecran */
+        if (strstr(shotPath, "carte3d")) mapView3d = 1;
+    }
 
     /* mode bot : velocity.exe --bot host|join [--name N] [--time S] [--log fichier] [--botshot fichier.bmp] [--loadout a,b[,m]] */
     {
@@ -181,14 +192,19 @@ static int velocity_main(const char *cmd) {
             else if (!strcmp(t, "--teams") && (t = strtok(NULL, " "))) wantTeams = atoi(t) < 0 ? 0 : atoi(t) > TEAM_MAX ? TEAM_MAX : atoi(t);
             else if (!strcmp(t, "--updated")) updAfter = 1;
             else if (!strcmp(t, "--level") && (t = strtok(NULL, " "))) botLevel = atoi(t) < 0 ? 0 : atoi(t) > 2 ? 2 : atoi(t);
-            else if (!strcmp(t, "--loadout") && (t = strtok(NULL, " "))) {   /* --loadout arme1,arme2[,melee] (WP_*, WP_*, MK_*) */
-                int l0, l1, mk, n = sscanf(t, "%d,%d,%d", &l0, &l1, &mk);
+            else if (!strcmp(t, "--map") && (t = strtok(NULL, " "))) menuMap = atoi(t) >= 0 && atoi(t) < NMAPS ? atoi(t) : 0;
+            else if (!strcmp(t, "--yaw") && (t = strtok(NULL, " "))) shotYaw = (float)atof(t);
+            else if (!strcmp(t, "--loadout") && (t = strtok(NULL, " "))) {   /* --loadout arme1,arme2[,melee[,competence]] (WP_*, WP_*, MK_*, SK_*) */
+                int l0, l1, mk, sk, n = sscanf(t, "%d,%d,%d,%d", &l0, &l1, &mk, &sk);
                 if (n >= 2) { wantLoadout[0] = l0; wantLoadout[1] = l1; }
-                if (n == 3) wantMelee = mk;
+                if (n >= 3) wantMelee = mk;
+                if (n == 4) { wantSkill = sk >= 0 && sk < SK_COUNT ? sk : SK_COIN; botSkillSet = 1; }
             }
+            else if (!strcmp(t, "--skill") && (t = strtok(NULL, " "))) { wantSkill = atoi(t) >= 0 && atoi(t) < SK_COUNT ? atoi(t) : SK_COIN; botSkillSet = 1; }
         }
     }
 
+    if (shotMode && strstr(shotPath, "small")) { winW = 1024; winH = 640; }   /* capture en fenetre reduite (mise en page) */
 #ifndef _WIN32
     if (!mac_window_create(winW, winH, "VELOCITY", !botHidden)) return 1;
     if (botMode) mac_window_place(botMode == 1 ? 0 : 820, 40, 800, 450);   /* deux bots cote a cote, fenetres reduites */
@@ -250,8 +266,9 @@ static int velocity_main(const char *cmd) {
     for (int i = 0; i < 3; i++) make_font_atlas(i);
     gfx_load_all();                                       /* graphismes/rendu.ini (sinon : valeurs par defaut) */
     make_textures();
-    build_level();
+    build_level(curMap);
     if (!botHidden || botShot[0]) build_world_list();       /* un bot cache ne dessine rien : pas de lightmaps */
+    glReady = !botHidden || botShot[0];                   /* load_map : reconstruire la liste d'affichage */
     make_sounds();
     {                                                     /* velocity.ini, a cote de l'executable */
 #ifdef _WIN32
@@ -280,6 +297,11 @@ static int velocity_main(const char *cmd) {
         if (updCheck) { updQuiet = 1; upd_start(upd_check_th, UPD_CHECKING); }
     }
     if (!shotMode && !botHidden) audio_init();
+    if (curMap != menuMap) load_map(menuMap);             /* --map N ou map= de velocity.ini */
+    if (botMode) {                                        /* Competences : sans --skill, le bot en tire une au hasard */
+        if (!botSkillSet) wantSkill = (int)(frand() * SK_COUNT) % SK_COUNT;
+        netlog("competence du bot : %s%s", skillDef[wantSkill].name, botSkillSet ? " (imposee)" : " (au hasard)");
+    }
     reset_game();
 
     if (shotMode && (strstr(shotPath, "settings") || strstr(shotPath, "menu") || strstr(shotPath, "loadout") ||
@@ -291,8 +313,8 @@ static int velocity_main(const char *cmd) {
             updInfo.build = VELOCITY_BUILD + 5; updState = updSeen = UPD_DOWNLOADING; updTotal = 1000; updGot = 630;
             set_status("nouvelle version disponible : build 5");
         }
-        if (strstr(shotPath, "settings")) { settingsOpen = 1; waitAct = A_COIN; waitSlot = 1; }
-        if (strstr(shotPath, "loadout")) loadoutOpen = 1;
+        if (strstr(shotPath, "settings")) { settingsOpen = 1; waitAct = A_SKILL; waitSlot = 1; }
+        if (strstr(shotPath, "loadout")) { loadoutOpen = 1; if (strstr(shotPath, "charge")) wantSkill = SK_CHARGE; }
         if (strstr(shotPath, "heberger")) { hostOpen = 1; wantTeams = 2; hostBots = 1; }
         if (strstr(shotPath, "skinmenu")) { skinOpen = 1; wantSkin = SKN_POUSSIN; skinPrevTeam = 1; nowT = 0.4; }
         render(1, TICK);
@@ -334,7 +356,7 @@ static int velocity_main(const char *cmd) {
         save_bmp(shotPath);
         return 0;
     }
-    if (shotMode && strstr(shotPath, "dm")) {   /* capture d'une scene de deathmatch */
+    if (shotMode && (strstr(shotPath, "dm") || strstr(shotPath, "skills"))) {   /* capture d'une scene de deathmatch */
         appState = APP_GAME; dmMode = 1; myId = 0;
         memset(NP, 0, sizeof NP);
         snprintf(NP[0].name, 16, "Moi"); NP[0].active = NP[0].alive = 1; NP[0].hp = 100; NP[0].kills = 3;
@@ -401,8 +423,30 @@ static int velocity_main(const char *cmd) {
             NP[1].teslaHitMeT = nowT = 1;
             tesla_fx_tick(TICK);
         }
+        if (strstr(shotPath, "skills")) {                 /* Competences : Rival marque (losange), leurre MIRAGE de Ninja, le mien */
+            P.skill = SK_MARK; P.skillCh = 1.4f; markP[1] = 3;
+            memset(CO, 0, sizeof CO);
+            CO[0].alive = 1; CO[0].decoy = 1; CO[0].owner = 2; CO[0].life = 2; CO[0].spin = PI + 0.6f;
+            CO[0].pos = v3(7, 0.9f, 15);
+            CO[1].alive = 1; CO[1].decoy = 1; CO[1].owner = 0; CO[1].life = 0.5f; CO[1].spin = 0.3f;
+            CO[1].pos = v3(-3, 0.9f, 19);
+            add_beam(v3(0.3f, 1.4f, 23.4f), np_center(1), v3(0.85f, 0.35f, 1), 0.3f);
+        }
         matchT = 95;
         if (strstr(shotPath, "bench")) { bench_render(shotPath); return 0; }
+        render(1, TICK);
+        save_bmp(shotPath);
+        return 0;
+    }
+    if (shotMode && curMap != 0) {        /* autres cartes : vue du menu, d'un point de depart ("spawn"), ou chute vers le vide ("chute") */
+        const MapDef *md = &maps[curMap];
+        appState = APP_GAME;
+        P.pos = md->menuCam; P.pitch = md->menuPitch; P.yaw = shotYaw;
+        if (strstr(shotPath, "spawn")) { P.pos = v3(md->spawns[0][0], md->spawns[0][1], md->spawns[0][2]); P.pitch = -0.05f; }
+        if (strstr(shotPath, "chute")) { P.pos = v3(md->menuCam.x + 2, md->killY + 3, md->menuCam.z + 2); P.vel = v3(0, -20, 0); P.pitch = -0.7f; }
+        P.prevPos = P.pos;
+        if (md->solo && strstr(shotPath, "solo")) { wave = 3; for (int i = 0; i < 8; i++) spawn_enemy(); }
+        gameTime = 1.3f;
         render(1, TICK);
         save_bmp(shotPath);
         return 0;
@@ -581,6 +625,7 @@ static int velocity_main(const char *cmd) {
         net_update(dt);
         if (botMode) {
             bot_think(dt);
+            bot_void_guard(dt);                           /* kill zone : pas de saut dans le vide, grappin de secours */
             if (nowT > botTime) break;
             if (botLocal && appState != APP_GAME && botT > 12) break;   /* l'hote est parti : le bot adverse se ferme */
         }
@@ -639,17 +684,27 @@ done:
         netlog("paquets recus %d, envoyes %d", pktIn, pktOut);
         netlog("vitesse du bot : moyenne %.1f m/s, max %.1f m/s", botSpeedSum / fmaxf(botAliveT, 0.01f), botMaxSpeed);
         if (netMode == NET_HOST)
-            netlog("equilibre : temps pour tuer moyen %.2f s sur %d kills, one-shots %d, parries reussis %d, epees parees %d, chocs %d",
-                   ttkN ? ttkSum / ttkN : 0.0, ttkN, oneShots, parryCount, meleeParries, clashes);
+            netlog("equilibre : temps pour tuer moyen %.2f s sur %d kills, one-shots %d, parries reussis %d, epees parees %d, chocs %d, "
+                   "salves mortelles %d", ttkN ? ttkSum / ttkN : 0.0, ttkN, oneShots, parryCount, meleeParries, clashes, burstKills);
         if (netMode == NET_HOST) {
             char hb[512]; int n = 0;
             for (int w = 0; w < W_COUNT && n < (int)sizeof hb - 40; w++)
                 if (hitCount[w]) n += snprintf(hb + n, sizeof hb - n, "%s %d, ", weaponNames[w], hitCount[w]);
             netlog("touches arbitrees : %s parries %d", n ? hb : "aucune, ", parryCount);
         }
+        if (maps[curMap].killY > -999)                    /* kill zone */
+            netlog("carte %s : chutes dans le vide %d (moi)%s", maps[curMap].name, voidFalls, "");
+        if (netMode == NET_HOST && maps[curMap].killY > -999)
+            netlog("vide (arbitre) : %d chutes, %d creditees a l'attaquant, %d suicides", voidCredited + voidSuicides, voidCredited,
+                   voidSuicides);
         netlog("munitions : points touche %.0f, kill %.0f, parry %.0f, cellules %.0f (%d prises), perdus %.0f ; a sec %.0f%% du temps",
                apStat[AP_HIT], apStat[AP_KILL], apStat[AP_PARRY], apStat[AP_CELL], cellsTaken, apStat[AP_LOST],
                100 * dryT / fmaxf(botAliveT, 0.01f));
+        netlog("competences : %s ; utilisations piece %d, marque %d, charge %d, ricochet %d, all in one %d, mirage %d ; "
+               "touches bonifiees %d ; ricochets : %d tirs, %d rebonds, %d retours sur soi ; dernier all in one %d projectiles ; "
+               "tirs absorbes par un leurre adverse %d",
+               skillDef[P.skill].name, skillUse[SK_COIN], skillUse[SK_MARK], skillUse[SK_CHARGE], skillUse[SK_RICOCHET],
+               skillUse[SK_ALLIN], skillUse[SK_DECOY], skillBonus, ricStat[0], ricStat[1], ricStat[2], allinLast, decoyHits);
         if (slamDives || slamWaves || slamParried || hitCount[W_SLAM])
             netlog("enclume : %d piques, ondes qui touchent %d / %d, |vy| moyen %.1f, degats moyens par onde %.1f, "
                    "immobilisations %d ; arbitre : touches %d, ondes parees %d, combos onde + rail %d",

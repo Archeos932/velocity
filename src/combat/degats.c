@@ -74,6 +74,7 @@ static void kill_enemy(int i, int byPlayer) {
 static void damage_enemy(int i, float dmg, V3 knock) {
     Enemy *e = &E[i];
     if (!e->alive) return;
+    dmg = skill_out(-1, i, dmg);                          /* Competences : MARQUE, CHARGE */
     e->hp -= dmg; e->flash = 0.12f;
     dmg_number(e->pos, dmg);
     e->vel = vadd(e->vel, knock);

@@ -190,6 +190,25 @@ Les nouveautés d'`origin/dev` sont intégrées et rangées dans l'arborescence 
 - Le code fusionné a été vérifié de la même façon que pour le point 6 : sortie du préprocesseur identique entre le
   fichier fusionné à plat et l'arborescence.
 
+## 18. Fusion avec le dépôt original (`origin/stable` : compétences et cartes)
+
+Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc ; tout est porté dans l'arborescence `src/` :
+
+- **Compétences** (emplacement générique, touche COMPETENCE) : PIECE, MARQUE, CHARGE, RICOCHET, ALL IN ONE, MIRAGE ;
+  choix dans LOADOUT (`skill=` dans `velocity.ini`), HUD des charges sous l'arme. Nouveau fichier
+  `src/combat/competences.c` ; détails dans `docs/COMPETENCES_MARKSMAN.md`.
+- **Cartes** : `MapDef` et 4 nouvelles cartes (LE PUITS, LE CANYON, LA BOUCLE, LE DOJO), bandes d'accélération,
+  ancres de grappin, pads visés ; **kill zone** (`W_VOID`, kill crédité au dernier attaquant), bots prudents au bord
+  du vide (`src/jeu/kill_zone.c`). Choix de la carte et ROTATION dans le menu principal **et** dans HEBERGER UNE
+  PARTIE ; `--map N` pour les bots et les captures (§3.18 de `docs/CODE.md`).
+- **Raccords avec `dev`** : départs par camp sur toutes les cartes en mode équipes, annonce LAN avec le mode **et**
+  la carte, lightmaps/ombres/bloom sur les nouvelles cartes (ciel et brouillard propres à chaque carte, `rendu.ini`
+  et ses ambiances pour l'Arène), carte du second écran et radar calés sur l'emprise réelle de la carte, chute hors
+  de la carte conservée sur les cartes fermées. `NET_VER` passe à **14** (les deux côtés avaient pris 13).
+- Vérifié : compilation macOS sans avertissement, toutes les lignes `--test` de `dev` et de l'original présentes et
+  conformes (+ une ligne : départs par camp sur LE CANYON), captures, matchs bot contre bot sur LE CANYON et LE DOJO
+  (le client sans `--map` charge bien la carte de l'hôte). Pas encore vérifié sous Windows.
+
 ---
 
 ## Vérifications faites

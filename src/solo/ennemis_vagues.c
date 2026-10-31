@@ -16,8 +16,9 @@ static void spawn_enemy(void) {
         e->fireT = frange(1.5f, 3.0f);
         e->t = frange(0, 10);
         for (int tries = 0; tries < 20; tries++) {
-            float ang = frange(0, 2 * PI), rad = frange(ms(28), ms(48));
-            e->pos = v3(cosf(ang) * rad, frange(9, 18), sinf(ang) * rad);
+            const MapDef *md = &maps[curMap];
+            float ang = frange(0, 2 * PI), rad = frange(md->enemyRMin, md->enemyRMax);
+            e->pos = v3(cosf(ang) * rad, frange(md->enemyMinY, md->enemyMaxY), sinf(ang) * rad);
             if (vlen(vsub(e->pos, P.pos)) > 22) break;
         }
         sphere_pushout(&e->pos, &e->vel, enemy_radius(e->type));
@@ -70,7 +71,8 @@ static void enemy_tick(float dt) {
         }
         e->pos = vadd(e->pos, vmul(e->vel, dt));
         sphere_pushout(&e->pos, &e->vel, enemy_radius(e->type));
-        if (e->pos.y < 1.0f) { e->pos.y = 1.0f; if (e->vel.y < 0) e->vel.y = 0; }
+        float floorY = maps[curMap].enemyFloor;          /* plancher des drones (au-dessus du vide) */
+        if (e->pos.y < floorY) { e->pos.y = floorY; if (e->vel.y < 0) e->vel.y = 0; }
     }
 }
 
@@ -100,12 +102,13 @@ static void wave_tick(float dt) {
 
 static void reset_game(void) {
     memset(&P, 0, sizeof P);
-    P.pos = P.prevPos = v3(0, 0, 24);
+    P.pos = P.prevPos = maps[curMap].start;
     P.hp = 100; P.dashCharge = 2; P.airJumps = 1; P.eyeH = EYE_STAND; P.fovCur = fovBase;
     loadout_apply();
     anvil_reset();
-    P.coins = COIN_MAX;
+    P.skillCh = (float)skillDef[P.skill].max;
     memset(CO, 0, sizeof CO);
+    memset(markP, 0, sizeof markP); memset(markE, 0, sizeof markE); markedMeT = 0; lastHpSeen = 100;
     for (int i = 0; i < npu; i++) PU[i].t = PU[i].pending = 0;
     memset(E, 0, sizeof E); memset(PR, 0, sizeof PR); memset(PA, 0, sizeof PA); memset(BM, 0, sizeof BM);
     memset(TR, 0, sizeof TR);

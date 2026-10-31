@@ -11,7 +11,7 @@
 /* HIT. Les evenements sont renvoyes 3 fois et dedoublonnes par id.    */
 /* ------------------------------------------------------------------ */
 #define NET_MAGIC 0x564C4F43u
-#define NET_VER   13
+#define NET_VER   14      /* 13 : carte dans WELCOME / ANNOUNCE / EV_MATCH, W_VOID ; 14 : fusion equipes + cartes */
 enum { PK_QUERY = 1, PK_ANNOUNCE, PK_JOIN, PK_WELCOME, PK_STATE, PK_SNAP, PK_ROSTER, PK_EVENT, PK_LEAVE,
        PK_PUNCH, PK_KEEP };   /* PUNCH : ouvre le NAT vers un client ; KEEP : un spectateur dit qu'il est la */
 enum { EV_RAIL = 1, EV_ROCKET, EV_ROCKET_END, EV_PARRY, EV_HIT, EV_MELEE, EV_KILL, EV_RESPAWN, EV_MATCH, EV_INFO, EV_PICKUP,
@@ -22,7 +22,8 @@ enum { EV_RAIL = 1, EV_ROCKET, EV_ROCKET_END, EV_PARRY, EV_HIT, EV_MELEE, EV_KIL
        EV_TESLA = 18,                                     /* Tesla : relais (0) ou decharge renvoyee (1) */
        EV_SHIELD = 19,                                    /* Egide : sub = SHE_* (revendication du tireur, decisions de l'hote) */
        EV_LANCE = 20,                                    /* Lance : choc de joute, emis par l'hote seulement */
-       EV_SLAM = 21 };                                    /* identifiants figes des armes : PLAN.md (15 a 20 reserves) */
+       EV_SLAM = 21,                                      /* identifiants figes des armes : PLAN.md (15 a 20 reserves) */
+       EV_SKILL = 22 };                                   /* Competences : sub = SK_*, target = cible marquee */
 
 #pragma pack(push, 1)
 typedef struct { unsigned int magic; unsigned char type, from, ver, pad; } PkHead;
@@ -31,7 +32,7 @@ typedef struct {
     unsigned char kind, from, target, sub, actor, pad[3];
     float f[7];
 } NetEvent;
-typedef struct { PkHead h; char name[16]; unsigned char players, maxp, teams, pad; } PkAnnounce;   /* teams : teamSize */
+typedef struct { PkHead h; char name[16]; unsigned char players, maxp, teams, map; } PkAnnounce;   /* teams : teamSize ; map : curMap */
 typedef struct { PkHead h; char name[16]; unsigned char spec, pad[3]; } PkJoin;
 typedef struct { PkHead h; unsigned char id, refused, pad[2]; } PkWelcome;
 typedef struct { PkHead h; NetPState st; } PkState;
@@ -47,6 +48,7 @@ typedef struct {
     int online, spec;                                     /* online : salon du lobby (addr = ip:port public) ; spec : spectateurs */
     int teams;                                            /* LAN : mode annonce (0 chacun pour soi, N = NvN) */
     char id[8];                                           /* identifiant du salon chez le lobby */
+    int map;                                              /* carte annoncee (LAN), -1 = inconnue (salon en ligne) */
 } Found;
 #define MAXFOUND 12
 static Found found[MAXFOUND];
@@ -234,6 +236,7 @@ static NetEvent ev_new(int kind) {
 }
 
 static void net_hit(int target, float dmg, V3 knock, int weapon) {
+    if (target != myId) dmg = skill_out(target, -1, dmg);   /* Competences : MARQUE, CHARGE */
     if (target != myId && target < MAXP) dmg_number(np_center(target), fminf(dmg, PVP_HIT_CAP));
     flail_combo_check(target, weapon);                    /* Fleau : combo fleau -> rail (visuel) */
     NetEvent e = ev_new(EV_HIT);
@@ -252,9 +255,11 @@ static void net_fx_kinetic(V3 a, V3 b, float e) {          /* Elan : EV_RAIL sou
     ev.sub = 1; ev.actor = (unsigned char)(clampf(e, 0, 1) * 255);
     net_emit(&ev);
 }
+static Proj *find_proj(unsigned int netId);
 static void net_fx_rocket(V3 pos, V3 vel, unsigned int netId) {
     NetEvent e = ev_new(EV_ROCKET);
     e.netId = netId; vf(e.f, pos); vf(e.f + 3, vel);
+    { Proj *p = find_proj(netId); if (p) e.sub = (unsigned char)p->ricLeft; }   /* RICOCHET : la copie rebondit aussi */
     net_emit(&e);
 }
 static void net_fx_rocket_end(unsigned int netId, V3 pos) {
@@ -270,6 +275,13 @@ static void net_fx_parry(unsigned int netId, V3 pos, V3 vel, float mult, int par
 static void net_fx_coin(int sub, unsigned int netId, V3 pos, V3 vel) {
     NetEvent e = ev_new(EV_COIN);
     e.sub = (unsigned char)sub; e.netId = netId; vf(e.f, pos); vf(e.f + 3, vel);
+    net_emit(&e);
+}
+/* Competences : EV_SKILL, sub = SK_*, target = joueur marque (255 : aucun), f[0..2] / f[3..5] = trace ou centre */
+static void net_fx_skill(int sub, int target, V3 a, V3 b) {
+    NetEvent e = ev_new(EV_SKILL);
+    e.sub = (unsigned char)sub; e.target = (unsigned char)(target < 0 ? 255 : target);
+    vf(e.f, a); vf(e.f + 3, b);
     net_emit(&e);
 }
 static void net_fx_melee(V3 pos, V3 dir, float sp) {
@@ -308,6 +320,7 @@ static void net_fx_saw(int sub, Proj *p, int target, int actor) {
 }
 /* comme net_hit, avec f[4] = nombre de renvois de la scie (journal de l'hote) */
 static void net_hit_saw(int target, float dmg, V3 knock, int w, int bounces) {
+    if (target != myId) dmg = skill_out(target, -1, dmg);
     if (target != myId && target < MAXP) dmg_number(np_center(target), fminf(dmg, PVP_HIT_CAP));
     NetEvent e = ev_new(EV_HIT);
     e.target = (unsigned char)target; e.sub = (unsigned char)w;
@@ -340,6 +353,7 @@ static void net_fx_mine(int sub, unsigned int netId, V3 a, V3 b, int target, flo
 }
 /* comme net_hit, avec le netId de l'objet source : l'hote ignore les touches d'une mine dont il a donne le sort a un autre */
 static void net_hit_id(int target, float dmg, V3 knock, int weapon, unsigned int netId) {
+    if (target != myId) dmg = skill_out(target, -1, dmg);
     if (target != myId && target < MAXP) dmg_number(np_center(target), fminf(dmg, PVP_HIT_CAP));
     NetEvent e = ev_new(EV_HIT);
     e.target = (unsigned char)target; e.sub = (unsigned char)weapon; e.netId = netId;
@@ -371,6 +385,7 @@ static int shield_intercept(int i, V3 dir, float dmg, V3 knock, int w, int blast
 }
 static int hit_player_ex(int i, float dmg, V3 knock, int w, V3 dir, int blast, unsigned int netId, float f4, float f5, float f6) {
     if (shield_intercept(i, dir, dmg, knock, w, blast, netId)) return 0;
+    if (i != myId) dmg = skill_out(i, -1, dmg);           /* Competences : MARQUE, CHARGE */
     if (i != myId && i < MAXP) dmg_number(np_center(i), fminf(dmg, PVP_HIT_CAP));
     flail_combo_check(i, w);                              /* Fleau : combo fleau -> rail (visuel) */
     NetEvent e = ev_new(EV_HIT);
@@ -692,7 +707,7 @@ static void apply_event(const NetEvent *ev) {
     }
     case EV_ROCKET: {
         Proj *p = spawn_proj(PR_ROCKET, a, b);
-        if (p) { p->owner = ev->from; p->netId = ev->netId; }
+        if (p) { p->owner = ev->from; p->netId = ev->netId; p->ricLeft = ev->sub; }
         play(S_ROCKET, 0.7f * atten(a), 1.0f);
         break;
     }
@@ -854,7 +869,7 @@ static void apply_event(const NetEvent *ev) {
             P.dashCharge = 2; P.airJumps = 1; P.crouch = P.sliding = P.wallrun = 0;
             loadout_apply();
             anvil_reset();
-            P.coins = COIN_MAX;
+            P.skillCh = (float)skillDef[P.skill].max; P.ricArmed = 0; P.chargeT = P.chargeHold = 0;
             P.yaw = atan2f(-a.x, a.z); P.pitch = 0; P.eyeH = EYE_STAND; P.roll = 0;
             shotStreak = 0;
         }
@@ -864,6 +879,12 @@ static void apply_event(const NetEvent *ev) {
     }
     case EV_MATCH:
         if (ev->sub == 0) {
+            if (ev->target < NMAPS && ev->target != curMap) {   /* changement de carte entre deux matchs */
+                load_map(ev->target);
+                if (!spectating) { P.pos = P.prevPos = maps[curMap].start; P.vel = v3(0, 0, 0); }
+                else { P.pos = P.prevPos = vadd(maps[curMap].menuCam, v3(0, maps[curMap].specUp, 0)); }
+                netlog("carte : %s", maps[curMap].name);
+            }
             matchOver = 0;
             for (int i = 0; i < MAXPR; i++) if (PR[i].kind == PR_MINE) PR[i].alive = 0;   /* Ventouse : nouveau match */
             memset(kfeed, 0, sizeof kfeed);
@@ -881,12 +902,31 @@ static void apply_event(const NetEvent *ev) {
             netlog("fin du match, gagnant : %s", msg);
         }
         break;
+    case EV_SKILL:                                        /* Competences d'un autre joueur */
+        if (ev->sub == SK_MARK) {
+            add_beam(a, b, v3(0.85f, 0.35f, 1), 0.3f);
+            if (ev->target == myId) {
+                markedMeT = MARK_T;
+                snprintf(popText, sizeof popText, "TU ES MARQUE"); popT = 1.2f;
+                play(S_HIT, 0.6f, 0.6f);
+            }
+        } else if (ev->sub == SK_CHARGE) burst(a, v3(1, 0.55f, 0.2f), 30, 5, 0.4f, 0.1f);
+        else if (ev->sub == SK_ALLIN) { play(S_EXPLO, 0.5f * atten(a), 1.5f); }
+        break;
     case EV_COIN:                                         /* piece d'un autre joueur : visible, mais pas a nous */
-        if (ev->sub == 0) {
+        if (ev->sub == 4) {                               /* MIRAGE : leurre immobile (f[3] = orientation) */
+            for (int i = 0; i < MAXCOIN; i++)
+                if (!CO[i].alive) {
+                    memset(&CO[i], 0, sizeof CO[i]);
+                    CO[i].alive = 1; CO[i].decoy = 1; CO[i].owner = ev->from; CO[i].netId = ev->netId;
+                    CO[i].pos = a; CO[i].life = DECOY_T; CO[i].spin = ev->f[3];
+                    break;
+                }
+        } else if (ev->sub == 0) {
             for (int i = 0; i < MAXCOIN; i++)
                 if (!CO[i].alive) {
                     CO[i].alive = 1; CO[i].owner = ev->from; CO[i].netId = ev->netId;
-                    CO[i].pos = a; CO[i].vel = b; CO[i].life = 4; CO[i].spin = 0; CO[i].teslaT = 0; CO[i].flailStruck = 0;
+                    CO[i].pos = a; CO[i].vel = b; CO[i].life = 4; CO[i].spin = 0; CO[i].teslaT = 0; CO[i].flailStruck = 0; CO[i].decoy = 0;
                     break;
                 }
         } else if (ev->sub == 1 && ev->f[3] == 1) {       /* Eventail : piece eclatee par un plomb */
@@ -895,13 +935,13 @@ static void apply_event(const NetEvent *ev) {
             sg_burst_fx(a, 0);
         } else if (ev->sub == 3) {                        /* relancee par une scie */
             for (int i = 0; i < MAXCOIN; i++)
-                if (CO[i].alive && CO[i].netId == ev->netId) { CO[i].pos = a; CO[i].vel = b; CO[i].life = ev->f[6]; }
+                if (CO[i].alive && !CO[i].decoy && CO[i].netId == ev->netId) { CO[i].pos = a; CO[i].vel = b; CO[i].life = ev->f[6]; }
         } else if (ev->sub == 2) {                        /* --- Fleau : frappee (visuelle ici, mais le rail peut la voler) --- */
             int ci = -1;
             for (int i = 0; i < MAXCOIN && ci < 0; i++) if (CO[i].alive && CO[i].netId == ev->netId) ci = i;
             for (int i = 0; i < MAXCOIN && ci < 0; i++)
                 if (!CO[i].alive) { ci = i; CO[i].alive = 1; CO[i].owner = ev->from; CO[i].netId = ev->netId; CO[i].spin = 0; CO[i].teslaT = 0; }
-            if (ci >= 0) {
+            if (ci >= 0 && !CO[ci].decoy) {
                 CO[ci].flailStruck = 1; CO[ci].pos = a; CO[ci].vel = b; CO[ci].life = FLAIL_COIN_LIFE;
                 play(S_FLAIL_COIN, 0.7f * atten(a), 1.0f);
             }                                             /* --- fin Fleau --- */
@@ -1025,7 +1065,7 @@ static void apply_event(const NetEvent *ev) {
             for (int i = 0; i < MAXCOIN; i++) {
                 Coin *c = &CO[i];
                 if (!c->alive || c->netId != ev->netId) continue;
-                if (c->teslaT > 0 && c->teslaBy < ev->from) break;   /* activations simultanees : le plus petit id gagne */
+                if (c->decoy || (c->teslaT > 0 && c->teslaBy < ev->from)) break;   /* MIRAGE : jamais relais */   /* activations simultanees : le plus petit id gagne */
                 c->pos = a; c->vel = v3(0, 0, 0);
                 c->teslaT = TESLA_RELAY_T; c->teslaPulse = 0; c->teslaBy = ev->from;
                 burst(a, v3(0.5f, 0.75f, 1), 20, 6, 0.3f, 0.1f);

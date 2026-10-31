@@ -96,16 +96,16 @@ velocity/
 │   ├── noyau/        entete.c (includes), maths.c (V3, aleatoire)
 │   ├── reglages/     equilibrage.c : TOUS les #define (mouvement, armes, parry, PvP, points)
 │   ├── son/          audio.c (mixeur, sons synthetises), music.h (morceaux et sequenceur)
-│   ├── monde/        carte.c (boites AABB, collisions, rayons), entites.c (Player P, Enemy, Proj...)
+│   ├── monde/        carte.c (boites AABB, les 5 cartes MapDef, collisions, rayons), entites.c (Player P, Enemy, Proj...)
 │   ├── entrees/      actions.c (touches, A_*, bindDefault)
 │   ├── effets/       combat_fx.c (impact frames, input_poll), particules.c, camera_mort.c, monde_fx.c (neons, meteo)
 │   ├── joueur/       mouvement.c (player_tick, grappin)
-│   ├── combat/       degats.c, loadout.c, melee.c, pieces_rail.c, roquettes.c, projectiles.c
+│   ├── combat/       degats.c, loadout.c, melee.c, pieces_rail.c, roquettes.c, projectiles.c, competences.c
 │   ├── armes/        une arme = un fichier : enclume, lance, fleau, poings, egide, elan, eventail, tesla, scie, ventouse
 │   ├── solo/         ennemis_vagues.c
 │   ├── reseau/       etat_partage.c, protocole.c (paquets, EV_*), hote.c, client.c, en_ligne.c (lobby, STUN)
 │   ├── bots/         bot.c
-│   ├── jeu/          boucle.c (pickup_tick, game_tick)
+│   ├── jeu/          kill_zone.c (void_check, bots prudents), boucle.c (pickup_tick, game_tick)
 │   ├── graphismes/   rendu_ini.c (lecture de graphismes/rendu.ini, ambiances, qualite)
 │   ├── perso/        skins.c (modeles et animation des personnages)
 │   ├── rendu/        base, textures, eclairage (lightmaps), modeles, armes_rendu, viewmodel, joueurs,
@@ -126,7 +126,7 @@ velocity/
 | `noyau/maths.c` | vecteurs 3D et aléatoire | `V3`, `v3`, `vadd`, `vsub`, `vmul`, `vdot`, `vcross`, `vlen`, `vnorm`, `vlerp`, `clampf`, `hlen`, `rng`, `frand`, `frange`, `rand_dir` |
 | `reglages/equilibrage.c` | presque tous les `#define` d'équilibrage (voir §5) | mouvement, grappin, armes (une sous-partie par arme), parry, PvP, points, molette |
 | `son/audio.c` | mixeur + synthèse | `S_*`, `Sound`, `Voice`, `play`, `audio_fill`, `audio_update`, `make_sounds`, `audio_init` ; inclut `music.h` |
-| `monde/carte.c` | carte, collisions, rayons | `Box`, `boxes`, `addbox`, `addpad`, `Pickup`, `build_level`, `ray_world`, `los`, `sphere_pushout` |
+| `monde/carte.c` | cartes, collisions, rayons | `Box`, `boxes`, `addbox`, `addpad`, `addpad_to`, `addspeed`, `addanchor`, `Pickup`, `build_map_*`, `MapDef`, `maps[]`, `curMap`, `build_level(m)`, `mapBox`, `ray_world`, `los`, `sphere_pushout` |
 | `monde/entites.c` | structures de jeu et état solo | `Player` (`P`), `Enemy` (`E`), `Coin` (`CO`), `Proj` (`PR`), `Part`, `Beam`, `hitstop`, `msg` |
 | `reseau/etat_partage.c` | ce que le jeu doit connaître du réseau avant le réseau | `MAXP`, `NetPState`, `NetPlayer` (`NP`), `myId`, équipes, déclarations anticipées `net_hit`, `net_fx_*` |
 | `entrees/actions.c` | touches physiques et actions | `SC_*`, `K_*`, `keys`, `latch`, `A_*`, `actId`, `actLabel`, `bindDefault`, `binds`, `act`, `actP` |
@@ -146,6 +146,8 @@ velocity/
 | `reseau/client.c` | client | `on_welcome`, `apply_snap`, `client_recv`, `net_update`, `net_connect` |
 | `reseau/en_ligne.c` | lobby et STUN (voir §4) | `stun_*`, `lb_*`, `quick_play` |
 | `bots/bot.c` | bots | `aim_assist`, `bot_think` |
+| `combat/competences.c` | compétences (touche `A_SKILL`) | `skill_mark`, `skill_allin`, `skill_decoy`, `skill_tick` |
+| `jeu/kill_zone.c` | chute sous `killY` | `void_check`, `bot_lands`, `bot_void_guard` |
 | `jeu/boucle.c` | un pas de simulation | `pickup_tick`, `spec_tick`, `fire_weapon`, `game_tick`, `fx_tick` |
 | `graphismes/rendu_ini.c` | `graphismes/rendu.ini` (voir §3.13) | `gx*`, `gfxKeys`, `gfx_load_all`, `gfx_quality_apply` |
 | `rendu/textures.c` | textures, primitives | `make_textures`, `tex_override`, `quadf`, `box_faces`, `box_edges` |
@@ -320,6 +322,31 @@ vitesse **relative** : foncer sur quelqu'un qui fonce sur vous frappe très fort
 - Chaque pièce a un `netId` (id du joueur + 1 dans les 8 bits hauts, compteur dans les 24 bits bas).
   En LAN : `net_fx_coin(0, ...)` à la création, `net_fx_coin(1, ...)` à la destruction (`EV_COIN`).
 
+#### Compétences (`skill_tick`, `skillDef`, design : `docs/COMPETENCES_MARKSMAN.md`)
+
+La pièce est une **compétence** parmi six (`enum SK_*`), choisie au LOADOUT (`wantSkill`, clé `skill=` de
+`velocity.ini`, `--skill N` ou `--loadout a,b,m,s` pour les bots ; sans eux, un bot en tire une au hasard).
+Touche `A_SKILL` (ancien `A_COIN`), charges `P.skillCh` (max et recharge par `skillDef[]`).
+
+| Compétence | Fonction | Effet |
+|---|---|---|
+| `SK_COIN` PIÈCE | `throw_coin` | inchangée (4 charges, 2 s) |
+| `SK_MARK` MARQUE | `skill_mark` | tir sans dégâts (90 m) : cible marquée 4 s (`markP[]` / `markE[]`), losange à travers les murs, mes touches ×1,25 |
+| `SK_CHARGE` CHARGE | `skill_tick` | maintenir 0,6 s → `P.chargeT` = 2 s : la prochaine touche ×1,5 (`CHARGE_GRACE` pour les autres touches du même tir), perdue si on perd des PV |
+| `SK_RICOCHET` RICOCHET | `ric_take`, `hitscan_shot` | `P.ricArmed` : le prochain rail / Élan est réfléchi (`r = d − 2(d·n)n`, 3 rebonds, 120 m), la roquette rebondit (`p->ricLeft`, ×0,8) ; recharge seulement après le tir ; retour sur soi à partir du 2e rebond, une fois par tir |
+| `SK_ALLIN` ALL IN ONE | `skill_allin` | toute la munition (rail, roquettes, Éventail, Élan) en éventail régulier, demi-angle `allin_half(n)` ; refus à 1 munition, Scie / Ventouse / Tesla, bouclier levé |
+| `SK_DECOY` MIRAGE | `skill_decoy` | `Coin` avec `decoy = 1` : immobile 3 s, absorbe un rail / Élan / plomb adverse (`decoy_absorb`), mon rail y ricoche ×1 ; ignoré par le yoyo, la scie, le tesla et le viseur adverse ; `decoy_skip` : un tir parti de l'intérieur le traverse |
+
+- Bonus centralisé : `skill_out()` dans `damage_enemy`, `net_hit*`, `hit_player_ex` (une fois par touche).
+- Réseau : `EV_SKILL` (marque, charge, all in one), `EV_COIN` sous-type 4 (leurre), `EV_ROCKET.sub` = rebonds.
+- Bots (`bot_skill`, appelé en fin de `bot_think`) : MARQUE sur une cible vue à 10–60 m, CHARGE maintenue
+  quand une cible approche, RICOCHET armé cible à couvert / près d'un mur (puis tir par le sol si elle reste
+  cachée), ALL IN ONE à 4–14 m avec ≥ 3 munitions, MIRAGE sous 45 PV ou juste après une touche. Un bot vise
+  le leurre adverse une fois sur deux pendant 0,4 à 1 s. Journal : ligne `competences : ...`, et
+  `salves mortelles` dans la ligne `equilibre` (kill depuis la pleine vie en < 0,1 s, en plusieurs touches).
+- Captures : `--shot skills.bmp` (marque, leurres), `--shot loadout_small.bmp` (fenêtre 1024×640),
+  `loadout_charge` (description sur deux lignes).
+
 #### Roquettes (`fire_rocket`, `proj_tick`, `explode`)
 
 - Arme 1. Projectile `PR_ROCKET` (`spawn_proj`) à `ROCKET_SPEED`, recharge `ROCKET_CD / streak_rate()`.
@@ -473,7 +500,8 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
 - Fichier : `velocity.ini` **à côté de l'exécutable** (chemin `cfgPath`, calculé avec
   `GetModuleFileNameA` dans `WinMain`). Format `cle=valeur`, une par ligne, `#` pour un commentaire :
   `name`, `sens`, `fov`, `volume`, `invert_y`, `show_fps`, `fullscreen`, `impact_frames`, `screen_fx`,
-  `online`, `update_check` (vérifier les mises à jour au démarrage), puis `bind_<actId>=code1,code2`.
+  `online`, `update_check` (vérifier les mises à jour au démarrage), `map` (carte choisie, §3.18), `map_rotate`,
+  puis `bind_<actId>=code1,code2`.
 - `cfg_load` lit au démarrage (pas en mode bot ni `--shot`), borne les valeurs (`clampf`) et ignore
   les clés inconnues. Il renvoie 1 si le plein écran est demandé.
 - `cfg_save` réécrit tout le fichier ; il ne fait rien si `botMode`, `shotMode` ou `cfgPath` vide.
@@ -534,6 +562,74 @@ Fichier `src/interface/mise_a_jour.c`, inclus juste avant `interface/config.c`.
 - **Antivirus** : Windows Defender signale parfois `velocity.exe` (et les builds de test) comme
   `Trojan:Win32/Bearfoos.A!ml`, un faux positif heuristique déjà vu avant le bouton de mise à jour. Pistes :
   signaler le faux positif à Microsoft, ajouter une ressource de version (`VERSIONINFO`), signer le binaire.
+
+### 3.18 Cartes (`MapDef`) et kill zone
+
+Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de construction, section « Monde ») :
+
+| # | Nom | Fonction | `killY` | Solo | Idée |
+|---|---|---|---|---|---|
+| 0 | ARENE | `build_map_arene` | −1000 (fermée) | oui | la carte d'origine, **inchangée** (`run_tests` dépend du couloir x = −20 et des pads) |
+| 1 | LE PUITS | `build_map_puits` | −30 | non | puits de 40 × 40 m, spirale de 8 plateformes reliées par des pads (y 0 → 42), sommet à 50 (grandes cellules), 12 ancres au centre, 2 îlots de secours au fond (pads vers la spirale) |
+| 2 | LE CANYON | `build_map_canyon` | −15 | non | deux falaises (y 20) et un gouffre de 70 m ; pads au bord → îlots extérieurs → îlots centraux ; tour de tir de 10 m par falaise ; 6 ancres espacées de 20 m au plus |
+| 3 | LA BOUCLE | `build_map_boucle` | −1000 | oui | anneau de 120 × 60 m, deux voies par ligne droite avec bandes d'accélération à contresens, séparateurs bas, bloc central coupé au milieu, passerelles et toit à 10 m, pads de coin et pads vers le toit |
+| 4 | LE DOJO | `build_map_dojo` | −1000 | oui | salle de 36 × 36 m, plafond à 7 m, 16 piliers, ring surélevé de 0,5 m, **aucune cellule** |
+
+- **`MapDef`** : `name` (sans accents), `build`, `spawns`/`nspawns` (coordonnées du monde ; l'Arène garde ses
+  anciens points via la macro `MS()` = `ms()` à la compilation), `start` (départ solo et position d'attente en LAN),
+  `killY`, zone des drones du solo (`enemyMinY/MaxY`, `enemyRMin/RMax` autour du centre, plancher `enemyFloor`),
+  caméra du menu (`menuCam`, `menuPitch` ; le spectateur est `specUp` mètres plus haut), `solo`, `music`, couleurs
+  `sky` (haut du ciel) et `fog` (horizon et brouillard, utilisées par `draw_sky` et `render`).
+- **Chargement** : `build_level(m)` remet `nb = npu = 0` et appelle `maps[m].build()`. `load_map(m)` fait
+  `build_level`, reconstruit la liste d'affichage (`glDeleteLists` + `build_world_list`, seulement si `glReady` :
+  `--test` n'a pas de contexte OpenGL), vide projectiles, pièces, drones, particules, rayons, rend les scies, remet
+  les cellules. `curMap` = carte chargée ; `menuMap` / `mapRotate` = choix du menu (`map=`, `map_rotate=` dans
+  `velocity.ini`).
+- **Branché sur `MapDef`** : `pick_spawn`, `reset_game`, `menu_backdrop` (charge `menuMap` : le fond du menu montre
+  la carte choisie), la vue du spectateur (`on_welcome`), `spawn_enemy`, le plancher des drones dans `enemy_tick`,
+  la scie perdue (`map_lost_y()` = `killY`, ou `SAW_LOST_Y` sur une carte fermée), ciel et brouillard.
+- **Outils de carte** (coordonnées du monde, sans `MAP_S`) : `addpad_at(x, y, z, v)` (pad posé à la hauteur y),
+  `addpad_to(x, y, z, cible, vy)` (calcule la vitesse avec `pad_aim` pour retomber sur `cible`), `addspeed`
+  (bande d'accélération), `addanchor` (ancre de grappin : cube de 1,2 m jaune), `addcell` (cellule).
+- **`B_SPEED`** (bande d'accélération) : boîte plate de 0,12 m ; `launch` = sens × `SPEED_MAX`. Dans `player_tick`,
+  au sol dessus : aucune friction, et `+SPEED_ACCEL` m/s² dans son sens jusqu'à `SPEED_MAX` (28 m/s). Rendu :
+  arêtes roses dans la liste d'affichage, chevrons qui défilent dans `draw_map_fx` (hors liste).
+- **Choix** : menu principal, ligne « CARTE : < NOM > » sous le pseudo (flèches cliquables) + bouton ROTATION
+  (l'hôte passe à la carte suivante à chaque nouveau match). SOLO utilise la carte choisie si elle est `solo`,
+  sinon l'Arène (le bouton l'indique). Options `--map N` (bots, captures).
+- **Réseau** (`NET_VER` 13) : l'id de carte voyage dans `PkWelcome.pad[0]` (le client fait `load_map` avant
+  `on_welcome`), `PkAnnounce.map` (affiché dans REJOINDRE : « [LAN LIBRE] Hote - LE PUITS ») et `EV_MATCH`
+  (`target`, sous-type 0 : début de match ; l'hôte y met la carte suivante si ROTATION). Le lobby en ligne ne
+  transmet pas la carte (on la reçoit à la connexion).
+
+- **Avec le reste de `dev`** (fusion du dépôt original, `NET_VER` 14) :
+  - **Équipes** : sur l'Arène, `pick_spawn` garde les moitiés nord/sud de `dev` ; sur les autres cartes, chaque camp
+    prend les départs de son côté de l'axe le plus long de la carte (bleus côté négatif, rouges côté positif).
+  - **Annonce LAN** : `PkAnnounce` porte `teams` **et** `map` (REJOINDRE : « [LAN 2V2] Hote - LE PUITS »).
+  - **Menu** : la ligne CARTE est dans le menu principal **et** dans HEBERGER UNE PARTIE (`draw_map_row`).
+  - **Rendu** : les nouvelles cartes passent par les lightmaps, ombres et bloom de `dev` (`load_map` reconstruit la
+    liste d'affichage dans `rendu/eclairage.c`). Ciel et brouillard : l'Arène suit `graphismes/rendu.ini` et ses
+    ambiances ; les autres cartes prennent `MapDef.sky` / `fog` (`map_fog_col`, `sky_color`). La ville
+    (`skylineList`) n'entoure que l'Arène.
+  - **Chute** : sur une carte fermée (`killY` −1000), la chute hors de la carte de `dev` (`FALL_DEATH_Y`) reste ;
+    sinon `void_check` (avec crédit du kill). Les deux mettent `fellOut` (« TOMBE DANS LE VIDE », pas de caméra de mort).
+  - **Second écran et radar** : l'emprise vient de `mapBox` (boîte englobante calculée par `build_level`), plus de
+    `boxes[0]` supposé être le sol (`mapFirst`).
+
+**Kill zone** (`void_check`, appelée dans `game_tick` juste après `player_tick`) :
+- sous `killY` : en solo `damage_player(999)` ; en LAN `net_hit(myId, 999, …, W_VOID)` (renvoyé toutes les 0,5 s
+  tant que l'hôte n'a pas tranché). Un corps mort s'arrête 6 m sous le plan.
+- **`W_VOID`** (dernier des `W_*`, « VIDE » dans le fil) : pas de plafond `PVP_HIT_CAP`, pas d'Égide, pas compté
+  dans le temps pour tuer. L'hôte mémorise pour chaque joueur le dernier attaquant et l'heure
+  (`NP[v].lastHitBy`, `lastHitT`, mis à jour dans `host_apply_damage`, remis à zéro par `host_respawn`) : une chute
+  moins de `VOID_CREDIT_T` (4 s) après une touche donne le kill à l'attaquant (« Rival [VIDE] Ninja »), sinon
+  c'est un suicide (« Ninja est tombe dans le vide », −1 frag). Compteurs `voidCredited`, `voidSuicides` (journal).
+- projectiles et pièces sous `killY − 2` disparaissent ; la scie est « perdue » et revient après `SAW_LOST_T`.
+- lisibilité : plan rouge sombre et grille additive qui respire 3 m sous `killY` (`draw_map_fx`, hors liste
+  d'affichage, sans brouillard) ; vignette rouge dans `draw_hud` quand on tombe à moins de `VOID_WARN_H` (8 m) du plan.
+- **Bots** : `bot_void_guard` (appelée dans la boucle principale juste après `bot_think`) annule un saut ou un dash
+  dont la trajectoire balistique (`bot_lands`) ne retombe sur aucun sol avant `killY`, freine au bord (dos au vide),
+  et en chute sans issue tente le double saut puis un **grappin de secours** vers le dessus de boîte le plus proche.
 
 ---
 
@@ -690,8 +786,9 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
 - UDP non bloquant, port `NET_PORT` (27960). Chaque paquet commence par `PkHead`
   (`magic` = `NET_MAGIC`, `type`, `from`, `ver` = `NET_VER`) ; `net_poll` jette tout paquet dont le
   magic ou la version diffère.
-- La carte n'est **pas** transmise : chaque exécutable la reconstruit (`build_level` est déterministe,
-  graine `rng = 777`). Tous les joueurs doivent donc avoir le même exécutable.
+- La géométrie n'est **pas** transmise, seulement l'**id de carte** (`PkWelcome.pad[0]`, `EV_MATCH.target`, §3.18) :
+  chaque exécutable la reconstruit (`build_level(m)` est déterministe, graine `rng = 777` pour l'Arène). Tous les
+  joueurs doivent donc avoir le même exécutable.
 
 ### Paquets `PK_*`
 
@@ -978,6 +1075,9 @@ Une version différente rend simplement les parties invisibles l'une à l'autre.
 | `MAXB` | 256 | boîtes de la carte (`boxes`) |
 | `MAP_S` | 1,4 | échelle horizontale de la carte (`ms()`) ; les hauteurs ne changent pas |
 | `MAXPICK` | 16 | cellules de recharge (limité aussi par les 16 bits de `pickMask`) |
+| `SPEED_ACCEL` / `SPEED_MAX` | 30 m/s² / 28 m/s | bande d'accélération `B_SPEED` (La Boucle) |
+| `VOID_CREDIT_T` | 4 s | chute dans le vide après une touche : kill à l'attaquant (§3.18) |
+| `VOID_WARN_H` | 8 m | hauteur au-dessus de `killY` où la vignette rouge apparaît |
 | `MAXE` | 64 | ennemis |
 | `MAXCOIN` | 24 | pièces |
 | `MAXPR` | 128 | projectiles |
@@ -998,7 +1098,7 @@ Une version différente rend simplement les parties invisibles l'une à l'autre.
 | `PVP_SCALE` | 0,7 | dégâts contre les joueurs = 70 % des dégâts contre les monstres |
 | `KILL_HEAL` | 30 PV | soin du tueur |
 | `NET_MAGIC` | `0x564C4F43` | signature des paquets (« VLOC ») |
-| `NET_VER` | 13 | version du protocole (voir §4) ; 12 = équipes, 13 = skin dans `NetPState` |
+| `NET_VER` | 14 | version du protocole (voir §4) ; 12 = équipes, 13 = skin dans `NetPState` (dev) / carte dans WELCOME, ANNOUNCE, EV_MATCH et `W_VOID` (original) ; 14 = fusion des deux (`PkAnnounce` : `teams` + `map`) |
 | `MAXSPEC` | 4 | spectateurs en direct sur l'hôte |
 | `MAXFOUND` | 12 | parties mémorisées (LAN + en ligne ; 7 affichées) |
 | `LOBBY_DEFAULT` | `velocity-lobby.velocity-void.workers.dev` | adresse du lobby déployé (`lobby=` dans `velocity.ini` la remplace) |
@@ -1073,18 +1173,25 @@ Ouvre la fenêtre sans l'activer, prépare une scène, la dessine une fois (`ren
 | `dm_equipes` | scène de deathmatch en 2v2 (HUD d'équipes, allié marqué) ; `_fin` : fin de match ; `_bas` : regard vers le sol (ombres des joueurs) |
 | `sansbloom` / `sansombre` | (à combiner) coupe le bloom / les ombres dynamiques pour comparer |
 
+Options après le nom : `--map N` (carte, §3.18) et `--yaw A` (orientation). Sur une carte autre que l'Arène
+(hors `menu`/`settings`/`dm`), la scène est une vue de la carte depuis la caméra du menu ; le nom peut contenir
+`spawn` (depuis le premier point de départ), `chute` (3 m au-dessus de `killY` en tombant : plan rouge et
+vignette) ou `solo` (avec 8 drones). Exemple : `velocity.exe --shot puits.bmp --map 1 --yaw 0.8`.
+
 Pas de son, `velocity.ini` n'est ni lu ni écrit.
 
 ### Mode bot : `--bot host|join`
 
 ```
-velocity.exe --bot host|join [--name N] [--time S] [--log fichier.txt] [--botshot fichier.bmp] [--teams N]
+velocity.exe --bot host|join [--name N] [--time S] [--log fichier.txt] [--botshot fichier.bmp] [--teams N] [--map N]
 ```
 
 - `--bot host` → `botMode = 1` : héberge automatiquement (`ACT_HOST`). Tout autre mot → `botMode = 2` :
   cherche (`ACT_BROWSE`) puis se connecte à la première partie trouvée (`bot_think`).
 - `--name` : pseudo (sinon le nom d'utilisateur Windows). `--time` : durée en secondes avant de quitter
-  (20 par défaut). `--log` : journal (`netlog`). `--botshot` : capture BMP à la fin.
+  (20 par défaut). `--log` : journal (`netlog`). `--botshot` : capture BMP à la fin. `--map N` : carte hébergée
+  (§3.18 ; le client reçoit celle de l'hôte). Sur une carte à vide, le résumé ajoute les chutes (« carte … : chutes
+  dans le vide », et côté hôte « vide (arbitre) : … chutes, … creditees a l'attaquant, … suicides »).
 - Fenêtres réduites à 800 × 450, l'hôte à gauche, le client à droite ; souris jamais capturée ;
   `velocity.ini` jamais lu ni écrit.
 - **Visée** : un tirage par tir (`bot_roll_aim`) : cadré avec la probabilité `botHitP[niveau]` (18 / 38 / 60 %,
@@ -1247,7 +1354,12 @@ Exemple : une troisième arme principale (`P.weapon == 2`).
 
 ### 7.5 Ajouter un élément de carte
 
-1. Dans `build_level`, ajoutez :
+Pour une **nouvelle carte** : une fonction `build_map_xxx()`, sa table de départs, une ligne dans `maps[]` (§3.18),
+avec les outils `addpad_to`, `addspeed`, `addanchor`, `addcell` (coordonnées du monde), puis `--test` : la ligne
+« carte … » vérifie les limites, que chaque départ est libre, au sol et au-dessus du vide, qu'aucune cellule n'est
+dans un solide et que chaque pad retombe sur un sol. Pour **modifier l'Arène** :
+
+1. Dans `build_map_arene`, ajoutez :
    - un bloc : `addbox(x0, y0, z0, x1, y1, z1, r, g, b)` — passez les coordonnées **horizontales** par
      `ms()` pour suivre l'échelle `MAP_S`, pas les hauteurs ;
    - un jump pad : `addpad(x, z, vitesse_de_lancement)` (coordonnées déjà mises à l'échelle) ;
@@ -1255,18 +1367,18 @@ Exemple : une troisième arme principale (`P.weapon == 2`).
      (`addpickup` applique `ms()` lui-même), `y` = hauteur du sol sous la cellule.
 2. Respectez les limites : `MAXB` boîtes, `MAXPICK` cellules (16 au plus à cause de `pickMask`).
    L'ordre des `addpickup` fixe les index réseau des cellules.
-3. Blocs de couverture aléatoires (fin de `build_level`) : ajoutez une exclusion (`near2(...)` ou un
+3. Blocs de couverture aléatoires (fin de `build_map_arene`) : ajoutez une exclusion (`near2(...)` ou un
    test de zone) pour qu'aucun bloc n'apparaisse dans votre élément, et **gardez dégagé le couloir de
    test** (x ≈ −20, z de 12 à 70). Ne changez pas la graine `rng = 777` sans raison : la carte doit être
    identique chez tous les joueurs.
 4. Rendu : la liste d'affichage `worldList` est compilée **une fois** par `build_world_list` après
    `build_level` dans `WinMain` ; un nouveau bloc y apparaît automatiquement. Si vous modifiez la
    carte en cours de partie, il faut reconstruire cette liste.
-5. Nouveau **type** de boîte : ajoutez une valeur à `B_SOLID`/`B_PAD`, réglez `boxes[nb - 1].kind`
+5. Nouveau **type** de boîte : ajoutez une valeur à `B_SOLID`/`B_PAD`/`B_SPEED`, réglez `boxes[nb - 1].kind`
    après `addbox` (modèle : `addpad`), codez son comportement dans `player_tick` (`P.groundBox` donne
    la boîte sous les pieds) et son aspect dans `build_world_list` ou `render`.
-6. Pensez aux points d'apparition LAN (`pick_spawn`, tableau `pts`), au départ solo (`reset_game`), à la
-   caméra du menu (`menu_backdrop`) et aux zones d'apparition des ennemis (`spawn_enemy`).
+6. Pensez aux points d'apparition LAN (`areneSpawns`), au départ solo, à la caméra du menu et aux zones
+   d'apparition des ennemis : ce sont des champs de `maps[0]`.
 7. Incrémentez `NET_VER` (une carte différente fausserait les cellules et les collisions entre
    versions). Vérifiez avec `--shot` et `--test` (escalier, jump pads et grappin dépendent de la
    géométrie).

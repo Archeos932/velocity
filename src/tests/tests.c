@@ -191,7 +191,7 @@ static void run_tests(const char *path) {
     botAimTest = 1;
     FILE *f = fopen(path, "w");
     if (!f) return;
-    build_level();
+    build_level(0);
 
     {                                                     /* molette : une rafale (inertie) = un seul changement */
         int burst = 0, two = 0;
@@ -530,7 +530,7 @@ static void run_tests(const char *path) {
         V3 d = vsub(CO[c0].pos, eye_pos());
         P.yaw = atan2f(d.x, -d.z); P.pitch = asinf(d.y / vlen(d));
         lastChain = 0;
-        float coinsLeft = P.coins;
+        float coinsLeft = P.skillCh;
         fire_rail();
         fprintf(f, "piece%s : chaine %d, degats au drone %.0f (attendu %.0f), pieces restantes %.0f" "\n",
                 pass ? "s x2" : "", lastChain, 1000 - E[0].hp, pass ? RAIL_DMG * 2.25f : RAIL_DMG * 1.5f, coinsLeft);
@@ -1516,7 +1516,7 @@ static void run_tests(const char *path) {
         NP[0].active = NP[0].alive = 1; NP[0].hp = 100; snprintf(NP[0].name, 16, "Bot");
         NP[1].active = NP[1].alive = 1; NP[1].hp = 100; snprintf(NP[1].name, 16, "Cible");
         NP[1].disp = v3(-20, 0, 28); vf(NP[1].st.pos, NP[1].disp);
-        P.dashCharge = 0; P.coins = 0;
+        P.dashCharge = 0; P.skillCh = 0;
         P.loadout[0] = WP_RAIL; P.loadout[1] = WP_TESLA; P.weapon = WP_RAIL;
         FILE *savedLog = botLog;
         botLog = NULL;                                     /* journal du bot hors des resultats */
@@ -2565,12 +2565,12 @@ static void run_tests(const char *path) {
         int savedBot = botMode;
         botMode = 0;                                      /* les bots ne sauvegardent jamais : on simule un joueur */
         snprintf(cfgPath, sizeof cfgPath, "cfg_test.ini");
-        binds[A_COIN][1] = K_X2; sens = 0.003f; fovBase = 115; invertY = 1;
+        binds[A_SKILL][1] = K_X2; sens = 0.003f; fovBase = 115; invertY = 1;
         cfg_save();
         memcpy(binds, bindDefault, sizeof binds); sens = 0.0022f; fovBase = 105; invertY = 0;
         cfg_load();
         fprintf(f, "reglages : piece -> %d (attendu %d), sens %.4f, fov %.0f, axe Y inverse %d (attendu 0.0030, 115, 1)%s",
-                binds[A_COIN][1], K_X2, sens, fovBase, invertY, "\n");
+                binds[A_SKILL][1], K_X2, sens, fovBase, invertY, "\n");
         remove(cfgPath);
         cfgPath[0] = 0;
         botMode = savedBot;
@@ -2732,6 +2732,10 @@ static void run_tests(const char *path) {
         fprintf(f, "equipes cibles : allie cible=%d dessine=%d, ennemi cible=%d (attendu 0, 1, 1)\n", np_target(2), np_present(2), np_target(1));
         V3 sb = pick_spawn(2), sr = pick_spawn(3);
         fprintf(f, "equipes spawns : bleu z=%.0f, rouge z=%.0f (attendu < 0, > 0)\n", sb.z, sr.z);
+        load_map(2);                                      /* autre carte : chaque camp sur sa falaise (axe x du Canyon) */
+        sb = pick_spawn(2); sr = pick_spawn(3);
+        fprintf(f, "equipes spawns %s : bleu x=%.0f, rouge x=%.0f (attendu < 0, > 0)\n", maps[2].name, sb.x, sr.x);
+        load_map(0);
         NP[0].kills = 10; NP[2].kills = 9; NP[1].kills = 12;   /* aucun joueur n'a 20, mais l'equipe bleue y arrive */
         host_kill(2, 1, W_RAIL);
         fprintf(f, "equipes victoire : limite=%d score bleu=%d rouge=%d fin=%d gagnant=%d (attendu 20, 20, 12, 1, 0)\n",
@@ -2845,6 +2849,337 @@ static void run_tests(const char *path) {
                 !strcmp(h2, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"),
                 !strcmp(h3, "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"));
         fprintf(f, "mise a jour : chemins %s | %s (attendu C:/jeu/velocity.exe.new | C:/jeu/velocity.exe.old)\n", nw, old);
+    }
+
+    {   /* --- Cartes (MapDef) : limites, departs, pads, kill zone solo et LAN, bande d'acceleration, prudence des bots --- */
+        double savedNow = nowT;
+        netMode = NET_OFF; dmMode = 0; connected = 0; spectating = 0; matchOver = 0;
+        for (int m = 0; m < NMAPS; m++) {
+            const MapDef *md = &maps[m];
+            load_map(m);
+            int freeN = 0, aboveN = 0, groundN = 0, cellBad = 0, padN = 0, padOk = 0, nbox = nb, ncell = npu;
+            for (int k = 0; k < md->nspawns; k++) {
+                V3 s = v3(md->spawns[k][0], md->spawns[k][1], md->spawns[k][2]);
+                freeN += pos_free(s, H_STAND);
+                aboveN += s.y > md->killY + 1;
+                groundN += ray_world(v3(s.x, s.y + 0.1f, s.z), v3(0, -1, 0), 0.6f, 0) < 0.6f;
+            }
+            for (int i = 0; i < npu; i++)                 /* une cellule n'est pas dans un solide */
+                for (int b = 0; b < nb; b++) {
+                    V3 c = PU[i].pos, lo = boxes[b].mn, hi = boxes[b].mx;
+                    if (boxes[b].kind == B_SOLID && c.x > lo.x && c.x < hi.x && c.y > lo.y && c.y < hi.y && c.z > lo.z && c.z < hi.z) cellBad++;
+                }
+            for (int i = 0; m > 0 && i < nbox; i++) {     /* chaque pad retombe sur un sol, et on y reste (l'Arene a ses tests) */
+                if (boxes[i].kind != B_PAD) continue;
+                padN++;
+                reset_game(); hitstop = 0;
+                memset(act, 0, sizeof act); memset(botHeld, 0, sizeof botHeld); memset(botPress, 0, sizeof botPress);
+                V3 c = vlerp(boxes[i].mn, boxes[i].mx, 0.5f);
+                P.pos = P.prevPos = v3(c.x, boxes[i].mx.y + 0.01f, c.z); P.vel = v3(0, 0, 0);
+                int landed = -1;
+                for (int t = 0; t < 960 && P.pos.y > md->killY; t++) {
+                    player_tick(TICK, 0, 0);
+                    if (landed < 0 && P.grounded && boxes[P.groundBox].kind != B_PAD) landed = t;
+                    if (landed >= 0 && t > landed + 120) break;   /* 1 s apres l'atterrissage, sans toucher a rien */
+                }
+                padOk += landed >= 0 && P.grounded && P.pos.y > md->killY;
+            }
+            fprintf(f, "carte %s : %d boites (< %d), %d cellules (<= %d), departs libres %d, au-dessus du vide %d, au sol %d, "
+                       "cellules dans un solide %d, pads qui retombent sur un sol %d/%d (attendu %d %d %d, 0, %d/%d)\n",
+                    md->name, nbox, MAXB, ncell, MAXPICK, freeN, aboveN, groundN, cellBad, padOk, padN,
+                    md->nspawns, md->nspawns, md->nspawns, padN, padN);
+        }
+
+        load_map(1);                                      /* kill zone solo : sous killY -> mort au tick suivant */
+        reset_game(); hitstop = 0;
+        memset(act, 0, sizeof act); memset(botHeld, 0, sizeof botHeld); memset(botPress, 0, sizeof botPress);
+        P.pos = P.prevPos = v3(17.8f, 0, 17.8f);
+        game_tick(TICK);
+        int aliveOn = !P.dead;
+        P.pos = P.prevPos = v3(0, maps[1].killY - 0.5f, 0); P.vel = v3(0, -20, 0);
+        game_tick(TICK);
+        fprintf(f, "kill zone solo (%s, killY %.0f) : vivant sur la plateforme %d, mort sous le plan %d, PV %.0f (attendu 1 1 0)\n",
+                maps[1].name, maps[1].killY, aliveOn, P.dead, P.hp);
+        for (int i = 0; i < 300; i++) game_tick(TICK);    /* le corps s'arrete 6 m sous le plan */
+        fprintf(f, "kill zone : corps arrete a y=%.1f (attendu %.1f)\n", P.pos.y, maps[1].killY - 6);
+
+        /* LAN simule (moi = hote 0, Cible = 1) : touche puis chute -> kill a l'attaquant ; chute sans touche -> suicide */
+        reset_game(); hitstop = 0;
+        netMode = NET_HOST; connected = 1; myId = 0; dmMode = 1; matchOver = 0;
+        memset(NP, 0, sizeof NP);
+        for (int i = 0; i < 2; i++) { NP[i].active = NP[i].alive = 1; NP[i].hp = 100; NP[i].lastHitBy = -1; }
+        snprintf(NP[0].name, 16, "Moi"); snprintf(NP[1].name, 16, "Cible");
+        P.pos = P.prevPos = v3(17.8f, 0, 17.8f); NP[0].disp = P.pos; NP[1].disp = v3(0, 6, 18.5f);
+        nowT += 10;
+        int c0 = voidCredited, s0 = voidSuicides, kills[4], deaths[4];
+        NetEvent hit = ev_new(EV_HIT), fall = ev_new(EV_HIT);
+        hit.from = 0; hit.target = 1; hit.sub = W_RAIL; hit.f[0] = 30;
+        fall.from = 1; fall.target = 1; fall.sub = W_VOID; fall.f[0] = 999;
+        host_handle(&hit); nowT += 1.5; host_handle(&fall);           /* 1. touche, chute 1,5 s apres : kill a Moi */
+        kills[0] = NP[0].kills; deaths[0] = NP[1].deaths;
+        host_respawn(1); nowT += 1; host_handle(&fall);               /* 2. chute sans touche : suicide */
+        kills[1] = NP[0].kills; deaths[1] = NP[1].deaths;
+        host_respawn(1); host_handle(&hit); nowT += VOID_CREDIT_T + 1; host_handle(&fall);   /* 3. touche trop ancienne : suicide */
+        kills[2] = NP[0].kills; deaths[2] = NP[1].deaths;
+        fprintf(f, "kill zone LAN : touche + chute -> kills %d morts %d ; chute seule -> kills %d morts %d ; touche il y a 5 s -> kills %d morts %d ; "
+                   "creditees %d suicides %d (attendu 1 1 ; 1 2 ; 1 3 ; 1 2)\n", kills[0], deaths[0], kills[1], deaths[1], kills[2], deaths[2],
+                voidCredited - c0, voidSuicides - s0);
+        P.pos = P.prevPos = v3(0, maps[1].killY - 0.5f, 0); P.vel = v3(0, -20, 0);   /* 4. l'hote lui-meme tombe : EV_HIT W_VOID */
+        nowT += 1;
+        game_tick(TICK);
+        fprintf(f, "kill zone LAN (hote) : mort %d, morts de Moi %d, suicides %d (attendu 1 1 3)\n", P.dead, NP[0].deaths, voidSuicides - s0);
+        netMode = NET_OFF; connected = 0; dmMode = 0; memset(NP, 0, sizeof NP); memset(outq, 0, sizeof outq);
+
+        {   /* bots : depuis la 8e plateforme, un saut vers le vide est detecte, un saut sur place non */
+            V3 s = v3(18.5f, 42, 0);
+            fprintf(f, "bot prudent (%s) : saut sur place retombe %d, saut a 15 m/s vers le centre retombe %d (attendu 1 0)\n", maps[1].name,
+                    bot_lands(s, v3(0, JUMP_V, 0), maps[1].killY), bot_lands(s, v3(-15, JUMP_V, 0), maps[1].killY));
+        }
+
+        load_map(3);                                      /* La Boucle : bande d'acceleration (voie nord exterieure, vers +x) */
+        reset_game(); hitstop = 0;
+        memset(act, 0, sizeof act); memset(botHeld, 0, sizeof botHeld); memset(botPress, 0, sizeof botPress);
+        float sv[3];
+        static const float sx0[3] = { -30, -35, -20 }, sv0[3] = { 0, 26, -10 };
+        static const int sticks[3] = { 60, 36, 36 };
+        for (int k = 0; k < 3; k++) {
+            P.pos = P.prevPos = v3(sx0[k], 0.12f, 26.5f); P.vel = v3(sv0[k], 0, 0); P.grounded = 1;
+            for (int i = 0; i < sticks[k]; i++) player_tick(TICK, 0, 0);
+            sv[k] = P.vel.x;
+        }
+        fprintf(f, "bande d'acceleration : arret -> %.1f m/s en 0,5 s, 26 m/s -> %.1f (plafond), a contresens -10 -> %.1f en 0,3 s "
+                   "(attendu ~15, %.0f, ~-1)\n", sv[0], sv[1], sv[2], SPEED_MAX);
+
+        load_map(0);
+        reset_game();
+        nowT = savedNow;
+    }
+    /* --- fin Cartes --- */
+    /* --- Competences : PIECE, MARQUE, CHARGE, RICOCHET, ALL IN ONE, MIRAGE (docs/COMPETENCES_MARKSMAN.md). Labo dans le
+     * ciel (y = 100), loin de la carte : deux murs paralleles en z = 90 et z = 110 (normales +z et -z), libre en x --- */
+    {
+        const float SKY = 100;
+        int nb0 = nb;
+        FILE *savedLog = botLog;
+        botLog = NULL;
+        netMode = NET_HOST; connected = 1; myId = 0; dmMode = 0;
+        memset(NP, 0, sizeof NP);
+        addbox(-60, SKY - 20, 110, 60, SKY + 20, 112, 0.5f, 0.5f, 0.5f);
+        addbox(-60, SKY - 20, 88, 60, SKY + 20, 90, 0.5f, 0.5f, 0.5f);
+#define SK_LAB(sk, ch) do { reset_game(); P.pos = P.prevPos = v3(0, SKY, 100); P.vel = v3(0, 0, 0); P.yaw = PI * 0.5f; P.pitch = 0; \
+                            P.skill = (sk); P.skillCh = (ch); shotStreak = 0; } while (0)
+#define SK_DRONE(x, z) do { E[0].alive = 1; E[0].type = EN_DRONE; E[0].hp = 1000; E[0].pos = v3((x), eye_pos().y, (z)); } while (0)
+
+        reset_game();                                     /* PIECE par defaut, recharge propre a chaque competence */
+        fprintf(f, "competences : par defaut %s, %.0f charges (attendu PIECE, %d)\n", skillDef[P.skill].name, P.skillCh, COIN_MAX);
+        {
+            char rb[256];
+            int rn = 0;
+            for (int k = 0; k < SK_COUNT; k++) {
+                SK_LAB(k, 0);
+                int ticks = 0;
+                while (P.skillCh < 1 && ticks < 30 * 120) { skill_tick(TICK, 0, 0); ticks++; }
+                rn += snprintf(rb + rn, sizeof rb - rn, "%s %.1f s, ", skillDef[k].name, ticks * TICK);
+            }
+            fprintf(f, "competences : recharge d'une charge : %s(attendu 2.0, 6.0, 8.0, 15.0, 20.0, 7.0)\n", rb);
+        }
+
+        SK_LAB(SK_MARK, 2); SK_DRONE(20, 100);            /* MARQUE : drone a 20 m, x1,25 pendant 4 s */
+        skill_tick(TICK, 1, 1);
+        {
+            int marked = markE[0] > 0;
+            for (int i = 0; i < 468; i++) skill_tick(TICK, 0, 0);   /* 3,9 s */
+            int still = markE[0] > 0;
+            fire_rail();
+            float d1 = 1000 - E[0].hp;
+            for (int i = 0; i < 24; i++) skill_tick(TICK, 0, 0);    /* 4,1 s */
+            int after = markE[0] > 0;
+            E[0].hp = 1000; shotStreak = 0;
+            fire_rail();
+            float d2 = 1000 - E[0].hp;
+            SK_LAB(SK_MARK, 2); SK_DRONE(95, 100);
+            skill_tick(TICK, 1, 1);
+            fprintf(f, "marque : drone a 20 m marque %d, encore marque a 3,9 s %d, rail %.0f (attendu 1, 1, %.0f) ; a 4,1 s marque %d, "
+                       "rail %.0f (attendu 0, %.0f) ; drone a 95 m marque %d (attendu 0), charges %.0f (attendu 1)\n",
+                    marked, still, d1, RAIL_DMG * MARK_MULT, after, d2, RAIL_DMG, markE[0] > 0, P.skillCh);
+        }
+
+        SK_LAB(SK_CHARGE, 1); SK_DRONE(20, 100);          /* CHARGE : maintien 0,6 s, une seule touche x1,5, perdue si touche */
+        {
+            for (int i = 0; i < 60; i++) skill_tick(TICK, 0, 1);    /* 0,5 s */
+            int at05 = P.chargeT > 0;
+            for (int i = 0; i < 14; i++) skill_tick(TICK, 0, 1);    /* 0,62 s */
+            int at06 = P.chargeT > 0;
+            skill_tick(TICK, 0, 0);
+            fire_rail();
+            float d1 = 1000 - E[0].hp;
+            for (int i = 0; i < 12; i++) skill_tick(TICK, 0, 0);
+            E[0].hp = 1000; shotStreak = 0;
+            fire_rail();
+            float d2 = 1000 - E[0].hp;
+            SK_LAB(SK_CHARGE, 1); SK_DRONE(20, 100);
+            for (int i = 0; i < 36; i++) skill_tick(TICK, 0, 1);    /* 0,3 s, relache, 0,3 s : rien */
+            skill_tick(TICK, 0, 0);
+            for (int i = 0; i < 36; i++) skill_tick(TICK, 0, 1);
+            int split = P.chargeT > 0;
+            for (int i = 0; i < 80; i++) skill_tick(TICK, 0, 1);
+            int ready = P.chargeT > 0;
+            damage_player(10);                            /* un drone me touche avant le tir */
+            skill_tick(TICK, 0, 0);
+            fire_rail();
+            fprintf(f, "charge : prete a 0,5 s %d, a 0,62 s %d (attendu 0, 1) ; 1re touche %.0f, 2e %.0f (attendu %.0f, %.0f) ; "
+                       "maintien coupe 0,3 + 0,3 s %d (attendu 0) ; prete %d puis touche -> rail %.0f (attendu 1, %.0f)\n",
+                    at05, at06, d1, d2, RAIL_DMG * CHARGE_MULT, RAIL_DMG, split, ready, 1000 - E[0].hp, RAIL_DMG);
+        }
+
+        {                                                 /* RICOCHET : reflexion sur un mur, 3 rebonds, recharge au tir */
+            SK_LAB(SK_RICOCHET, 1); P.yaw = PI - 0.5f;    /* 28,6 degres d'incidence sur le mur z = 110 */
+            skill_tick(TICK, 1, 1);
+            int armed = P.ricArmed, b0 = ricStat[1];
+            for (int i = 0; i < 600; i++) skill_tick(TICK, 0, 0);   /* 5 s armee sans tirer */
+            float ch5 = P.skillCh;
+            fire_rail();
+            float inc = acosf(clampf(-vdot(ricDir[0], ricNrm[0]), -1, 1)) * 180 / PI;
+            float out = acosf(clampf(vdot(ricDir[1], ricNrm[0]), -1, 1)) * 180 / PI;
+            int segs = ricSegs, bounces = ricStat[1] - b0, armedAfter = P.ricArmed;
+            for (int i = 0; i < 1800; i++) skill_tick(TICK, 0, 0);  /* 15 s apres le tir */
+            fprintf(f, "ricochet : arme %d, charge apres 5 s sans tirer %.2f (attendu 1, 0.00) ; incidence %.2f, sortie %.2f, ecart %.2f "
+                       "(attendu ecart < 0.5) ; segments %d, rebonds %d (attendu 4, 3 : plafond) ; desarme %d, charge 15 s apres le tir %.2f "
+                       "(attendu 1, 1.00)\n", armed, ch5, inc, out, fabsf(inc - out), segs, bounces, !armedAfter, P.skillCh);
+
+            float dxw = 10 * tanf(0.5f);                  /* touche le mur z = 110 en x = 10 tan(0,5), repasse en z = 100 en x = 2 x */
+            SK_LAB(SK_RICOCHET, 1); P.yaw = PI - 0.5f; SK_DRONE(2 * dxw, 100);
+            fire_rail();                                  /* non arme : comportement d'avant */
+            float dUn = 1000 - E[0].hp; int segUn = ricSegs;
+            SK_LAB(SK_RICOCHET, 1); P.yaw = PI - 0.5f; SK_DRONE(2 * dxw, 100);
+            skill_tick(TICK, 1, 1);
+            fire_rail();
+            fprintf(f, "ricochet : drone hors de vue derriere le rebond, non arme %.0f (segments %d), arme %.0f (attendu 0 (1), %.0f : x1)\n",
+                    dUn, segUn, 1000 - E[0].hp, RAIL_DMG);
+
+            SK_LAB(SK_RICOCHET, 1); P.yaw = PI;           /* tir perpendiculaire : le 1er rebond me traverse sans degats, le 2e me touche */
+            skill_tick(TICK, 1, 1);
+            int self0 = ricStat[2];
+            fire_rail();
+            fprintf(f, "ricochet : tir perpendiculaire entre deux murs, PV %.0f, retours sur soi %d (attendu %.0f, 1 : 2e rebond, une fois)\n",
+                    P.hp, ricStat[2] - self0, 100 - RAIL_DMG * 0.5f);
+
+            for (int pass = 0; pass < 2; pass++) {        /* roquette : rebondit 3 fois puis explose ; ou sur un drone apres le 1er rebond */
+                SK_LAB(SK_RICOCHET, 1); P.yaw = PI - 0.5f; P.weapon = WP_ROCKET;
+                if (pass) SK_DRONE(2 * dxw, 100);
+                skill_tick(TICK, 1, 1);
+                memset(PR, 0, sizeof PR);
+                fire_rocket();
+                Proj *rk = &PR[0];
+                int bounces = 0, prev = rk->ricLeft, leftAtEnd = -1, endOk = 0;
+                float v1 = 0;
+                for (int i = 0; i < 6 * 120 && rk->alive; i++) {
+                    proj_tick(TICK);
+                    if (rk->ricLeft != prev) { bounces++; prev = rk->ricLeft; if (bounces == 1) v1 = vlen(rk->vel); }
+                    if (!rk->alive) { leftAtEnd = rk->ricLeft; endOk = rk->life > 0; }
+                }
+                if (!pass)
+                    fprintf(f, "ricochet roquette : rebonds %d, vitesse apres le 1er %.1f, explose au 4e impact %d (attendu 3, %.1f, 1)\n",
+                            bounces, v1, endOk && leftAtEnd == 0, ROCKET_SPEED * RIC_ROCKET_SLOW);
+                else
+                    fprintf(f, "ricochet roquette : drone sur le rebond touche %d, rebonds restants %d (attendu 1, 2)\n",
+                            E[0].hp < 1000, leftAtEnd);
+            }
+            memset(PR, 0, sizeof PR);
+        }
+
+        {                                                 /* ALL IN ONE : n projectiles, munition a 0, eventail, refus */
+            SK_LAB(SK_ALLIN, 1); P.weapon = WP_ROCKET; P.ammo[WP_ROCKET] = 4;
+            memset(PR, 0, sizeof PR);
+            skill_tick(TICK, 1, 1);
+            int rockets = 0;
+            for (int i = 0; i < MAXPR; i++) rockets += PR[i].alive && PR[i].kind == PR_ROCKET;
+            fprintf(f, "all in one : 4 roquettes -> %d projectiles, munition %d, charges %.0f (attendu 4, 0, 0)\n",
+                    rockets, P.ammo[WP_ROCKET], P.skillCh);
+            memset(PR, 0, sizeof PR);
+            float hm[3];
+            for (int k = 0; k < 3; k++) {
+                SK_LAB(SK_ALLIN, 1); P.weapon = WP_RAIL; P.ammo[WP_RAIL] = 2 + 2 * k;
+                skill_tick(TICK, 1, 1);
+                hm[k] = allinSpan * 0.5f * 180 / PI;
+            }
+            fprintf(f, "all in one : demi-angle n=2 / 4 / 6 : %.2f / %.2f / %.2f (attendu %.2f / %.2f / %.2f)\n", hm[0], hm[1], hm[2],
+                    allin_half(2) * 180 / PI, allin_half(4) * 180 / PI, allin_half(6) * 180 / PI);
+            SK_LAB(SK_ALLIN, 1); P.weapon = WP_RAIL; P.ammo[WP_RAIL] = 1;
+            skill_tick(TICK, 1, 1);
+            int a1 = P.ammo[WP_RAIL]; float c1 = P.skillCh;
+            char why[64];
+            snprintf(why, sizeof why, "%s", popText);
+            SK_LAB(SK_ALLIN, 1); P.weapon = WP_TESLA;
+            skill_tick(TICK, 1, 1);
+            fprintf(f, "all in one : refus a 1 munition (munition %d, charges %.0f, \"%s\"), tesla en main charges %.0f \"%s\" "
+                       "(attendu 1, 1, 1)\n", a1, c1, why, P.skillCh, popText);
+
+            SK_LAB(SK_ALLIN, 1); dmMode = 1;              /* PvP : 2 rails a 8 m, plafond par projectile : one-shot */
+            NP[0].active = NP[0].alive = 1; NP[0].hp = 100; snprintf(NP[0].name, 16, "Moi");
+            NP[1].active = NP[1].alive = 1; NP[1].hp = 100; snprintf(NP[1].name, 16, "Cible");
+            NP[1].disp = v3(8, SKY, 100); vf(NP[1].st.pos, NP[1].disp);
+            {
+                V3 d = vsub(np_center(1), eye_pos());
+                P.yaw = atan2f(d.x, -d.z); P.pitch = asinf(d.y / vlen(d));
+            }
+            P.weapon = WP_RAIL; P.ammo[WP_RAIL] = 2;
+            int bk0 = burstKills;
+            skill_tick(TICK, 1, 1);
+            fprintf(f, "all in one PvP : 2 rails a 8 m -> cible en vie %d, salves mortelles +%d (attendu 0, 1 : %.0f par projectile)\n",
+                    NP[1].alive, burstKills - bk0, fminf(RAIL_DMG * PVP_SCALE, PVP_HIT_CAP));
+            dmMode = 0; memset(NP, 0, sizeof NP);
+        }
+
+        {                                                 /* MIRAGE : immobile, sans gravite, 3 s ; absorbe ; mon rail y ricoche */
+            SK_LAB(SK_DECOY, 2);
+            skill_tick(TICK, 1, 1);
+            int ci = -1;
+            for (int i = 0; i < MAXCOIN; i++) if (CO[i].alive && CO[i].decoy) ci = i;
+            V3 p0 = ci >= 0 ? CO[ci].pos : v3(0, 0, 0);
+            for (int i = 0; i < 348; i++) coin_tick(TICK);           /* 2,9 s */
+            int alive29 = ci >= 0 && CO[ci].alive;
+            float moved = ci >= 0 ? vlen(vsub(CO[ci].pos, p0)) : -1;
+            for (int i = 0; i < 24; i++) coin_tick(TICK);            /* 3,1 s */
+            fprintf(f, "mirage : leurre pose %d, charges %.0f, a 2,9 s en vie %d deplacement %.3f, a 3,1 s en vie %d (attendu 1, 1, 1, 0.000, 0)\n",
+                    ci >= 0, P.skillCh, alive29, moved, ci >= 0 && CO[ci].alive);
+
+            SK_LAB(SK_DECOY, 2); dmMode = 1;              /* le rail adverse s'arrete sur le leurre (une piece volee l'aurait renvoye) */
+            NP[0].active = NP[0].alive = 1; NP[0].hp = 100; snprintf(NP[0].name, 16, "Moi");
+            NP[1].active = NP[1].alive = 1; NP[1].hp = 100; snprintf(NP[1].name, 16, "Lanceur");
+            NP[1].disp = v3(20, SKY, 100); vf(NP[1].st.pos, NP[1].disp);
+            memset(CO, 0, sizeof CO);
+            CO[0].alive = 1; CO[0].decoy = 1; CO[0].owner = 1; CO[0].life = 3; CO[0].netId = 0x02000077;
+            CO[0].pos = vadd(np_center(1), v3(-10, 0, 0));
+            {
+                V3 d = vsub(np_center(1), eye_pos());
+                P.yaw = atan2f(d.x, -d.z); P.pitch = asinf(d.y / vlen(d));
+            }
+            fire_rail();
+            fprintf(f, "mirage : rail adverse dans le leurre -> leurre detruit %d, PV du lanceur %.0f, message \"%s\" (attendu 1, 100, LEURRE !)\n",
+                    !CO[0].alive, NP[1].hp, popText);
+            dmMode = 0; memset(NP, 0, sizeof NP);
+
+            SK_LAB(SK_DECOY, 2); SK_DRONE(10, 94);        /* mon leurre a 10 m devant : mon rail y ricoche vers le drone, x1 */
+            memset(CO, 0, sizeof CO);
+            CO[0].alive = 1; CO[0].decoy = 1; CO[0].owner = myId; CO[0].life = 3; CO[0].pos = vadd(eye_pos(), v3(10, 0, 0));
+            lastChain = 0;
+            fire_rail();
+            float dr = 1000 - E[0].hp; int ch = lastChain;
+            SK_LAB(SK_DECOY, 2); SK_DRONE(20, 100);       /* leurre pose a mes pieds : mon tir le traverse (pas de visee auto) */
+            memset(CO, 0, sizeof CO);
+            skill_tick(TICK, 1, 1);
+            fire_rail();
+            fprintf(f, "mirage : mon rail ricoche sur mon leurre -> drone %.0f, chaine %d (attendu %.0f, 1) ; leurre a mes pieds traverse : "
+                       "drone en face %.0f, leurre intact %d (attendu %.0f, 1)\n", dr, ch, RAIL_DMG * DECOY_MULT, 1000 - E[0].hp,
+                    CO[0].alive, RAIL_DMG);
+        }
+#undef SK_LAB
+#undef SK_DRONE
+        nb = nb0;
+        memset(CO, 0, sizeof CO); memset(PR, 0, sizeof PR); memset(E, 0, sizeof E);
+        reset_game();
+        botLog = savedLog;
     }
 
     botLog = NULL;
