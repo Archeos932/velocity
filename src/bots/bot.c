@@ -473,8 +473,58 @@ static void bot_think(float dt) {
         }
     }
 
-    /* comme un humain : temps de reaction, et une visee moins precise de loin */
+    /* --- Navigation : cible cachee, recharge a aller chercher, ou de l'autre cote d'un vide : on suit le graphe
+     * (sauts, pads, grappin d'ancre en ancre). En vue directe, on alterne : tir quand l'arme est prete, sinon trajet. --- */
     if (see) seeT += dt; else seeT = 0;
+    {
+        static float navHiddenT;
+        navHiddenT = see ? 0 : navHiddenT + dt;
+        static int patrol = -1;                           /* personne en vue ni recharge : ronde vers un point du graphe */
+        static float patrolT;
+        if (seek < 0 && best < 0) {
+            patrolT -= dt;
+            if (nnav > 0 && (patrol < 0 || patrol >= nnav || patrolT <= 0 || hlen(vsub(NV[patrol].p, P.pos)) < 3)) {
+                for (int k = 0; k < 20; k++) { patrol = (int)(frand() * nnav) % nnav; if (NV[patrol].kind == NN_SURF) break; }
+                patrolT = 10;
+            }
+        } else patrol = -1;
+        int hasGoal = seek >= 0 || best >= 0 || (patrol >= 0 && patrol < nnav);
+        V3 goal = seek >= 0 ? PU[seek].pos : best >= 0 ? NP[best].disp : hasGoal ? NV[patrol].p : P.pos;
+        if (best < 0 && seek < 0 && hasGoal && navMap != curMap) hasGoal = 0;   /* graphe pas encore construit */
+        int navOn = 0, wasBusy = navBusy;
+        if (hasGoal && !P.hookPlayer && nav_plan(goal, 0, dt)) {
+            int cur = navStep > 0 ? navPath[navStep - 1] : navFrom, t0 = nav_edge_type(cur, navPath[navStep]);
+            int canShoot = see && seeT > botReactT[botLevel] && bd < 55 && P.fireCd <= 0 && P.switchT <= 0;
+            int midAir = !P.grounded && (t0 != NE_WALK || navLanding);   /* en plein trajet (pad, saut, grappin) : on le finit */
+            navOn = seek >= 0 || best < 0 || navHiddenT > 0.35f || wasBusy || midAir || t0 != NE_WALK;   /* (on tire en route, plus bas) */
+            (void)canShoot;
+            if (best >= 0 && see && bd < 9 && t0 == NE_WALK && !midAir) navOn = 0;   /* au contact : on se bat */
+        } else navBusy = 0;
+        if (navOn) {
+            static int lastType = -1;
+            int ty = nav_follow(dt);
+            if (ty != lastType && ty >= 0) {
+                static const char *tn[5] = { "marche", "saut", "pad", "grappin", "lacher" };
+                netlog("nav : %s vers (%.0f %.0f %.0f), %d etapes", tn[ty], NV[navPath[navStep < navLen ? navStep : navLen - 1]].p.x,
+                       NV[navPath[navStep < navLen ? navStep : navLen - 1]].p.y, NV[navPath[navStep < navLen ? navStep : navLen - 1]].p.z, navLen - navStep);
+            }
+            lastType = ty;
+            if (ty >= 0) {
+                if (P.weapon != P.loadout[0] && wp_has_ammo(P.loadout[0])) P.weapon = P.loadout[0];
+                /* tir en route (pas pendant la traction du grappin) : la visee ne sert qu'un tick, la trajectoire continue */
+                int canShoot = best >= 0 && see && seeT > botReactT[botLevel] && bd < 55 && P.fireCd <= 0 && P.switchT <= 0 &&
+                               P.weapon != WP_SAW && P.weapon != WP_MINE && wp_has_ammo(P.weapon);
+                if (canShoot && ty != NE_HOOK && !navLanding) {
+                    float e = (0.012f + bd * 0.0014f) * botAimMul[botLevel];
+                    P.yaw = aimYaw + e * sinf(botT * 7.3f + botMode); P.pitch = aimPitch + e * 0.6f * cosf(botT * 5.1f);
+                    botHeld[A_FIRE] = 1;
+                }
+                return;
+            }
+        }
+    }
+
+    /* comme un humain : temps de reaction, et une visee moins precise de loin */
     float aimErr = (0.012f + (best >= 0 ? bd : 0) * 0.0014f) * botAimMul[botLevel];
     float aimErrYaw = aimErr * sinf(botT * 7.3f + botMode), aimErrPitch = aimErr * 0.6f * cosf(botT * 5.1f);
     if (!botAimTest) {                                    /* un tirage par tir (refait apres chaque coup) + leger tremblement */

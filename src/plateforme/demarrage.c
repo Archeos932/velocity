@@ -697,6 +697,8 @@ done:
         if (netMode == NET_HOST && maps[curMap].killY > -999)
             netlog("vide (arbitre) : %d chutes, %d creditees a l'attaquant, %d suicides", voidCredited + voidSuicides, voidCredited,
                    voidSuicides);
+        netlog("navigation : graphe %d noeuds, %d chemins, aretes suivies marche %d saut %d pad %d grappin %d lacher %d, arrivees %d",
+               nnav, navPaths, navStat[NE_WALK], navStat[NE_JUMP], navStat[NE_PAD], navStat[NE_HOOK], navStat[NE_DROP], navArrive);
         netlog("munitions : points touche %.0f, kill %.0f, parry %.0f, cellules %.0f (%d prises), perdus %.0f ; a sec %.0f%% du temps",
                apStat[AP_HIT], apStat[AP_KILL], apStat[AP_PARRY], apStat[AP_CELL], cellsTaken, apStat[AP_LOST],
                100 * dryT / fmaxf(botAliveT, 0.01f));

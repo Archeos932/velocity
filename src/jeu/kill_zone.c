@@ -54,6 +54,7 @@ static void bot_void_guard(float dt) {
         V3 dv = v3(wish.x * sp, P.grounded ? fmaxf(v.y, vy) : (vy > 2 ? vy : vy < 0 ? vy : 2), wish.z * sp);
         if (!bot_lands(P.pos, dv, ky) && bot_lands(P.pos, v, ky)) botPress[A_DASH] = 0;
     }
+    if (navBusy && rescueT <= 0 && (P.hook != HOOK_NONE || botPress[A_HOOK] || P.grounded)) return;   /* navigation : grappin ou pad prevu */   /* navigation : grappin ou pad prevu */
     if (P.grounded) {
         rescueT = 0;
         int onPad = boxes[P.groundBox].kind == B_PAD;
@@ -69,6 +70,7 @@ static void bot_void_guard(float dt) {
     }
     if (P.hook == HOOK_ATTACHED && rescueT > 0) {         /* tire par le grappin de secours : on tient tant que ca ne retombe sur rien */
         rescueT -= dt;
+        navLen = 0; navBusy = 0;
         botHeld[A_HOOK] = !bot_lands(P.pos, v, ky) || v.y < 0;
         return;
     }
@@ -86,7 +88,7 @@ static void bot_void_guard(float dt) {
                       clampf(eye.z, b->mn.z + 0.3f, b->mx.z - 0.3f));
             V3 d = vsub(q, eye);
             float l = vlen(d), score = l + (top ? 0 : 15);   /* une paroi retient, un dessus sauve */
-            if (l < 2 || l > GRAPPLE_RANGE * 0.95f || score >= bs) continue;
+            if (l < 5 || l > GRAPPLE_RANGE * 0.95f || score >= bs) continue;   /* trop pres : on l'atteint et on retombe */
             if (ray_world(eye, vmul(d, 1 / l), l + 0.5f, 0) < l - 0.6f) continue;   /* masque par autre chose */
             bs = score; bd = l; best = q;
         }
@@ -96,5 +98,6 @@ static void bot_void_guard(float dt) {
     P.yaw = atan2f(d.x, -d.z); P.pitch = asinf(clampf(d.y / bd, -1, 1));
     botPress[A_HOOK] = botHeld[A_HOOK] = 1;
     rescueT = 2.5f;
+    navLen = 0; navLanding = 0; navBusy = 0;              /* le chemin en cours est abandonne : on le recalculera une fois pose */
     netlog("grappin de secours (%.0f m, y %.1f)", bd, P.pos.y);
 }

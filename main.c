@@ -64,6 +64,7 @@
 #include "src/reseau/client.c"                   /* client : connexion, instantanes, envoi */
 #include "src/reseau/en_ligne.c"                 /* parties en ligne : STUN, lobby WebSocket */
 
+#include "src/bots/navigation.c"                 /* bots : graphe de la carte (sols, pads, ancres), plus court chemin */
 #include "src/bots/bot.c"                        /* bots : visee, decisions */
 
 #include "src/combat/competences.c"              /* competences : MARQUE, CHARGE, RICOCHET, ALL IN ONE, MIRAGE (la piece en est une) */

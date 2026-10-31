@@ -2936,6 +2936,37 @@ static void run_tests(const char *path) {
                     bot_lands(s, v3(0, JUMP_V, 0), maps[1].killY), bot_lands(s, v3(-15, JUMP_V, 0), maps[1].killY));
         }
 
+        {   /* --- Navigation des bots : depart -> but sur chaque carte, avec le graphe et les vraies commandes --- */
+            static const float nv[6][7] = {               /* carte, depart x y z, but x y z */
+                { 0, -66, 0, 66, 66, 0, -66 }, { 1, 17.8f, 0, 17.8f, -3, 50, 0 }, { 2, -60, 20, 10, 60, 20, -10 },
+                { 2, -60, 20, 0, 0, 18, 12 }, { 3, 10, 0, 26, 32, 10, 0 }, { 4, 16, 0, 16, -16, 0, -16 },
+            };
+            char nb2[512]; int nn = 0;
+            for (int k = 0; k < 6; k++) {
+                load_map((int)nv[k][0]); reset_game(); hitstop = 0; appState = APP_GAME;
+                memset(act, 0, sizeof act); memset(botHeld, 0, sizeof botHeld); memset(botPress, 0, sizeof botPress);
+                P.pos = P.prevPos = v3(nv[k][1], nv[k][2], nv[k][3]);
+                V3 goal = v3(nv[k][4], nv[k][5], nv[k][6]);
+                navLen = 0; navReplanT = 0; navMap = -1;
+                int plan = nav_plan(goal, 1, TICK), plen = navLen, ok = 0, falls = 0;
+                }
+                float t = 0;
+                for (; t < 40 && !ok; t += TICK) {
+                    memset(botHeld, 0, sizeof botHeld);
+                    if (nav_plan(goal, 0, TICK)) nav_follow(TICK); else { V3 d = vsub(goal, P.pos); P.yaw = atan2f(d.x, -d.z); botHeld[A_FWD] = 1; }
+                    botMode = 1; bot_void_guard(TICK); botMode = 0;
+                    for (int i = 0; i < MAXE; i++) E[i].alive = 0;
+                    game_tick(TICK); P.hp = 100;
+                    if (P.dead || P.pos.y < maps[curMap].killY) { falls++; P.dead = 0; P.pos = P.prevPos = v3(nv[k][1], nv[k][2], nv[k][3]); P.vel = v3(0, 0, 0); navLen = 0; }
+                    ok = hlen(vsub(goal, P.pos)) < 4 && fabsf(goal.y - P.pos.y) < 2.5f;
+                }
+                nn += snprintf(nb2 + nn, sizeof nb2 - nn, "%s%s %d noeuds chemin %d -> %s en %.1f s chutes %d", k ? " ; " : "",
+                               maps[curMap].name, nnav, plan ? plen : 0, ok ? "arrive" : "PERDU", t, falls);
+            }
+            fprintf(f, "navigation : %s (attendu arrive partout)\n", nb2);
+            appState = APP_MENU;
+        }
+
         load_map(3);                                      /* La Boucle : bande d'acceleration (voie nord exterieure, vers +x) */
         reset_game(); hitstop = 0;
         memset(act, 0, sizeof act); memset(botHeld, 0, sizeof botHeld); memset(botPress, 0, sizeof botPress);
