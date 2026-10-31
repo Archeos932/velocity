@@ -606,7 +606,11 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
   textures) — Windows : `wglShareLists`, fenêtre `WS_EX_NOACTIVATE` ; macOS : `mac_map_update/begin/end`,
   `NSOpenGLContext ... shareContext:gCtx`, fenêtre qui ignore la souris. Pas de synchro verticale sur ce contexte
   (sinon deux attentes par image).
-- Réglage : PARAMETRES > « 2e ECRAN : CARTE / NON », `second_ecran=` dans `velocity.ini`. Jamais en `--bot`/`--shot`.
+- **Deux vues** : de dessus (`maps_draw_map`) ou **en 3D inclinée** (`maps_draw_3d` : blocs ombrés par face, pions à
+  la couleur des joueurs avec flèche du regard, ombre au sol et poteau pointillé quand ils sont en l'air, traînées en
+  3D ; noms projetés par `maps_proj3`). Angle, recul et champ : `carte_3d` dans `graphismes/rendu.ini` (`gxMap3d`).
+- Réglage : PARAMETRES > « 2e ECRAN : NON / HAUT / 3D » (`second_ecran=`, `carte_vue=` dans `velocity.ini`).
+  Jamais en `--bot`/`--shot`. Capture de la vue 3D : `--shot carte3d.bmp`, `carte3d_dm.bmp`…
 - Capture : `--shot carte.bmp` (solo), `carte_dm.bmp`, `carte_dm_equipes.bmp` dessinent cet écran dans la fenêtre du jeu.
 
 ## 4. Réseau LAN

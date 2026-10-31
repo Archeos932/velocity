@@ -195,6 +195,155 @@ static void maps_draw_map(const MapView *v, float S, const MapsPl *pl, int n) {
     }
 }
 
+/* ---- vue 3D inclinee : meme contenu, vu de biais (hauteurs lisibles : poteau et ombre sous chaque joueur) ---- */
+static GLfloat maps3Mv[16], maps3Pr[16];
+static float maps3X, maps3Y, maps3S;                      /* viewport de la vue 3D, en pixels (origine en haut) */
+
+static int maps_proj3(V3 p, float *sx, float *sy) {       /* monde -> ecran de la vue 3D */
+    float v[4] = { p.x, p.y, p.z, 1 }, e[4], c[4];
+    for (int r = 0; r < 4; r++) e[r] = maps3Mv[r] * v[0] + maps3Mv[4 + r] * v[1] + maps3Mv[8 + r] * v[2] + maps3Mv[12 + r] * v[3];
+    for (int r = 0; r < 4; r++) c[r] = maps3Pr[r] * e[0] + maps3Pr[4 + r] * e[1] + maps3Pr[8 + r] * e[2] + maps3Pr[12 + r] * e[3];
+    if (c[3] <= 0.05f) return 0;
+    *sx = maps3X + (c[0] / c[3] * 0.5f + 0.5f) * maps3S;
+    *sy = maps3Y + (1 - (c[1] / c[3] * 0.5f + 0.5f)) * maps3S;
+    return 1;
+}
+
+static void maps_box3(V3 a, V3 b, float r, float g, float bl, float al) {   /* ombrage fixe par face, sans eclairage GL */
+    static const float shade[5] = { 1.0f, 0.62f, 0.78f, 0.7f, 0.55f };      /* dessus, +x, -x, +z (vers nous), -z */
+    glBegin(GL_QUADS);
+    glColor4f(r * shade[0], g * shade[0], bl * shade[0], al);
+    glVertex3f(a.x, b.y, a.z); glVertex3f(a.x, b.y, b.z); glVertex3f(b.x, b.y, b.z); glVertex3f(b.x, b.y, a.z);
+    glColor4f(r * shade[1], g * shade[1], bl * shade[1], al);
+    glVertex3f(b.x, a.y, a.z); glVertex3f(b.x, b.y, a.z); glVertex3f(b.x, b.y, b.z); glVertex3f(b.x, a.y, b.z);
+    glColor4f(r * shade[2], g * shade[2], bl * shade[2], al);
+    glVertex3f(a.x, a.y, a.z); glVertex3f(a.x, a.y, b.z); glVertex3f(a.x, b.y, b.z); glVertex3f(a.x, b.y, a.z);
+    glColor4f(r * shade[3], g * shade[3], bl * shade[3], al);
+    glVertex3f(a.x, a.y, b.z); glVertex3f(b.x, a.y, b.z); glVertex3f(b.x, b.y, b.z); glVertex3f(a.x, b.y, b.z);
+    glColor4f(r * shade[4], g * shade[4], bl * shade[4], al);
+    glVertex3f(a.x, a.y, a.z); glVertex3f(a.x, b.y, a.z); glVertex3f(b.x, b.y, a.z); glVertex3f(b.x, a.y, a.z);
+    glEnd();
+}
+
+static void maps_draw_3d(float x0, float y0, float S, int scrW, int scrH, const MapsPl *pl, int n) {
+    const Box *fl = &boxes[0];
+    V3 c = v3((fl->mn.x + fl->mx.x) * 0.5f, 0, (fl->mn.z + fl->mx.z) * 0.5f);
+    float span = fmaxf(fl->mx.x - fl->mn.x, fl->mx.z - fl->mn.z), sx, sy;
+    rect(x0 - 10, y0 - 10, S + 20, S + 20, 0.02f, 0.025f, 0.06f, 1);
+    rect_vgrad(x0, y0, S, S, 0.10f, 0.11f, 0.2f, 1, 0.3f);   /* fond : ciel sombre */
+
+    maps3X = x0; maps3Y = y0; maps3S = S;
+    glViewport((int)x0, scrH - (int)(y0 + S), (int)S, (int)S);
+    glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity();
+    float zn = 5, fh = zn * tanf(gxMap3d[0] * PI / 360);
+    glFrustum(-fh, fh, -fh, fh, zn, span * 4);
+    glMatrixMode(GL_MODELVIEW); glPushMatrix(); glLoadIdentity();
+    glTranslatef(0, -span * 0.04f, -span * gxMap3d[1]);
+    glRotatef(gxMap3d[2], 1, 0, 0);                     /* inclinaison : on regarde du sud, en plongee */
+    glTranslatef(-c.x, 0, -c.z);
+    glGetFloatv(GL_MODELVIEW_MATRIX, maps3Mv);
+    glGetFloatv(GL_PROJECTION_MATRIX, maps3Pr);
+    glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LEQUAL); glDepthMask(GL_TRUE);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    glColor4f(0.07f, 0.08f, 0.13f, 1);                    /* sol + quadrillage */
+    glBegin(GL_QUADS);
+    glVertex3f(fl->mn.x, 0, fl->mn.z); glVertex3f(fl->mn.x, 0, fl->mx.z); glVertex3f(fl->mx.x, 0, fl->mx.z); glVertex3f(fl->mx.x, 0, fl->mn.z);
+    glEnd();
+    glColor4f(0.3f, 0.4f, 0.6f, 0.15f);
+    glBegin(GL_LINES);
+    for (float g = ceilf(fl->mn.x / 10) * 10; g <= fl->mx.x; g += 10) { glVertex3f(g, 0.02f, fl->mn.z); glVertex3f(g, 0.02f, fl->mx.z); }
+    for (float g = ceilf(fl->mn.z / 10) * 10; g <= fl->mx.z; g += 10) { glVertex3f(fl->mn.x, 0.02f, g); glVertex3f(fl->mx.x, 0.02f, g); }
+    glEnd();
+
+    for (int i = 1; i < nb; i++) {                        /* blocs ; les murs exterieurs, tres hauts, sont rabotes */
+        const Box *b = &boxes[i];
+        V3 a = b->mn, m = b->mx;
+        int border = m.x <= fl->mn.x + 0.1f || a.x >= fl->mx.x - 0.1f || m.z <= fl->mn.z + 0.1f || a.z >= fl->mx.z - 0.1f;
+        if (border) m.y = fminf(m.y, 1.5f);
+        if (b->kind == B_PAD) {
+            float pl2 = 0.6f + 0.4f * sinf((float)nowT * 5 + a.x);
+            maps_box3(a, v3(m.x, a.y + 0.3f, m.z), 0.2f * pl2, 0.95f * pl2, pl2, 1);
+            continue;
+        }
+        float hk = 0.55f + 0.45f * clampf(m.y / 16, 0, 1);
+        maps_box3(a, m, b->col.x * hk, b->col.y * hk, b->col.z * hk, 1);
+    }
+
+    for (int i = 0; i < npu; i++) {                       /* recharges : petits cubes dores qui flottent */
+        V3 p = PU[i].pos; float s = PU[i].pts >= PICKUP_BIG ? 0.9f : 0.6f, bob = 0.3f * sinf((float)nowT * 3 + i);
+        if (PU[i].t > 0) continue;
+        maps_box3(v3(p.x - s, p.y - s + bob, p.z - s), v3(p.x + s, p.y + s + bob, p.z + s), 1, 0.82f, 0.3f, 1);
+    }
+    for (int i = 0; i < MAXPR; i++) {
+        if (!PR[i].alive || !maps_sees(PR[i].owner)) continue;
+        V3 p = PR[i].pos;
+        if (PR[i].kind == PR_ROCKET) maps_box3(v3(p.x - 0.6f, p.y - 0.6f, p.z - 0.6f), v3(p.x + 0.6f, p.y + 0.6f, p.z + 0.6f), 1, 0.55f, 0.15f, 1);
+        else maps_box3(v3(p.x - 0.4f, p.y - 0.4f, p.z - 0.4f), v3(p.x + 0.4f, p.y + 0.4f, p.z + 0.4f), 0.9f, 0.9f, 1, 1);
+    }
+    if (!dmMode)
+        for (int i = 0; i < MAXE; i++) {
+            if (!E[i].alive) continue;
+            V3 p = E[i].pos;
+            maps_box3(v3(p.x - 0.9f, p.y - 0.9f, p.z - 0.9f), v3(p.x + 0.9f, p.y + 0.9f, p.z + 0.9f), 1, 0.25f, 0.25f, 1);
+        }
+
+    glLineWidth(3);                                       /* trainees en 3D : on voit les sauts */
+    for (int k = 0; k < n; k++) {
+        int id = pl[k].id, cnt = mapsTrailN[id];
+        if (cnt < 2) continue;
+        glBegin(GL_LINE_STRIP);
+        for (int j = 0; j < cnt; j++) {
+            V3 p = mapsTrail[id][(mapsTrailHead[id] - cnt + j + 2 * MAPS_TRAIL) % MAPS_TRAIL];
+            glColor4f(pl[k].col[0], pl[k].col[1], pl[k].col[2], 0.6f * j / cnt);
+            glVertex3f(p.x, p.y + 1, p.z);
+        }
+        glEnd();
+    }
+    for (int k = 0; k < n; k++) {                         /* joueurs : pion a la couleur, poteau et ombre jusqu'au sol */
+        const MapsPl *p = &pl[k];
+        if (!p->alive) continue;
+        const float *col = p->col;
+        V3 q = p->pos;
+        float gh = ray_world(v3(q.x, q.y + 0.2f, q.z), v3(0, -1, 0), 200, 0), gy = q.y + 0.2f - gh, s = 2.2f;
+        glColor4f(0, 0, 0, 0.5f);                         /* ombre au sol */
+        glBegin(GL_TRIANGLE_FAN);
+        glVertex3f(q.x, gy + 0.05f, q.z);
+        for (int a = 0; a <= 16; a++) glVertex3f(q.x + cosf(a * PI / 8) * 3, gy + 0.05f, q.z + sinf(a * PI / 8) * 3);
+        glEnd();
+        if (q.y - gy > 0.8f) {                            /* en l'air : poteau pointille jusqu'au sol */
+            glLineWidth(2);
+            glColor4f(col[0], col[1], col[2], 0.7f);
+            glBegin(GL_LINES);
+            for (float yy = gy; yy < q.y; yy += 1.2f) { glVertex3f(q.x, yy, q.z); glVertex3f(q.x, fminf(yy + 0.6f, q.y), q.z); }
+            glEnd();
+        }
+        maps_box3(v3(q.x - s, q.y, q.z - s), v3(q.x + s, q.y + 6.5f, q.z + s), col[0], col[1], col[2], 1);
+        float s1 = sinf(p->yaw), c1 = -cosf(p->yaw), ty = q.y + 6.7f;   /* fleche du regard sur la tete */
+        glColor4f(p->self ? 1 : col[0] * 0.5f + 0.5f, p->self ? 1 : col[1] * 0.5f + 0.5f, p->self ? 1 : col[2] * 0.5f + 0.5f, 1);
+        glBegin(GL_TRIANGLES);
+        glVertex3f(q.x + s1 * 6, ty, q.z + c1 * 6);
+        glVertex3f(q.x - s1 * 2.5f + c1 * 3.2f, ty, q.z - c1 * 2.5f - s1 * 3.2f);
+        glVertex3f(q.x - s1 * 2.5f - c1 * 3.2f, ty, q.z - c1 * 2.5f + s1 * 3.2f);
+        glEnd();
+    }
+    glLineWidth(1);
+    glDisable(GL_DEPTH_TEST);
+    glMatrixMode(GL_PROJECTION); glPopMatrix();
+    glMatrixMode(GL_MODELVIEW); glPopMatrix();
+    glViewport(0, 0, scrW, scrH);
+
+    for (int k = 0; k < n; k++) {                         /* noms et PV, projetes au-dessus des pions */
+        const MapsPl *p = &pl[k];
+        if (!p->alive || !maps_proj3(v3(p->pos.x, p->pos.y + 8.0f, p->pos.z), &sx, &sy)) continue;
+        const float *col = p->col;
+        float tw = fontW[0] * (float)strlen(p->name), hk = clampf(p->hp / 100, 0, 1);
+        text(0, sx - tw * 0.5f, sy - 10, p->name, col[0] * 0.5f + 0.5f, col[1] * 0.5f + 0.5f, col[2] * 0.5f + 0.5f, 1);
+        rect(sx - 16, sy, 32, 4, 0.1f, 0.1f, 0.15f, 0.8f);
+        rect(sx - 16, sy, 32 * hk, 4, 1 - hk * 0.7f, 0.25f + hk * 0.6f, 0.35f, 1);
+    }
+}
+
 static float maps_title(float x, float y, const char *s) {   /* intitule de rubrique, renvoie la ligne suivante */
     text(0, x, y, s, 0.5f, 0.75f, 1, 0.9f);
     rect(x, y + 8, 60, 2, 0.5f, 0.75f, 1, 0.6f);
@@ -334,7 +483,8 @@ static void draw_map_screen(int w, int h) {
     mapsMnX = boxes[0].mn.x; mapsMnZ = boxes[0].mn.z;
     float span = fmaxf(boxes[0].mx.x - boxes[0].mn.x, boxes[0].mx.z - boxes[0].mn.z);
     MapView v = { m, wide ? (h - S) * 0.5f : m, S / fmaxf(span, 1) };
-    maps_draw_map(&v, S, pl, n);
+    if (mapView3d) maps_draw_3d(v.x0, v.y0, S, w, h, pl, n);
+    else maps_draw_map(&v, S, pl, n);
     if (wide) maps_draw_panel(m + S + 60, m, w - S - 3 * m - 60, h - 2 * m);
     else maps_draw_panel(m, m + S + 60, w - 2 * m, h - S - 3 * m - 60);
 }

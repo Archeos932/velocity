@@ -147,7 +147,7 @@ static int velocity_main(const char *cmd) {
     memcpy(binds, bindDefault, sizeof binds);
     if (cmd && strncmp(cmd, "--test ", 7) == 0) { run_tests(cmd + 7); return 0; }
     const char *shotPath = NULL;
-    if (cmd && strncmp(cmd, "--shot ", 7) == 0) { shotMode = 1; shotPath = cmd + 7; shotMap = strstr(shotPath, "carte") != NULL; }
+    if (cmd && strncmp(cmd, "--shot ", 7) == 0) { shotMode = 1; shotPath = cmd + 7; shotMap = strstr(shotPath, "carte") != NULL; if (strstr(shotPath, "carte3d")) mapView3d = 1; }
 
     /* mode bot : velocity.exe --bot host|join [--name N] [--time S] [--log fichier] [--botshot fichier.bmp] [--loadout a,b[,m]] */
     {

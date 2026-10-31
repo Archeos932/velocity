@@ -86,8 +86,12 @@ static void draw_settings(float cx, float cy) {
     y += 50;
     snprintf(buf, sizeof buf, "EFFETS : %s", screenFx ? "OUI" : "NON");
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) screenFx = !screenFx;
-    snprintf(buf, sizeof buf, "2e ECRAN:%s", secondScreen ? "CARTE" : "NON");   /* carte de la partie sur l'autre ecran */
-    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) secondScreen = !secondScreen;
+    snprintf(buf, sizeof buf, "2e ECRAN:%s", !secondScreen ? "NON" : mapView3d ? "3D" : "HAUT");   /* carte : NON, de haut, 3D */
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) {
+        if (!secondScreen) { secondScreen = 1; mapView3d = 0; }
+        else if (!mapView3d) mapView3d = 1;
+        else secondScreen = 0;
+    }
     y += 50;
     snprintf(buf, sizeof buf, "OMBRES : %s", gfxShadows ? "OUI" : "NON");   /* graphismes : deux demi-boutons */
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) gfxShadows = !gfxShadows;

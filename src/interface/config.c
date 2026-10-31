@@ -44,7 +44,7 @@ static void cfg_save(void) {
     fprintf(f, "name=%s" "\n" "sens=%.5f" "\n" "fov=%.0f" "\n" "volume=%.2f" "\n" "music=%.2f" "\n" "invert_y=%d" "\n" "show_fps=%d" "\n" "fullscreen=%d" "\n",
             myName, sens, fovBase, masterVol, musicVol, invertY, showFps, fullscreen);
     fprintf(f, "impact_frames=%d" "\n" "screen_fx=%d" "\n" "shadows=%d" "\n" "bloom=%d" "\n", impactFrames, screenFx, gfxShadows, gfxBloom);
-    fprintf(f, "second_ecran=%d" "\n", secondScreen);
+    fprintf(f, "second_ecran=%d" "\n" "carte_vue=%d" "\n", secondScreen, mapView3d);
     fprintf(f, "quality=%d" "\n" "ambiance=%d" "\n", gfxQuality, gfxAmbiance);
     fprintf(f, "online=%d" "\n" "teams=%d" "\n", onlineOn, wantTeams);
     fprintf(f, "loadout=%d,%d" "\n" "melee=%d" "\n" "skin=%d" "\n", wantLoadout[0], wantLoadout[1], wantMelee, wantSkin);
@@ -73,6 +73,7 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
         else if (!strcmp(line, "impact_frames")) impactFrames = atoi(v) != 0;
         else if (!strcmp(line, "screen_fx")) screenFx = atoi(v) != 0;
         else if (!strcmp(line, "second_ecran")) secondScreen = atoi(v) != 0;
+        else if (!strcmp(line, "carte_vue")) mapView3d = atoi(v) != 0;
         else if (!strcmp(line, "shadows")) gfxShadows = atoi(v) != 0;
         else if (!strcmp(line, "bloom")) gfxBloom = atoi(v) != 0;
         else if (!strcmp(line, "quality")) gfxQuality = atoi(v) < 0 ? 0 : atoi(v) > 2 ? 2 : atoi(v);

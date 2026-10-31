@@ -21,6 +21,7 @@ static float gxBloom[4] = { 0.7f, 3, 2, 1.6f };
 static float gxTexScale[3] = { 0.5f, 0.5f, 2.37f }, gxFloorTex[2] = { 64, 0.80f }, gxWallTex[3] = { 128, 64, 0.62f };
 static float gxGrain = 0.22f, gxEdges = 0.25f;
 static float gxTrail[3] = { 16, 0.55f, 0.35f }, gxOutline = 3;
+static float gxMap3d[3] = { 30, 2.0f, 52 };                /* carte du 2e ecran en 3D : champ (deg), recul (x taille), inclinaison (deg) */
 static float gxNeonC[3] = { 0.2f, 0.95f, 1.0f }, gxNeonM[3] = { 1.0f, 0.25f, 0.85f }, gxNeonO[3] = { 1.0f, 0.6f, 0.15f };
 static float gxNeon[3] = { 1.0f, 0.55f, 5.0f }, gxBleed = 0.35f;   /* neons : eclat, lueur sur le decor, portee ; rebond colore */
 static float gxLights = 1.0f;                             /* lumieres dynamiques (armes, explosions), 0 = aucune */
@@ -43,7 +44,7 @@ static const GfxKey gfxKeys[] = {
     { "bloom", gxBloom, 4 },
     { "texture_echelle", gxTexScale, 3 }, { "sol_texture", gxFloorTex, 2 }, { "mur_texture", gxWallTex, 3 },
     { "grain_force", &gxGrain, 1 }, { "aretes_opacite", &gxEdges, 1 },
-    { "trainees", gxTrail, 3 }, { "contours", &gxOutline, 1 },
+    { "trainees", gxTrail, 3 }, { "contours", &gxOutline, 1 }, { "carte_3d", gxMap3d, 3 },
     { "neon_cyan", gxNeonC, 3 }, { "neon_magenta", gxNeonM, 3 }, { "neon_orange", gxNeonO, 3 }, { "neon", gxNeon, 3 },
     { "rebond_couleur", &gxBleed, 1 }, { "lumieres_dynamiques", &gxLights, 1 },
     { "nuages", gxClouds, 2 }, { "nuages_couleur", gxCloudCol, 3 }, { "poussiere", &gxDust, 1 }, { "reflets_soleil", &gxFlare, 1 },
@@ -83,6 +84,7 @@ static void gfx_clamp(void) {                             /* valeurs absurdes ra
     gxCity[0] = clampf(gxCity[0], 0, 400); gxFog[1] = fmaxf(gxFog[1], gxFog[0] + 1);
     gxClouds[0] = clampf(gxClouds[0], 0, 80); gxDust = clampf(gxDust, 0, 600); gxRain = clampf(gxRain, 0, 2000);
     gxNeon[2] = clampf(gxNeon[2], 0.5f, 12); gxOutline = clampf(gxOutline, 0, 8);
+    gxMap3d[0] = clampf(gxMap3d[0], 10, 80); gxMap3d[1] = clampf(gxMap3d[1], 1, 5); gxMap3d[2] = clampf(gxMap3d[2], 15, 89);
     if (vlen(v3(gxSunDir[0], gxSunDir[1], gxSunDir[2])) < 1e-3f || gxSunDir[1] < 0.05f) gxSunDir[1] = 0.05f;   /* soleil au-dessus */
     int fp = (int)gxFloorTex[0], wx = (int)gxWallTex[0], wy = (int)gxWallTex[1];   /* motifs : diviseurs de 256 */
     if (fp < 8 || 256 % fp) gxFloorTex[0] = 64;
