@@ -3051,7 +3051,7 @@ static void run_tests(const char *path) {
             FILE *logSave = botLog; botLog = NULL;            /* pas de journal dans le fichier de test */
             netMode = NET_HOST; dmMode = 1; myId = 0; teamSize = 2; matchOver = 0; matchT = 0;
             memset(NP, 0, sizeof NP);
-            for (int i = 0; i < 4; i++) { NP[i].active = NP[i].alive = 1; NP[i].hp = 100; NP[i].team = (unsigned char)(i & 1); NP[i].disp = v3(60, 0, 60 + i); }
+            for (int i = 0; i < 4; i++) { NP[i].active = NP[i].alive = 1; NP[i].hp = 100; NP[i].team = (unsigned char)(i & 1); NP[i].disp = v3(60, 0, 60.0f + i); }
             P.pos = v3(60, 0, 60);
             #define TICKS(sec) for (int _k = 0; _k < (int)((sec) * 120); _k++) { nowT += TICK; mode_tick(TICK); }
             rules = (MatchRules){ MODE_ZONES, 1, AMMO_NORMAL, 0, 0, 10 }; mode_reset();
@@ -3064,7 +3064,7 @@ static void run_tests(const char *path) {
             fprintf(f, "mode 3 ZONES : A prise par l'equipe %d en %.0f s, B contestee -> %d, points ROUGES apres 10 s %d (attendu 1, %.0f, 2, ~10)\n",
                     ownA, ZONE_CAP_T, ownB, ptsR, ZONE_CAP_T);
             rules.mode = MODE_DRAPEAU; mode_reset();
-            for (int i = 0; i < 4; i++) NP[i].disp = v3(60, 0, 60 + i);
+            for (int i = 0; i < 4; i++) NP[i].disp = v3(60, 0, 60.0f + i);
             NP[1].disp = flag_home(0);                    /* un ROUGE prend le drapeau BLEU */
             TICKS(0.1f);
             int carried = obj.fl[0].state == FLAG_CARRIED && obj.fl[0].carrier == 1;
@@ -3085,7 +3085,7 @@ static void run_tests(const char *path) {
             fprintf(f, "mode DRAPEAU : pris %d, tombe a la mort %d (sur place %d), retour remis a zero si touche %d, rendu %d, capture -> %d point (attendu 1, 1 1, 1, 1, 1)\n",
                     carried, dropped, at, retReset, returned, obj.pts[1]);
             rules.mode = MODE_BOUCLIER; mode_reset();
-            for (int i = 0; i < 4; i++) { NP[i].alive = 1; NP[i].disp = v3(60, 0, 60 + i); }
+            for (int i = 0; i < 4; i++) { NP[i].alive = 1; NP[i].disp = v3(60, 0, 60.0f + i); }
             NP[1].disp = shield_pos(); TICKS(10);
             int sh1 = obj.shield;
             NP[0].disp = shield_pos(); P.pos = shield_pos(); TICKS(5);   /* un BLEU dessus : plus de surcharge */

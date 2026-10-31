@@ -125,7 +125,7 @@ static void build_map_oasis(void) {
     ct_box(-10, 0, -10, 10, 1.2f, 10, oaPale);
     dc_bevel(v3(-10.2f, 1.0f, -10.2f), v3(10.2f, 1.3f, 10.2f), 0.06f, oaStone);
     for (int c = 0; c < 4; c++) {                         /* temple en ruine : 4 colonnes, linteaux sur deux cotes */
-        float px = c & 1 ? 8 : -8, pz = c & 2 ? 8 : -8;
+        float px = c & 1 ? 8.0f : -8.0f, pz = c & 2 ? 8.0f : -8.0f;
         dc_column(v3(px, 1.2f, pz), 5.5f, 0.6f, oaPale);
         ct_hidden(px - 0.8f, 1.2f, pz - 0.8f, px + 0.8f, 6.7f, pz + 0.8f);
     }
