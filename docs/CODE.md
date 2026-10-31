@@ -385,6 +385,7 @@ vitesse **relative** : foncer sur quelqu'un qui fonce sur vous frappe très fort
 | Flashs d'écran | `parryFlash`, `P.hurtFlash`, `hitMarker`, `killMarkT`, `muzzleT`, `hurtDirT`/`hurtFrom` | affectation directe | `game_tick` | `draw_hud`, `draw_viewmodel` |
 | Textes | `popText`/`popT` (centre), `msg`/`msgT` (gros titre), `streakLostT` | `snprintf` + durée | `game_tick` | `draw_hud` |
 | Effets d'écran | vignette, lignes de vitesse | — | — | `draw_hud`, si `screenFx` |
+| Changement d'arme | `wpFlashAt` (temps réel `nowT`), `P.switchT` | `weapon_select` | — (`WP_FLASH_T` 0,9 s) | `draw_hud` : nom de l'arme sous le viseur + emplacement surligné ; `draw_viewmodel` : l'arme remonte en pivotant. Capture : `--shot changearme.bmp` |
 
 ### 3.7 Audio synthétisé
 

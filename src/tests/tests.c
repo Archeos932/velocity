@@ -203,6 +203,15 @@ static void run_tests(const char *path) {
         wheelLastEv = wheelLastOk = -1e9;
     }
 
+    {                                                     /* changement d'arme : le nom s'affiche, pas si on garde la meme */
+        reset_game();
+        nowT = 50; weapon_select(P.loadout[1]);
+        double a = wpFlashAt;
+        nowT = 51; weapon_select(P.loadout[1]);
+        fprintf(f, "changement d'arme : nom affiche a t=%.0f, re-choix de la meme arme t=%.0f (attendu 50, 50)\n", a, wpFlashAt);
+        nowT = 0; wpFlashAt = -10;
+    }
+
     reset_game();                                         /* escalier -> plateforme centrale */
     P.pos = P.prevPos = v3(0, 0, ms(14) + 0.6f); P.yaw = 0;
     act[A_FWD] = 1;

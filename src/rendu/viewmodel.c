@@ -8,11 +8,16 @@ static void draw_viewmodel(float aspect) {
     glLoadIdentity();
     float hs = hlen(P.vel);
     float bx = (P.grounded && !P.sliding) ? cosf(P.bobT * 0.5f) * 0.012f * fminf(hs / RUN_SPEED, 1) : 0;
-    float lower = P.switchT > 0 ? P.switchT / 0.22f : 0;
+    float lower = P.switchT > 0 ? P.switchT / SWITCH_TIME : 0;
     if (P.dead) lower = 1.5f;
     glTranslatef(0.2f + bx + P.swayX, -0.19f + P.bob * 0.3f - lower * 0.25f + P.swayY - P.landDip * 0.2f,
                  -0.42f + P.recoil * 0.06f);
     glScalef(0.5f, 0.5f, 0.5f);
+    if (P.switchT > 0 && !P.dead) {                       /* changement d'arme : la nouvelle remonte en pivotant */
+        float k = P.switchT / SWITCH_TIME;
+        glRotatef(-k * k * 35, 1, 0, 0);
+        glRotatef(k * 18, 0, 1, 0);
+    }
     glRotatef(P.recoil * 7, 1, 0, 0);
     glRotatef(-P.roll * 0.5f, 0, 0, 1);
     if (P.sliding) glRotatef(-10, 0, 0, 1);

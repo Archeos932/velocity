@@ -381,6 +381,7 @@ enum { AP_HIT, AP_KILL, AP_PARRY, AP_CELL, AP_LOST, AP_COUNT };   /* origine des
 #define SWITCH_TIME        0.22f   /* changement d'arme */
 #define WHEEL_QUIET        0.15    /* molette : repos (s) qui separe deux gestes ; une rafale = un seul changement */
 #define WHEEL_COOLDOWN     0.30    /* molette : delai minimal (s) entre deux changements */
+#define WP_FLASH_T         0.9     /* nom de l'arme affiche (s) apres un changement */
 #define DRYFIRE_CD         0.35f   /* delai entre deux clics a sec */
 #define ST_MASK            0xF0    /* NetPState.pad : bits 4-7 = etats d'arme, bits 0-3 = meleeKind */
 

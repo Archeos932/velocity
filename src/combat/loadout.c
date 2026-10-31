@@ -91,7 +91,8 @@ static void loadout_apply(void) {                         /* (re)spawn : munitio
     P.shieldBrokenT = P.shieldRipT = P.shieldHeldT = P.shieldAnim = P.shieldHitT = 0; P.shieldDownT = 1; P.shieldRamDone = 0;
     melee_start_swing();
 }
-static void weapon_select(int w) { if (w != P.weapon) { P.weapon = w; P.switchT = SWITCH_TIME; } }
+static double wpFlashAt = -10;                            /* dernier changement d'arme (temps reel) : nom affiche au centre */
+static void weapon_select(int w) { if (w != P.weapon) { P.weapon = w; P.switchT = SWITCH_TIME; wpFlashAt = nowT; } }
 
 /* Coup de corps a corps (clic droit / V). Degats et portee montent avec la vitesse RELATIVE
  * entre le joueur et la cible : foncer sur quelqu'un qui fonce sur toi frappe tres fort.

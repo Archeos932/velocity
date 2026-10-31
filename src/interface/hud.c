@@ -637,6 +637,14 @@ static void draw_hud(void) {
                 break;
             }
     }
+    float wpFl = P.dead ? 0 : clampf(1 - (float)(nowT - wpFlashAt) / WP_FLASH_T, 0, 1);   /* changement d'arme recent */
+    if (wpFl > 0) {                                       /* nom de l'arme sous le viseur : monte et s'efface */
+        const AmmoDef *wd = &ammoDef[P.weapon];
+        float a = fminf(1, wpFl * 2.5f), y = cy + 78 + 14 * wpFl * wpFl, nw = fontW[1] * (float)strlen(wd->name);
+        rect(cx - nw * 0.5f - 14, y - 4, nw + 28, (float)fontH[1] + 8, 0.03f, 0.03f, 0.08f, 0.45f * a);
+        rect(cx - nw * 0.5f - 14, y + fontH[1] + 4.0f, (nw + 28) * wpFl, 3, wd->r, wd->g, wd->b, 0.9f * a);
+        text_c(1, cx, y, wd->name, wd->r * 0.6f + 0.4f, wd->g * 0.6f + 0.4f, wd->b * 0.6f + 0.4f, a);
+    }
     {                                                     /* emplacements : [touche] ARME munitions, l'actif en blanc */
         char sb[2][48];
         for (int s = 0; s < 2; s++)
@@ -648,6 +656,8 @@ static void draw_hud(void) {
             float k = act0 ? 1.0f : 0.55f;
             text(0, x, winH - 13.0f, sb[s], emp ? 1.0f : k, emp ? 0.35f : k, emp ? 0.35f : k * 1.05f, 0.9f);
             float gw = fontW[0] * (float)strlen(sb[s]), gf = w == WP_TESLA ? P.ammo[w] / 100.0f : gauge_frac(w);
+            if (act0 && wpFl > 0)                         /* emplacement choisi : eclat a la couleur de l'arme */
+                rect(x - 4, winH - 30.0f, gw + 8, 24, ammoDef[w].r, ammoDef[w].g, ammoDef[w].b, 0.25f * wpFl);
             if (ammoDef[w].gauge > 0) {
                 rect(x, winH - 5.0f, gw, 3, 0.1f, 0.1f, 0.15f, 0.7f);
                 rect(x, winH - 5.0f, gw * gf, 3, ammoDef[w].r, ammoDef[w].g, ammoDef[w].b, 0.9f);

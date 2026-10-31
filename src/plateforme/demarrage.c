@@ -397,6 +397,9 @@ static int velocity_main(const char *cmd) {
         for (int i = 0; i < 12; i++) game_tick(TICK);
         snprintf(msg, sizeof msg, "VAGUE %d", wave); msgT = 2;
         if (strstr(shotPath, "rail")) { P.weapon = 0; P.switchT = 0; P.fireCd = 0; }
+        if (strstr(shotPath, "changearme")) {             /* changement d'arme : nom au centre, arme qui remonte */
+            msgT = 0; P.weapon = P.loadout[1]; weapon_select(P.loadout[0]); P.switchT = SWITCH_TIME * 0.5f; wpFlashAt = nowT - 0.25;
+        }
         shotStreak = 4; P.meleeT = 0.12f; P.vel = v3(0, 0, -14);   /* pour voir le HUD des deux axes */
         if (strstr(shotPath, "elan")) {                   /* Elan : un tir plein, puis la fenetre du dash-tir ouverte */
             P.loadout[1] = WP_KINETIC; P.weapon = WP_KINETIC; P.switchT = 0; P.fireCd = 0; P.meleeT = 0;
