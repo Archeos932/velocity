@@ -14,7 +14,7 @@
 #include <math.h>
 #pragma comment(lib, "winmm.lib")
 
-#include "music.h"
+#include "../src/son/music.h"
 
 #define BUFLEN 2048
 #define NBUF   4

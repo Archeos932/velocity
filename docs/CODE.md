@@ -1,18 +1,20 @@
 # VELOCITY — documentation du code
 
-Ce document décrit `main.c` pour qu'un humain ou une IA puisse modifier le jeu sans tout relire.
-Le code est cité par **noms** de fonctions, de structures, de variables et de `#define` : cherchez-les
-dans `main.c` (les numéros de ligne changent trop souvent pour être utiles).
+Ce document décrit le code du jeu (`main.c` et les morceaux de `src/`) pour qu'un humain ou une IA puisse le
+modifier sans tout relire. Le code est cité par **noms** de fonctions, de structures, de variables et de `#define` :
+cherchez-les avec `grep -rn nom src/` (les numéros de ligne changent trop souvent pour être utiles). Le §2 dit dans
+quel fichier se trouve chaque partie.
 
-> Les commentaires de `main.c` sont en français **sans accents**. Gardez cette convention dans le code.
+> Les commentaires du code sont en français **sans accents**. Gardez cette convention.
 
 ---
 
 ## 1. Vue d'ensemble
 
-### Un seul fichier, aucune dépendance
+### Une seule unité de compilation, aucune dépendance
 
-- Tout le jeu tient dans **`main.c`** (~4 900 lignes) : fenêtre Win32, rendu OpenGL 1.1 (pipeline fixe,
+- Tout le jeu forme **une seule unité de compilation** : `main.c` inclut, dans l'ordre, les morceaux de `src/`
+  (voir §2). On ne compile que `main.c`. Fenêtre Win32, rendu OpenGL 1.1 (pipeline fixe,
   `glBegin`/`glEnd`, listes d'affichage), audio `waveOut` avec sons **synthétisés** au démarrage,
   réseau UDP Winsock pour le deathmatch LAN.
 - Aucune ressource externe : pas d'image, pas de son, pas de police à charger (la police vient de
@@ -79,41 +81,101 @@ Un clic ne déclenche pas l'action tout de suite : il pose `pendingAction` (`ACT
 
 ---
 
-## 2. Carte des sections de `main.c`
+## 2. Arborescence des fichiers
 
-Les sections sont délimitées par des bandeaux `/* ---- */`. Dans l'ordre :
+`main.c` est la **table des matières** : une liste de `#include "src/..."` dans l'ordre. Les morceaux ne se
+compilent pas seuls (ils voient tout ce qui est inclus avant eux, comme si c'était un seul grand fichier) et chacun
+commence par une ligne qui dit son rôle. La sortie du préprocesseur est la même qu'avec l'ancien `main.c` unique.
 
-| # | Section (titre du bandeau) | Rôle | Éléments clés |
-|---|---|---|---|
-| 0 | *(en-tête)* | includes, `#pragma comment(lib)` | `PI`, `TICK` |
-| 1 | **Maths** | vecteurs 3D et aléatoire | `V3`, `v3`, `vadd`, `vsub`, `vmul`, `vdot`, `vcross`, `vlen`, `vnorm`, `vlerp`, `vc`, `clampf`, `hlen` (vitesse horizontale), `rng`, `frand`, `frange`, `rand_dir` |
-| 2 | **Reglages du mouvement** | presque tous les `#define` d'équilibrage | mouvement, grappin, rail, munitions, pièces, roquettes, épée, parry, chaîne de tir (voir §5) |
-| 3 | **Audio** | mixeur `waveOut` + synthèse | `S_*`, `Sound`, `Voice`, `sounds`, `voices`, `masterVol`, `play`, `audio_fill`, `audio_update`, `noise`, `sbuf`, `mksound`, `make_sounds`, `audio_init` |
-| 4 | **Monde : une liste d'AABB** | carte, collisions, rayons | `Box`, `B_SOLID`, `B_PAD`, `boxes`, `nb`, `addbox`, `addpad`, `MAP_S`, `ms`, `Pickup`, `PU`, `npu`, `addpickup`, `build_level`, `box_overlap`, `ray_box`, `ray_world`, `ray_sphere`, `los`, `sphere_pushout` |
-| 5 | **Entites** | structures de jeu et état global solo | `Player` (`P`), `HOOK_NONE/FLYING/ATTACHED`, `Enemy` (`E`, `EN_DRONE`, `EN_RUSHER`), `Coin` (`CO`), `Proj` (`PR`, `PR_ROCKET`, `PR_ORB`, `PR_PARRIED`), `Part` (`PA`), `Beam` (`BM`), score/vague/combo, `hitstop`, `parryFlash`, `shotStreak`, `msg`, `popText` |
-| 6 | **Multijoueur LAN : etat partage** | ce que le jeu doit connaître du réseau avant la section réseau | `MAXP`, `NET_PORT`, `FRAG_LIMIT`…, `NET_*`, `APP_*`, `W_*`, `NF_*`, `NetPState`, `NetPlayer` (`NP`), `myId`, `np_height`, `np_center`, `np_vel`, `np_aabb`, `np_target`, `rel_speed`, déclarations anticipées `net_hit`, `net_fx_*`, `netlog` |
-| 7 | **Entrees** | touches physiques et couche d'actions | `SC_*`, `K_LMB`…`K_WHEEL`, `K_COUNT`, `keys`, `latch`, `A_*`, `actId`, `actLabel`, `bindDefault`, `binds`, `act`, `actP`, `botHeld`, `botPress`, réglages `fovBase`, `invertY`, `showFps`, `impactFrames`, `screenFx` |
-| 8 | **Effets visuels de combat** | impact frames, chiffres de dégâts, éclats ; et aussi la lecture des entrées | `impact_frame`, `impactT`, `killMarkT`, `muzzleT`, `hurtDirT`, `DmgNum` (`DN`, `dmg_number`), `Shard` (`SH`, `shards`, `shard_tick`), `bound_held`, `input_poll`, `hookPressIn`, `hookHeldIn`, `sens`, `captured`, `shotMode`, `hwnd`, `winW`, `winH`, `set_capture` |
-| 9 | **Effets** | particules et rayons | `add_part`, `burst`, `add_beam` |
-| 10 | **Joueur** | physique du joueur et grappin | `pheight`, `paabb`, `pos_free`, `view_dir`, `eye_pos`, `pcenter`, `move_axis`, `wall_check`, `accelerate`, `hook_release`, `grapple_bounce`, `grapple_tick`, `player_tick` |
-| 11 | **Combat** | dégâts, épée, parry, rail, pièces, roquettes | `damage_player`, `kill_enemy`, `damage_enemy`, `explode`, `explode_fx`, `atten`, `streak_mult`, `streak_rate`, `shot_result`, `parry_feedback`, `melee_range`, `melee_dmg`, `try_parry`, `melee`, `muzzle`, `throw_coin`, `coin_tick`, `ricochet`, `fire_rail`, `spawn_proj`, `fire_rocket`, `proj_tick` |
-| 12 | **Ennemis et vagues** | mode solo | `spawn_enemy`, `enemy_tick`, `enemies_alive`, `wave_tick`, `reset_game` |
-| 13 | **Multijoueur LAN : reseau** | protocole, hôte, client, bot, **et `game_tick`** | `NET_MAGIC`, `NET_VER`, `PK_*`, `EV_*`, structures de paquets ; utilitaires `netlog`, `set_status`, `pname`, `net_open`, `net_send`, `head` (remplit un `PkHead`), `same_addr`, `host_send_all`, `pack_state`, `find_local_ip` ; sous-parties « evenements » (`ev_seen`, `net_queue`, `net_emit`, `ev_new`, `net_hit`, `net_fx_*`, `kfeed_add`, `find_proj`, `pickup_taken`, `apply_event`), « hote : arbitrage » (`host_*`, `pick_spawn`), « client » (`net_shutdown`, `on_welcome`, `apply_snap`, `client_recv`, `net_poll`, `flush_events`, `net_update`, `net_host_start`, `net_browse_start`, `net_connect`), « bot de test » (`bot_think`), puis `pickup_tick` et `game_tick` |
-| 14 | **Rendu** | 3D | `make_textures`, `quadf`, `box_faces`, `box_edges`, `build_world_list`, `make_font`, `text`, `text_c`, `rect`, `billboard`, `set_frustum`, `draw_sky`, `draw_enemy`, `draw_viewmodel` |
-| 15 | **Interface : menus, tableau des scores, joueurs distants** | 2D, réglages, menus, HUD, et `render` | `ACT_*`, `settingsOpen`, `key_name`, `bind_text`, `cfg_save`, `cfg_load`, `assign_bind`, `button`, `field`, `slider`, `draw_controls`, `draw_settings`, `draw_status`, `draw_main_menu`, `draw_join_menu`, `draw_pause`, `draw_scoreboard`, `draw_killfeed`, `project`, `draw_name_tags`, `draw_remote_players`, `melee_preview`, `draw_hud`, `render` |
-| 16 | **Fenetre** | Win32, outils, point d'entrée | `toggle_fullscreen`, `wndproc`, `save_bmp`, `run_tests`, `do_action`, `WinMain` |
+```
+velocity/
+├── main.c                     table des matieres : inclut src/ dans l'ordre (seul fichier compile)
+├── build.bat / build_mac.sh   compilation Windows (MSVC) / macOS (clang, Velocity.app)
+├── build_music.bat            outil d'ecoute de la musique (outils/musique.c)
+├── src/
+│   ├── noyau/        entete.c (includes), maths.c (V3, aleatoire)
+│   ├── reglages/     equilibrage.c : TOUS les #define (mouvement, armes, parry, PvP, points)
+│   ├── son/          audio.c (mixeur, sons synthetises), music.h (morceaux et sequenceur)
+│   ├── monde/        carte.c (boites AABB, collisions, rayons), entites.c (Player P, Enemy, Proj...)
+│   ├── entrees/      actions.c (touches, A_*, bindDefault)
+│   ├── effets/       combat_fx.c (impact frames, chiffres, input_poll), particules.c, monde_fx.c (neons, meteo)
+│   ├── joueur/       mouvement.c (player_tick, grappin)
+│   ├── combat/       degats.c, loadout.c, melee.c, pieces_rail.c, roquettes.c, projectiles.c
+│   ├── armes/        une arme = un fichier : enclume, lance, fleau, poings, egide, elan, eventail, tesla, scie, ventouse
+│   ├── solo/         ennemis_vagues.c
+│   ├── reseau/       etat_partage.c, protocole.c (paquets, EV_*), hote.c, client.c, en_ligne.c (lobby, STUN)
+│   ├── bots/         bot.c
+│   ├── jeu/          boucle.c (pickup_tick, game_tick)
+│   ├── graphismes/   rendu_ini.c (lecture de graphismes/rendu.ini, ambiances, qualite)
+│   ├── perso/        skins.c (modeles et animation des personnages)
+│   ├── rendu/        base, textures, eclairage (lightmaps), modeles, armes_rendu, viewmodel, joueurs,
+│   │                 ciel_ombres_bloom, render.c (l'image complete)
+│   ├── interface/    texte.c, config.c (velocity.ini), menus.c, scores.c, hud.c
+│   ├── plateforme/   fenetre.c (Win32 + gestionnaires d'entrees communs), demarrage.c (WinMain, boucle)
+│   │   └── mac/      mac_platform.m / .h, mac_compat.h (port macOS, voir §8)
+│   └── tests/        tests.c (--shot, --test)
+├── graphismes/       rendu.ini, ambiances, textures .bmp : modifiables sans recompiler (F5)
+├── outils/           musique.c (ecoute du design musical, Windows)
+├── worker/           lobby en ligne (Cloudflare Worker, Node)
+└── docs/             cette doc, plans, fiches des armes (docs/armes/)
+```
+
+| Fichier | Rôle | Éléments clés |
+|---|---|---|
+| `noyau/entete.c` | includes, `#pragma comment(lib)` | `PI`, `TICK` |
+| `noyau/maths.c` | vecteurs 3D et aléatoire | `V3`, `v3`, `vadd`, `vsub`, `vmul`, `vdot`, `vcross`, `vlen`, `vnorm`, `vlerp`, `clampf`, `hlen`, `rng`, `frand`, `frange`, `rand_dir` |
+| `reglages/equilibrage.c` | presque tous les `#define` d'équilibrage (voir §5) | mouvement, grappin, armes (une sous-partie par arme), parry, PvP, points, molette |
+| `son/audio.c` | mixeur + synthèse | `S_*`, `Sound`, `Voice`, `play`, `audio_fill`, `audio_update`, `make_sounds`, `audio_init` ; inclut `music.h` |
+| `monde/carte.c` | carte, collisions, rayons | `Box`, `boxes`, `addbox`, `addpad`, `Pickup`, `build_level`, `ray_world`, `los`, `sphere_pushout` |
+| `monde/entites.c` | structures de jeu et état solo | `Player` (`P`), `Enemy` (`E`), `Coin` (`CO`), `Proj` (`PR`), `Part`, `Beam`, `hitstop`, `msg` |
+| `reseau/etat_partage.c` | ce que le jeu doit connaître du réseau avant le réseau | `MAXP`, `NetPState`, `NetPlayer` (`NP`), `myId`, équipes, déclarations anticipées `net_hit`, `net_fx_*` |
+| `entrees/actions.c` | touches physiques et actions | `SC_*`, `K_*`, `keys`, `latch`, `A_*`, `actId`, `actLabel`, `bindDefault`, `binds`, `act`, `actP` |
+| `effets/combat_fx.c` | impact frames, chiffres de dégâts, éclats **et lecture des entrées** | `impact_frame`, `DmgNum`, `Shard`, `input_poll`, `set_capture` |
+| `effets/particules.c` | particules, rayons | `add_part`, `burst`, `add_beam`, `add_light`, `decal_at`, `fx_explosion` |
+| `joueur/mouvement.c` | physique du joueur et grappin | `view_dir`, `eye_pos`, `move_axis`, `wall_check`, `accelerate`, `grapple_tick`, `player_tick` |
+| `combat/degats.c` | dégâts, kills, explosions | `damage_player`, `kill_enemy`, `damage_enemy`, `explode_ex`, `streak_mult`, `parry_feedback` |
+| `combat/loadout.c` | deux armes, munitions à jauge | `loadout`, `weapon_select`, `wp_has_ammo` |
+| `combat/melee.c` | épée et aiguillage des mêlées | `melee` (`try_parry` est dans `loadout.c`) |
+| `combat/pieces_rail.c` | pièces, ricochets, rail | `throw_coin`, `coin_tick`, `ricochet`, `hitscan_shot`, `fire_rail` |
+| `combat/roquettes.c`, `combat/projectiles.c` | projectiles | `spawn_proj`, `fire_rocket`, `proj_tick` |
+| `armes/*.c` | une arme par fichier (logique ; fiche de conception dans `docs/armes/`) | `slam_*`, `lance_*`, `flail_*`, `fist_*`, `shield_*`, `kin_*`, `sg_*`, `tesla_*`, `saw_*`, `mine_*` |
+| `solo/ennemis_vagues.c` | mode solo | `spawn_enemy`, `enemy_tick`, `wave_tick`, `reset_game` |
+| `reseau/protocole.c` | paquets et événements | `NET_VER`, `PK_*`, `EV_*`, `net_emit`, `net_hit`, `net_fx_*`, `apply_event` |
+| `reseau/hote.c` | autorité de l'hôte | `host_handle`, `host_kill`, `host_tick`, `pick_spawn` |
+| `reseau/client.c` | client | `on_welcome`, `apply_snap`, `client_recv`, `net_update`, `net_connect` |
+| `reseau/en_ligne.c` | lobby et STUN (voir §4) | `stun_*`, `lb_*`, `quick_play` |
+| `bots/bot.c` | bots | `aim_assist`, `bot_think` |
+| `jeu/boucle.c` | un pas de simulation | `pickup_tick`, `spec_tick`, `fire_weapon`, `game_tick`, `fx_tick` |
+| `graphismes/rendu_ini.c` | `graphismes/rendu.ini` (voir §3.13) | `gx*`, `gfxKeys`, `gfx_load_all`, `gfx_quality_apply` |
+| `rendu/textures.c` | textures, primitives | `make_textures`, `tex_override`, `quadf`, `box_faces`, `box_edges` |
+| `perso/skins.c` | personnages (voir §3.14) | `SkinAnim`, `skin_robot`…, `draw_skin` |
+| `rendu/eclairage.c` | lightmaps, néons, décor | `bake_lightmaps`, `build_neon`, `build_world_list` |
+| `interface/texte.c` | police et 2D | `make_font`, `text`, `text_c`, `rect` |
+| `rendu/modeles.c`, `rendu/armes_rendu.c`, `rendu/viewmodel.c` | modèles 3D, rendu des armes, arme en main | `draw_enemy`, `draw_tesla_arcs`, `draw_flails`, `draw_viewmodel` |
+| `interface/config.c` | `velocity.ini` | `cfg_save`, `cfg_load`, `assign_bind`, `key_name` |
+| `interface/menus.c` | menus et paramètres | `button`, `slider`, `draw_settings`, `draw_loadout`, `draw_skin_menu`, `draw_main_menu`, `draw_pause` |
+| `interface/scores.c` | scores, killfeed, pseudos | `draw_scoreboard`, `draw_killfeed`, `project`, `draw_name_tags` |
+| `rendu/joueurs.c` | joueurs distants | `np_anim`, `draw_trails`, `draw_outlines`, `draw_remote_players` |
+| `interface/hud.c` | HUD | `melee_preview`, `draw_radar`, `draw_hud` |
+| `rendu/ciel_ombres_bloom.c` | ciel, ombres, bloom (voir §3.12) | `draw_sky_dome`, `draw_dyn_shadows`, `bloom_apply` |
+| `effets/monde_fx.c` | effets du monde | `draw_world_marks`, `draw_world_glow`, `draw_weather`, `storm_tick`, `draw_flare` |
+| `rendu/render.c` | image complète | `gfx_reload`, `render` |
+| `plateforme/fenetre.c` | fenêtre et entrées | `in_key_down`, `in_wheel`, `wheel_accept`, `wndproc`, `plat_*` |
+| `tests/tests.c` | outils de test (§6) | `save_bmp`, `*_test_*`, `run_tests` |
+| `plateforme/demarrage.c` | point d'entrée | `music_follow_game`, `do_action`, `WinMain` / `velocity_main` |
 
 À savoir pour s'y retrouver :
 
-- **`game_tick` est dans la section réseau** (tout à la fin, après `bot_think` et `pickup_tick`),
-  parce qu'il a besoin de `host_tick`.
-- **`input_poll` est dans la section « Effets visuels de combat »**, juste après `shard_tick`.
-- **`render` est à la fin de la section Interface**, car il appelle `draw_hud`.
-- Le C exige qu'une fonction soit déclarée avant usage : les fonctions réseau appelées par le combat
-  (`net_hit`, `net_fx_rail`, `net_fx_rocket`, `net_fx_rocket_end`, `net_fx_parry`, `net_fx_melee`,
-  `net_fx_coin`, `netlog`) sont **déclarées en avance** à la fin de la section « etat partage ».
-  Même chose pour `enemy_radius` et `damage_enemy` avant `grapple_tick`, et `apply_event`/`host_handle`
-  avant `net_emit`.
+- **L'ordre des `#include` de `main.c` compte** : une fonction doit être définie, ou déclarée en avance, dans un
+  morceau placé plus haut que celui qui l'appelle. Ajouter une fonction : la mettre dans le fichier de son thème ;
+  si elle sert plus haut, ajouter une déclaration anticipée (comme `net_hit` dans `reseau/etat_partage.c`).
+- **Nouveau fichier** : créer `src/<theme>/nom.c` avec la ligne de rôle en tête, puis l'ajouter à `main.c` au bon
+  endroit. Rien d'autre à changer : les scripts de compilation ne compilent que `main.c`.
+- Une arme touche plusieurs fichiers : sa logique dans `armes/`, mais ses événements dans `reseau/`, son rendu dans
+  `rendu/armes_rendu.c` et son HUD dans `interface/hud.c` (chaque partie est balisée `/* --- Nom : ... --- */`).
+- **`game_tick` est dans `jeu/boucle.c`**, après le réseau, parce qu'il a besoin de `host_tick`.
+- **`input_poll` est dans `effets/combat_fx.c`**, juste après `shard_tick`.
+- **`render` est dans `rendu/render.c`**, après le HUD et le ciel qu'il appelle.
 
 ---
 
@@ -335,8 +397,8 @@ vitesse **relative** : foncer sur quelqu'un qui fonce sur vous frappe très fort
 - Les sons `S_*` sont fabriqués **une fois** dans `make_sounds` (sinus, bruit filtré, enveloppes
   exponentielles) puis convertis par `mksound`. `sbuf(secondes, &n)` alloue un tampon de travail.
 - Pas d'audio en mode `--shot` ni `--test` (`audio_ok == 0`, `play` ne fait rien).
-- **Musique** (hard techno, un morceau par carte) : tout le design est dans **`music.h`** (morceaux `tracks[]`
-  + moteur), inclus par `main.c`. Séquenceur synthétisé mixé dans `audio_fill` via `music_sample()`, volume
+- **Musique** (hard techno, un morceau par carte) : tout le design est dans **`src/son/music.h`** (morceaux `tracks[]`
+  + moteur), inclus par `son/audio.c`. Séquenceur synthétisé mixé dans `audio_fill` via `music_sample()`, volume
   `musicVol` (`music=` dans `velocity.ini`, curseur « Musique »). Un morceau : BPM de départ, `bpmStep` (BPM
   gagnés par niveau), tonique (Hz), jusqu'à 8 mesures de 16 pas (`MusBar` : masques `kick/clap/hat/ohat`, notes
   `bass/lead` en demi-tons, `RS` = silence). Instruments : kick saturé à chute de hauteur, basse rumble en
@@ -521,7 +583,7 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
   (`gfx_quality_apply`) et règle ombres/bloom. Captures : `--shot arene_nuit.bmp`, `skins.bmp`, `skins_course.bmp`,
   `skinmenu.bmp`.
 - **Radar des alliés** (`draw_radar`) : mode équipes, en haut à gauche.
-- **Anticrénelage** : macOS demande un format 4x MSAA (`mac_platform.m`), sinon le format simple. Pas encore sous
+- **Anticrénelage** : macOS demande un format 4x MSAA (`src/plateforme/mac/mac_platform.m`), sinon le format simple. Pas encore sous
   Windows (il faudrait `wglChoosePixelFormatARB`).
 
 ## 4. Réseau LAN
@@ -1148,9 +1210,10 @@ Exemple : une troisième arme principale (`P.weapon == 2`).
 
 ---
 
-## 7. Port macOS
+## 8. Port macOS
 
-Même `main.c`, compilé avec `clang` (pas de MSVC). Tout ce qui est propre à la plateforme est isolé :
+Même `main.c`, compilé avec `clang` (pas de MSVC). Tout ce qui est propre à la plateforme est isolé dans
+`src/plateforme/mac/` :
 
 | Fichier | Rôle |
 |---|---|
@@ -1162,7 +1225,7 @@ Même `main.c`, compilé avec `clang` (pas de MSVC). Tout ce qui est propre à l
   et `Velocity-macOS.zip`. Sans Mac : le workflow `.github/workflows/macos.yml` fait la même chose sur un runner
   macOS, lance `--test` et publie le zip en artefact. Au premier lancement d'un `.app` téléchargé : clic droit →
   Ouvrir (ou `xattr -dr com.apple.quarantine Velocity.app`).
-- **`main.c`** : les blocs Windows sont sous `#ifdef _WIN32`. Les entrées passent par des gestionnaires communs
+- **Code partagé** : les blocs Windows sont sous `#ifdef _WIN32`. Les entrées passent par des gestionnaires communs
   (`in_key_down`, `in_char`, `in_button_down`, `in_wheel`, `in_resize`…) appelés par `wndproc` (Windows) ou par
   les `plat_*` (macOS). `WinMain` devient `velocity_main(cmd)` ; `main(argc, argv)` recolle les arguments.
   Le fil principal reste le seul à lire/écrire l'état du jeu, y compris l'audio : `AudioQueue` ne fait que

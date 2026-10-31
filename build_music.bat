@@ -8,4 +8,4 @@ set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 set /p VSPATH=<"%TEMP%\vspath.txt"
 call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul 2>nul
 :build
-cl /nologo /O2 /W3 /std:c11 /Fe:musique.exe musique.c
+cl /nologo /O2 /W3 /std:c11 /Fe:musique.exe outils\musique.c

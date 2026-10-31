@@ -10,7 +10,7 @@ mkdir -p build "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 clang -O2 -std=gnu11 -fobjc-arc -Wall -Wno-deprecated-declarations \
     -mmacosx-version-min=10.15 -arch arm64 -arch x86_64 \
-    main.c mac_platform.m \
+    main.c src/plateforme/mac/mac_platform.m \
     -framework Cocoa -framework OpenGL -framework AudioToolbox -framework CoreText -framework Carbon \
     -o "$APP/Contents/MacOS/velocity"
 

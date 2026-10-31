@@ -1,12 +1,15 @@
 # VELOCITY — guide pour Claude
 
-Movement shooter 3D en **C pur**, un seul fichier `main.c`, sans aucune dépendance :
+Movement shooter 3D en **C pur**, une seule unité de compilation (`main.c` inclut les morceaux de `src/` dans l'ordre),
+sans aucune dépendance :
 Win32 + OpenGL 1.1 (pipeline fixe) + waveOut (son synthétisé) + Winsock UDP (LAN).
 Le propriétaire est francophone : réponses, commentaires et docs **en français**.
 
-- Architecture, systèmes, réseau, réglages, recettes : **`docs/CODE.md`**
-- Port macOS (`mac_platform.m`, `mac_compat.h`, `build_mac.sh`, CI GitHub Actions) : **§7 de `docs/CODE.md`**. Toute nouvelle
-  API Win32 dans `main.c` doit avoir son équivalent macOS (`#ifdef _WIN32` / `mac_*`).
+- Architecture, systèmes, réseau, réglages, recettes : **`docs/CODE.md`** ; **arborescence des fichiers et rôle de
+  chacun : §2** (une arme = `src/armes/<arme>.c`, skins = `src/perso/`, réglages = `src/reglages/equilibrage.c`…).
+  Nouvelle fonction : dans le fichier de son thème ; nouveau fichier : l'ajouter à `main.c` au bon endroit (l'ordre compte).
+- Port macOS (`src/plateforme/mac/`, `build_mac.sh`, CI GitHub Actions) : **§8 de `docs/CODE.md`**. Toute nouvelle
+  API Win32 dans le code doit avoir son équivalent macOS (`#ifdef _WIN32` / `mac_*`).
 - Idées d'armes et de cartes à implémenter : **`docs/IDEES_ARMES_CARTES.md`**
 - Parties en ligne (lobby Cloudflare gratuit, STUN, perçage de NAT, spectateurs) : **`docs/PLAN_EN_LIGNE.md`**
   et §4 de `docs/CODE.md`. Le lobby est dans **`worker/`** (`node test.js` pour ses tests, `node dev-server.js`
@@ -51,7 +54,7 @@ Sur Mac : `./build_mac.sh`, puis `Velocity.app/Contents/MacOS/velocity --test te
 
 ## Règles du code
 
-- **Réglages** : tous les `#define` en haut de `main.c` (mouvement, armes, parry, PvP, pièces…).
+- **Réglages** : tous les `#define` dans `src/reglages/equilibrage.c` (mouvement, armes, parry, PvP, pièces…).
   Valeurs PvP actuelles : `PVP_SCALE` 0,7, plafond `PVP_HIT_CAP` 60 PV par touche.
 - **Entrées** : la logique de jeu ne lit **jamais** `keys[]` : elle lit les actions `act[A_*]`
   (tenu) et `actP[A_*]` (appui du tick), remplies par `input_poll()` via `binds`. Les bots écrivent
