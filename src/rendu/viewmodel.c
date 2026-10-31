@@ -179,15 +179,41 @@ static void draw_viewmodel(float aspect) {
         draw_tesla_vm();
     } else if (P.weapon == WP_MINE) {                     /* Ventouse */
         draw_mine_vm(ready);
-    } else {
-        glColor3f(0.32f, 0.36f, 0.22f);
-        box_faces(v3(-0.055f, -0.055f, -0.5f), v3(0.055f, 0.055f, 0.05f));
-        glColor3f(0.2f, 0.2f, 0.18f);
-        box_faces(v3(-0.068f, -0.068f, -0.56f), v3(0.068f, 0.068f, -0.48f));
-        box_faces(v3(-0.025f, -0.17f, -0.1f), v3(0.025f, -0.055f, -0.03f));
+    } else {                                              /* Roquettes : tube a facettes, bouche evasee, tuyere, ogive visible */
+        V3 tc = v3(0, 0, 0);                              /* axe du tube */
+        int nr = P.ammo[WP_ROCKET];
+        glColor3f(0.30f, 0.34f, 0.22f);
+        prism_z(tc, -0.50f, 0.04f, 0.058f, 0.058f, 8, 0, 0);                 /* tube */
+        glColor3f(0.17f, 0.18f, 0.16f);
+        prism_z(tc, -0.60f, -0.50f, 0.078f, 0.066f, 8, 0, 1);                /* bouche evasee */
+        prism_z(tc, 0.04f, 0.15f, 0.064f, 0.082f, 8, 1, 0);                  /* tuyere arriere evasee */
+        glColor3f(0.05f, 0.05f, 0.06f);
+        prism_z(tc, -0.598f, -0.596f, 0.064f, 0.064f, 8, 1, 0);              /* ame sombre a l'avant */
+        prism_z(tc, 0.148f, 0.15f, 0.07f, 0.07f, 8, 0, 1);                   /* ame sombre a l'arriere */
+        glColor3f(0.22f, 0.24f, 0.18f);                   /* colliers de renfort */
+        prism_z(tc, -0.36f, -0.33f, 0.064f, 0.064f, 8, 1, 1);
+        prism_z(tc, -0.06f, -0.03f, 0.064f, 0.064f, 8, 1, 1);
+        glColor3f(0.16f, 0.16f, 0.15f);                   /* poignee, pontet, poignee avant */
+        box_faces(v3(-0.025f, -0.17f, -0.10f), v3(0.025f, -0.05f, -0.03f));
+        box_faces(v3(-0.012f, -0.10f, -0.17f), v3(0.012f, -0.088f, -0.10f));
+        box_faces(v3(-0.022f, -0.15f, -0.30f), v3(0.022f, -0.05f, -0.25f));
+        glColor3f(0.2f, 0.21f, 0.2f);                     /* viseur sur le flanc gauche */
+        box_faces(v3(-0.10f, 0.0f, -0.30f), v3(-0.058f, 0.05f, -0.18f));
         glDisable(GL_LIGHTING);
-        glColor3f(1.0f * ready, 0.5f * ready, 0.1f * ready);
-        box_faces(v3(-0.058f, 0.015f, -0.3f), v3(0.058f, 0.03f, -0.02f));
+        if (nr > 0) {                                     /* ogive de la roquette chargee, dans la bouche */
+            glColor3f(0.9f * ready + 0.1f, 0.42f * ready + 0.08f, 0.1f);
+            prism_z(tc, -0.585f, -0.53f, 0.0f, 0.04f, 8, 0, 0);
+        }
+        glColor3f(1.0f * ready, 0.5f * ready, 0.1f * ready);   /* bandes chaudes autour du tube */
+        prism_z(tc, -0.47f, -0.455f, 0.0605f, 0.0605f, 8, 0, 0);
+        prism_z(tc, -0.02f, -0.005f, 0.0605f, 0.0605f, 8, 0, 0);
+        glColor3f(1.0f, 0.35f + 0.5f * ready, 0.2f);      /* point du viseur */
+        box_faces(v3(-0.092f, 0.032f, -0.302f), v3(-0.072f, 0.044f, -0.298f));
+        for (int i = 0; i < ammoDef[WP_ROCKET].max; i++) {   /* temoins sur le dessus : une LED par roquette */
+            float z = -0.30f + i * 0.032f, on = i < nr ? 1.0f : 0.12f;
+            glColor3f(1.0f * on, 0.55f * on, 0.15f * on);
+            box_faces(v3(-0.012f, 0.058f, z), v3(0.012f, 0.066f, z + 0.02f));
+        }
     }
     if (P.meleeKind == MK_SHIELD) { glEnable(GL_LIGHTING); draw_shield_vm(); }   /* Egide : apres l'arme (transparence) */
 }
