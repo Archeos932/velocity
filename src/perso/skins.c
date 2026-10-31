@@ -29,7 +29,7 @@ static void skin_leg(float x, float hip, float ang, float w, float len) {
 }
 static float leg_angle(const SkinAnim *a, int side) {   /* course, saut, glissade */
     if (a->slide > 0.5f) return 70;
-    if (a->air > 0.5f) return side ? 30 : -20;
+    if (a->air > 0.5f) return side ? 30.0f : -20.0f;
     return sinf(a->run + (side ? PI : 0)) * 38 * a->spd;
 }
 /* bras : droit vers l'avant (tient l'arme, suit la visee), gauche qui balance */

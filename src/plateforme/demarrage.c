@@ -118,10 +118,6 @@ static void do_action(void) {
     }
 }
 
-#ifdef _WIN32
-int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show) {
-    (void)prev;
-#else
 /* --shot bench_dm.bmp : temps de rendu moyen (ms) par reglage graphique, ecrit dans bench_dm.bmp.txt */
 static void bench_render(const char *path) {
     char out[300];
@@ -147,6 +143,10 @@ static void bench_render(const char *path) {
     fclose(f);
 }
 
+#ifdef _WIN32
+int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show) {
+    (void)prev;
+#else
 static int velocity_main(const char *cmd) {
 #endif
     memcpy(binds, bindDefault, sizeof binds);

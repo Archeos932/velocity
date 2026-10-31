@@ -2656,7 +2656,7 @@ static void run_tests(const char *path) {
                 else if (fabsf(ox) > 0.45f && fabsf(ox) < 1.5f) nearMiss++;
             }
             fprintf(f, "visee bot niveau %d a 20 m : cadres %.0f%%, rates qui frolent (0,45 a 1,5 m) %.0f%% des rates (attendu ~%.0f%%, 100%%)\n",
-                    lv, hits / 20.0f, 100.0f * nearMiss / fmaxf(1, 2000 - hits), botHitP[lv] * 90);
+                    lv, hits / 20.0f, 100.0f * nearMiss / fmaxf(1, (float)(2000 - hits)), botHitP[lv] * 90);
         }
         botLevel = lv0;
     }

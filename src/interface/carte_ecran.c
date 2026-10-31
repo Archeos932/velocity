@@ -417,7 +417,7 @@ static void maps_speed_tick(void) {
 /* courbes des joueurs visibles : 60 dernieres secondes pendant la partie, toute la partie a la fin */
 static void maps_draw_speed(float x, float y, float w, float h) {
     char buf[32];
-    int n1 = mapsSpdN, n0 = matchOver ? 0 : (int)fmaxf(0, mapsSpdN - 60 / MAPS_SPD_DT);
+    int n1 = mapsSpdN, n0 = matchOver ? 0 : (int)fmaxf(0, (float)(mapsSpdN - 60 / MAPS_SPD_DT));
     float vmax = 30;
     for (int i = 0; i <= MAXP; i++)
         for (int k = n0; k < n1; k++) vmax = fmaxf(vmax, mapsSpd[i][k] / 4.0f);

@@ -571,7 +571,7 @@ static void draw_hud(void) {
         rect(hx - 3, hy - 3, 306, 26, 0.02f, 0.02f, 0.05f, 0.55f);
         rect(hx, hy, 300, 20, 0.1f, 0.1f, 0.15f, 0.7f);
         if (ghk > hpk) {
-            float fresh = clampf(1 - (float)(nowT - hpHitAt) / HP_GHOST_HOLD, 0, 1);   /* blanc juste apres le coup, puis rouge */
+            float fresh = clampf(1 - (float)((nowT - hpHitAt) / HP_GHOST_HOLD), 0, 1);   /* blanc juste apres le coup, puis rouge */
             rect(hx + 300 * hpk, hy, 300 * (ghk - hpk), 20, 1, 0.3f + 0.7f * fresh, 0.25f + 0.75f * fresh, 0.85f);
         }
         rect(hx, hy, 300 * hpk, 20, 1 - hpk * 0.7f, 0.25f + hpk * 0.6f, 0.35f, 0.95f);
@@ -705,7 +705,7 @@ static void draw_hud(void) {
                     break;
                 }
         }
-        float wpFl = P.dead ? 0 : clampf(1 - (float)(nowT - wpFlashAt) / WP_FLASH_T, 0, 1);   /* changement d'arme recent */
+        float wpFl = P.dead ? 0 : clampf(1 - (float)((nowT - wpFlashAt) / WP_FLASH_T), 0, 1);   /* changement d'arme recent */
         if (wpFl > 0) {                                       /* nom de l'arme sous le viseur : monte et s'efface */
             const AmmoDef *wd = &ammoDef[P.weapon];
             float a = fminf(1, wpFl * 2.5f), y = cy + 78 + 14 * wpFl * wpFl, nw = fontW[1] * (float)strlen(wd->name);
@@ -738,7 +738,7 @@ static void draw_hud(void) {
     }
 
     /* infos de partie */
-    hud_panel(16, 14, fontW[0] * (dmMode ? 40.0f : 26.0f) + 28, dmMode && teamSize > 0 ? 64 : 100);
+    hud_panel(16, 14, fontW[0] * (dmMode ? 40.0f : 26.0f) + 28, dmMode && teamSize > 0 ? 64.0f : 100.0f);
     if (dmMode) {
         int count = 0, rank = 1;
         for (int i = 0; i < MAXP; i++) {
