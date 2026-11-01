@@ -32,7 +32,8 @@ quel fichier se trouve chaque partie.
 `WinMain` fait, dans l'ordre :
 
 1. Copie `bindDefault` dans `binds`, puis lit la ligne de commande : `--test` (lance `run_tests` et
-   quitte, **sans fenêtre**), `--shot`, et les options du mode bot (`--bot`, `--name`, `--time`,
+   quitte, **sans fenêtre**), `--export-textures dossier` (écrit les textures générées en `.bmp` et quitte, sans
+   fenêtre ni OpenGL), `--shot`, et les options du mode bot (`--bot`, `--name`, `--time`,
    `--log`, `--botshot`). Le pseudo par défaut est le nom d'utilisateur Windows (`GetUserNameA`).
 2. Crée la fenêtre et le contexte OpenGL, active la synchro verticale (`wglSwapIntervalEXT`),
    s'abonne à la souris brute (`RegisterRawInputDevices`).
@@ -153,7 +154,7 @@ velocity/
 | `jeu/kill_zone.c` | chute sous `killY` | `void_check`, `bot_lands`, `bot_void_guard` |
 | `jeu/boucle.c` | un pas de simulation | `pickup_tick`, `spec_tick`, `fire_weapon`, `game_tick`, `fx_tick` |
 | `graphismes/rendu_ini.c` | `graphismes/rendu.ini` (voir §3.13) | `gx*`, `gfxKeys`, `gfx_load_all`, `gfx_quality_apply` |
-| `rendu/textures.c` | textures, primitives | `make_textures`, `tex_override`, `quadf`, `box_faces`, `box_edges` |
+| `rendu/textures.c` | textures, primitives | `make_textures`, `tex_override`, `tex_generate` (`tex_gen_*`), `save_bmp_rgb`, `export_textures`, `quadf`, `box_faces`, `box_edges` |
 | `perso/skins.c` | personnages (voir §3.14) | `SkinAnim`, `skin_robot`…, `draw_skin` |
 | `rendu/eclairage.c` | lightmaps, néons, décor | `bake_lightmaps`, `build_neon`, `build_world_list` |
 | `interface/texte.c` | police et 2D | `make_font`, `text`, `text_c`, `rect` |
@@ -554,7 +555,8 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
 Fichier `src/interface/mise_a_jour.c`, inclus juste avant `interface/config.c`.
 
 - **Source** : la branche `release` du dépôt public `Archeos932/velocity` (`UPD_REPO` dans `src/interface/mise_a_jour.c`), remplie par `.github/workflows/release.yml`
-  à chaque push sur `stable` : `velocity.exe`, `Velocity-macOS.zip` et **`version.txt`** (`build`, `sha`,
+  à chaque push sur `stable` : `velocity.exe`, `Velocity-Windows.zip` (`velocity.exe` + `graphismes/`, pour une
+  première installation ; le bouton ne télécharge que `velocity.exe`), `Velocity-macOS.zip` et **`version.txt`** (`build`, `sha`,
   `win_size`, `win_sha256`, `mac_size`, `mac_sha256`). Lu à `https://raw.githubusercontent.com/Archeos932/velocity/release/`
   (`UPD_HOST`, `UPD_DIR`).
 - **Numéro de build** : `VELOCITY_BUILD`, passé par `build.bat` / `build_mac.sh` si la variable d'environnement
@@ -709,8 +711,15 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
   dans **`gfxKeys`** (nom de clé → variable, nombre de valeurs). Ajouter un réglage = une variable + une ligne de
   `gfxKeys` + sa ligne commentée dans `rendu.ini`. `gfx_clamp` borne les valeurs ; `gfx_defaults` remet les défauts
   avant chaque relecture. Les tests (`--test`) n'ouvrent pas ce fichier (valeurs par défaut).
-- **Textures** : `sol.bmp`, `mur.bmp`, `grain.bmp` du même dossier (`tex_override`, `load_bmp_square`) remplacent
-  `texGrid`, `texWall`, `texGrime`.
+- **Textures** : `sol.bmp`, `mur.bmp`, `pierre.bmp`, `enduit.bmp`, `grain.bmp` du même dossier (`tex_override`,
+  `load_bmp_square`) remplacent `texGrid`, `texWall`, `texStone`, `texPlaster`, `texGrime`. Sans `.bmp`, la texture est
+  calculée sur le processeur par `tex_generate(TEXG_*)` (une image RGB, puis `upload_rgb_mip`) à partir de
+  `sol_texture`, `mur_texture`, `pierre`, `enduit`, `grain_force` : ces réglages n'ont donc **plus d'effet** quand le
+  `.bmp` existe. Le dépôt livre ces `.bmp` (exception `!graphismes/*.bmp` du `.gitignore`), produits par
+  **`velocity.exe --export-textures graphismes`** (`export_textures` : `tex_generate` puis `save_bmp_rgb`, BMP 24 bits de
+  bas en haut en BGR, ce que relit `load_bmp_square` : même image octet pour octet, mêmes mipmaps). L'export lit
+  `rendu.ini` comme le jeu (`gfx_load_all`). Aucune de ces textures ne dépend de la carte, de l'ambiance ni de la
+  qualité. Test : ligne « export des textures » de `run_tests`.
 - **Recherche du dossier** (`gfx_find_dir`) : macOS `~/Library/Application Support/Velocity/graphismes`, puis à côté
   de `Velocity.app`, puis `Velocity.app/Contents/Resources/graphismes` (copié par `build_mac.sh`) ; Windows : à côté de
   l'exe ; enfin `./graphismes`.
@@ -1322,6 +1331,17 @@ Options après le nom : `--map N` (carte, §3.18) et `--yaw A` (orientation). Su
 vignette) ou `solo` (avec 8 drones). Exemple : `velocity.exe --shot puits.bmp --map 1 --yaw 0.8`.
 
 Pas de son, `velocity.ini` n'est ni lu ni écrit.
+
+### `--export-textures dossier` (textures générées en `.bmp`)
+
+```bash
+./velocity.exe --export-textures graphismes
+```
+
+Sans fenêtre ni OpenGL : lit `graphismes/rendu.ini` (`gfx_load_all`), calcule chaque texture générée
+(`tex_generate`) et l'écrit dans le dossier (créé s'il manque) : `sol.bmp`, `mur.bmp`, `pierre.bmp`,
+`enduit.bmp` (256 px) et `grain.bmp` (64 px), BMP 24 bits non compressés. Code de sortie 0 si les cinq sont écrits.
+Le dossier peut contenir des espaces (tout le reste de la ligne). `velocity.ini` n'est ni lu ni écrit.
 
 ### Mode bot : `--bot host|join`
 

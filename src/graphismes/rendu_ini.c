@@ -5,7 +5,8 @@
  * Tout ce qui fait l'aspect du jeu (soleil, ombres, brouillard, ciel, ville, bloom, textures) est
  * ici, avec la valeur par defaut. Le fichier graphismes/rendu.ini les remplace (cle = valeurs) ;
  * F5 en jeu le relit et reconstruit textures et lightmaps. Une cle absente garde son defaut.
- * Les textures sol.bmp, mur.bmp, grain.bmp du meme dossier remplacent les textures generees. */
+ * Les textures sol.bmp, mur.bmp, pierre.bmp, enduit.bmp, grain.bmp du meme dossier remplacent les textures
+ * generees (et rendent alors sans effet sol_texture, mur_texture, pierre, enduit, grain_force). */
 static float sunCol[3] = { 1.00f, 0.84f, 0.66f }, skyCol[3] = { 0.52f, 0.54f, 0.74f },
              bounceCol[3] = { 0.16f, 0.13f, 0.12f }, padGlowCol[3] = { 0.25f, 0.85f, 1.0f };
 static float gxSunDir[3] = { 0.55f, 0.66f, -0.82f }, gxSunPow = 1.3f, gxPad[2] = { 0.9f, 9 };

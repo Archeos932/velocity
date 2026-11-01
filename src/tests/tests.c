@@ -203,6 +203,21 @@ static void run_tests(const char *path) {
         wheelLastEv = wheelLastOk = -1e9;
     }
 
+    {                                                     /* --export-textures : le .bmp relu = la texture generee, octet pour octet */
+        char tp[600];
+        int same = 0, sizes = 0;
+        snprintf(tp, sizeof tp, "%s.texture.bmp", path);
+        for (int k = 0; k < TEXG_N; k++) {
+            int n = 0, m = 0;
+            unsigned char *gen = tex_generate(k, &n), *back = NULL;
+            if (gen && save_bmp_rgb(tp, gen, n)) back = load_bmp_square(tp, &m);
+            if (back && m == n) { sizes++; same += !memcmp(gen, back, (size_t)n * n * 3); }
+            free(gen); free(back);
+            remove(tp);
+        }
+        fprintf(f, "export des textures : relues a la bonne taille=%d, identiques=%d (attendu %d, %d)\n", sizes, same, TEXG_N, TEXG_N);
+    }
+
     {                                                     /* changement d'arme : le nom s'affiche, pas si on garde la meme */
         reset_game();
         nowT = 50; weapon_select(P.loadout[1]);

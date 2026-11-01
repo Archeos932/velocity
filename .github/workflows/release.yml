@@ -1,4 +1,5 @@
-# Branche `release` : uniquement les binaires (velocity.exe, Velocity-macOS.zip), construits depuis `stable`,
+# Branche `release` : uniquement les binaires (velocity.exe, Velocity-Windows.zip = velocity.exe + graphismes/,
+# Velocity-macOS.zip), construits depuis `stable`,
 # et version.txt (numero de build, taille et SHA-256 de chaque binaire) lu par le bouton MISE A JOUR du jeu.
 # Le numero de build est github.run_number : compile dans le jeu (VELOCITY_BUILD) et ecrit dans version.txt.
 # Se lance a chaque push sur stable, ou a la main (onglet Actions > Release > Run workflow).
@@ -42,10 +43,13 @@ jobs:
           if (-not $p.HasExited) { $p.Kill(); throw "--test : delai depasse" }
           if ($p.ExitCode -ne 0) { throw "--test : code $($p.ExitCode)" }
 
+      # velocity.exe seul (bouton MISE A JOUR) + graphismes/ (zippe dans Velocity-Windows.zip par publish)
       - uses: actions/upload-artifact@v4
         with:
           name: Velocity-Windows
-          path: velocity.exe
+          path: |
+            velocity.exe
+            graphismes/
 
   macos:
     runs-on: macos-latest
@@ -93,6 +97,8 @@ jobs:
           else git checkout -q --orphan release; fi
           git rm -rqf --ignore-unmatch .
           cp ../bin/Velocity-Windows/velocity.exe .
+          # installation complete : velocity.exe + graphismes/ (rendu.ini, textures .bmp) ; le bouton ne prend que velocity.exe
+          REL="$PWD"; (cd ../bin/Velocity-Windows && zip -qrX "$REL/Velocity-Windows.zip" velocity.exe graphismes)
           if [ -f ../bin/Velocity-macOS/Velocity-macOS.zip ]; then cp ../bin/Velocity-macOS/Velocity-macOS.zip .; fi
           {                                       # lu par le bouton MISE A JOUR du jeu
             echo "build=$BUILD"
@@ -109,7 +115,8 @@ jobs:
             echo
             echo "Construits automatiquement depuis \`stable\` ($SHA), build $BUILD. Ne pas modifier cette branche a la main."
             echo
-            echo "- Windows : \`velocity.exe\`"
+            echo "- Windows : \`Velocity-Windows.zip\` (\`velocity.exe\` + dossier \`graphismes\`, a extraire ensemble)"
+            echo "  ou \`velocity.exe\` seul (textures generees, reglages graphiques par defaut)"
             if [ -f Velocity-macOS.zip ]; then
               echo "- macOS : \`Velocity-macOS.zip\` (au premier lancement : clic droit > Ouvrir)"
             fi
