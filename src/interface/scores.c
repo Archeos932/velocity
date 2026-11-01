@@ -47,11 +47,12 @@ static void draw_scoreboard(float cx, float cy) {
         for (int b = a; b > 0 && NP[order[b]].kills > NP[order[b - 1]].kills; b--) {
             int t = order[b]; order[b] = order[b - 1]; order[b - 1] = t;
         }
-    float w = 600, x = cx - w * 0.5f, y = cy - 170;
+    float w = ranked ? 820.0f : 600.0f, x = cx - w * 0.5f, y = cy - 170;
     rect(x - 24, y - 56, w + 48, 90 + n * 38.0f, 0.03f, 0.04f, 0.08f, 0.88f);
     text(1, x, y - 14, "JOUEUR", 0.6f, 0.7f, 0.85f, 1);
     text(1, x + 360, y - 14, "FRAGS", 0.6f, 0.7f, 0.85f, 1);
     text(1, x + 480, y - 14, "MORTS", 0.6f, 0.7f, 0.85f, 1);
+    if (ranked) text(1, x + 610, y - 14, "CLASSE", 1, 0.8f, 0.3f, 1);
     for (int k = 0; k < n; k++) {
         int i = order[k];
         float yy = y + 30 + k * 38.0f;
@@ -61,6 +62,33 @@ static void draw_scoreboard(float cx, float cy) {
         text(1, x + 360, yy, buf, 1, 1, 1, 1);
         snprintf(buf, sizeof buf, "%d", NP[i].deaths);
         text(1, x + 480, yy, buf, 0.8f, 0.8f, 0.85f, 1);
+        if (ranked) {                                     /* palier et cote annonces (moi : mon cache) */
+            int m = i == myId ? myMmr : rkMmr[i] ? rkMmr[i] : RANK_START, pl = i == myId ? rankPlayed : rkPlay[i];
+            const float *c = rank_col(m);
+            char tl[32];
+            rank_label(m, pl, tl, sizeof tl);
+            snprintf(buf, sizeof buf, "%s  %d", tl, m);
+            text(0, x + 610, yy - 4, buf, c[0], c[1], c[2], 1);
+        }
+    }
+}
+
+/* fin d'un match classe, sous le tableau des scores : "+18 MMR  ->  OR II" une fois le serveur d'accord */
+static void draw_rank_result(float cx, float cy) {
+    char buf[128], tl[32];
+    int n = 0;
+    for (int i = 0; i < MAXP; i++) n += NP[i].active;
+    float y = cy - 136 + n * 38.0f + 46;
+    rect(cx - 330, y - 30, 660, 46, 0.03f, 0.04f, 0.08f, 0.8f);
+    if (rkHadOpp || rkRepState == RS_PENDING) {
+        snprintf(buf, sizeof buf, "envoi du resultat au serveur de classement ...   (estimation %+d)", rkHadOpp ? 0 : rkEstimate);
+        text_c(0, cx, y, buf, 0.8f, 0.8f, 0.9f, 1);
+    } else if (rkRepState == RS_DONE) {
+        rank_label(rkLastMmr, rkLastPlayed, tl, sizeof tl);
+        snprintf(buf, sizeof buf, "%+d MMR  ->  %s   (%d)", rkLastDelta, tl, rkLastMmr);
+        text_c(1, cx, y + 8, buf, rkLastDelta >= 0 ? 0.4f : 1.0f, rkLastDelta >= 0 ? 1.0f : 0.4f, rkLastDelta >= 0 ? 0.5f : 0.35f, 1);
+    } else if (rkRepState == RS_FAILED) {
+        text_c(0, cx, y, "resultat non confirme par le serveur : cote inchangee", 1, 0.6f, 0.3f, 1);
     }
 }
 
@@ -112,6 +140,11 @@ static void draw_name_tags(void) {
             glVertex2f(sx - 7, sy - 26); glVertex2f(sx + 7, sy - 26); glVertex2f(sx, sy - 17);
             glEnd();
             text_c(0, sx, sy, NP[i].name, c[0], c[1], c[2], a);
+        } else if (ranked) {                              /* mode classe : palier a cote du nom */
+            char tag[64], tl[32];
+            rank_label(rkMmr[i] ? rkMmr[i] : RANK_START, rkPlay[i], tl, sizeof tl);
+            snprintf(tag, sizeof tag, "%s  [%s]", NP[i].name, tl);
+            text_c(0, sx, sy, tag, c[0], c[1], c[2], 0.95f);
         } else text_c(0, sx, sy, NP[i].name, c[0], c[1], c[2], 0.95f);
     }
 }

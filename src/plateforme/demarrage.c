@@ -36,7 +36,7 @@ static void do_action(void) {
     int a = pendingAction;
     pendingAction = ACT_NONE;
     if (!myName[0]) snprintf(myName, sizeof myName, "joueur");
-    if (a == ACT_SOLO || a == ACT_HOST || a == ACT_BROWSE || a == ACT_QUICK || a == ACT_VSBOT) cfg_save();
+    if (a == ACT_SOLO || a == ACT_HOST || a == ACT_BROWSE || a == ACT_QUICK || a == ACT_VSBOT || a == ACT_RANKED) cfg_save();
     if (a != ACT_NONE && a != ACT_RESUME && a != ACT_RESTART && a != ACT_FULLSCREEN) raceOn = 0;   /* toute autre action quitte la course */
     switch (a) {
     case ACT_RACE:                                        /* course au grappin (LA TOILE) */
@@ -50,12 +50,13 @@ static void do_action(void) {
         break;
     case ACT_HOST:
         if (net_host_start()) { appState = APP_GAME; if (!botMode) set_capture(1); }
-        hostQuick = 0;
+        hostQuick = 0; hostRanked = 0;
         break;
     case ACT_BROWSE:
         if (net_browse_start()) { appState = APP_JOIN; netStatus[0] = 0; }
         break;
     case ACT_VSBOT: {                                     /* heberge en local, puis lance les bots (autres processus) qui nous rejoignent */
+        hostRanked = 0;                                   /* une partie contre des bots n'est jamais classee */
         if (!net_host_start()) break;
         if (mode_team(rules.mode)) { appState = APP_GAME; set_capture(1); netlog("pas de bots en %s", modeNames[rules.mode]); break; }   /* modes a objectif : sans bots */
         int lv = pendingArg < 0 ? 0 : pendingArg > 2 ? 2 : pendingArg;
@@ -85,7 +86,7 @@ static void do_action(void) {
             }
 #endif
         }
-        if (ok) { vsBot = 1; botLevel = lv; appState = APP_GAME; set_capture(1); }
+        if (ok) { vsBot = ok; botLevel = lv; appState = APP_GAME; set_capture(1); }   /* vsBot : nombre de bots (aimant de visee) */
         else { set_status("impossible de lancer le bot"); net_shutdown(); }
         break;
     }
@@ -97,6 +98,9 @@ static void do_action(void) {
         break;
     case ACT_QUICK:
         quick_play();
+        break;
+    case ACT_RANKED:
+        ranked_play();
         break;
     case ACT_JOIN_IP: {
         struct sockaddr_in addr;
@@ -199,6 +203,8 @@ static int velocity_main(const char *cmd) {
             else if (!strcmp(t, "--lanep")) lanEp = 1;
             else if (!strcmp(t, "--nolan")) lanOff = 1;
             else if (!strcmp(t, "--spec")) botSpec = 1;
+            else if (!strcmp(t, "--ranked")) botRanked = 1;   /* mode classe : partie classee (identite temporaire) */
+            else if (!strcmp(t, "--frags") && (t = strtok(NULL, " "))) rkFragsTest = atoi(t);
             else if (!strcmp(t, "--local")) botLocal = 1;
             else if (!strcmp(t, "--hidden")) botHidden = 1;
             else if (!strcmp(t, "--teams") && (t = strtok(NULL, " "))) wantTeams = atoi(t) < 0 ? 0 : atoi(t) > TEAM_MAX ? TEAM_MAX : atoi(t);
@@ -304,6 +310,8 @@ static int velocity_main(const char *cmd) {
         if (!botMode && !shotMode && cfg_load()) toggle_fullscreen();
         if (!botMode && !shotMode && (gfxAmbiance || gfxQuality != 2)) { gfx_reload(); popT = 0; }   /* ambiance / qualite du joueur */
     }
+    if (rk_identity() && !botMode && !shotMode) cfg_save();   /* mode classe : identite creee au premier lancement */
+    if (!shotMode && (!botMode || botRanked)) { rq_hello(); rq_top(); }   /* cote et TOP 3 en arriere-plan */
     if (!botMode && !shotMode) {                          /* mise a jour : restes de la precedente, puis verification discrete */
         upd_cleanup();
         if (updAfter) {
@@ -335,6 +343,29 @@ static int velocity_main(const char *cmd) {
         if (strstr(shotPath, "loadout")) { loadoutOpen = 1; if (strstr(shotPath, "charge")) wantSkill = SK_CHARGE; }
         if (strstr(shotPath, "heberger")) { hostOpen = 1; wantTeams = 2; hostBots = 1; }
         if (strstr(shotPath, "skinmenu")) { skinOpen = 1; wantSkin = SKN_POUSSIN; skinPrevTeam = 1; nowT = 0.4; }
+        if (strstr(shotPath, "menu")) {                   /* mode classe : donnees factices pour l'encadre TOP 3 */
+            static const RkTop fake[3] = { { "Vortex", 1612, 41, "MAITRE" }, { "Kestrel", 1418, 33, "PLATINE I" },
+                                           { "Nyx", 1377, 25, "DIAMANT III" } };
+            memcpy(rkTop, fake, sizeof fake); rkTopN = 3; rkTopState = 1;
+            myMmr = 1093; rankPlayed = 14; rankWins = 6; rkMeRank = 12;
+        }
+        render(1, TICK);
+        save_bmp(shotPath);
+        return 0;
+    }
+    if (shotMode && strstr(shotPath, "ranked")) {         /* mode classe : fin de match classe, tableau des scores */
+        appState = APP_GAME; dmMode = 1; myId = 0; ranked = 1; connected = 1;
+        memset(NP, 0, sizeof NP);
+        static const char *nm[3] = { "Moi", "Rival", "Ninja" };
+        static const int kl[3] = { 15, 11, 4 }, mm[3] = { 1093, 1188, 962 }, pp[3] = { 14, 30, 6 };
+        for (int i = 0; i < 3; i++) {
+            snprintf(NP[i].name, 16, "%s", nm[i]); NP[i].active = NP[i].alive = 1; NP[i].hp = 100;
+            NP[i].kills = kl[i]; NP[i].deaths = 3 + i * 2; rkMmr[i] = mm[i]; rkPlay[i] = pp[i];
+        }
+        P.pos = P.prevPos = v3(0, 0, 24); P.yaw = -0.1f; P.pitch = 0.08f; P.hp = 100;
+        myMmr = 1093; rankPlayed = 14;
+        rkRepState = RS_DONE; rkLastDelta = 18; rkLastMmr = 1093; rkLastPlayed = 14;
+        matchOver = 1; matchWinner = 0; matchEndT = 6; matchT = 340;
         render(1, TICK);
         save_bmp(shotPath);
         return 0;
@@ -667,6 +698,7 @@ static int velocity_main(const char *cmd) {
     }
     if (botMode == 1) pendingAction = ACT_HOST;
     if (botMode == 2) pendingAction = ACT_BROWSE;
+    if (botMode && botRanked) pendingAction = ACT_RANKED;   /* recherche classee ; sans partie, l'hote en cree une */
 
     LARGE_INTEGER freq, start, last, now;
     QueryPerformanceFrequency(&freq);
@@ -742,8 +774,9 @@ static int velocity_main(const char *cmd) {
         }
         tesla_audio();                                    /* Tesla : boucles sonores des arcs */
         music_follow_game();
+        rk_net_poll();                                    /* mode classe : requetes au serveur de classement */
         audio_update();
-        if (lbWantHost) { lbWantHost = 0; if (appState == APP_JOIN) { pendingAction = ACT_HOST; hostQuick = 1; } }
+        if (lbWantHost) { lbWantHost = 0; if (appState == APP_JOIN) { pendingAction = ACT_HOST; hostQuick = 1; hostRanked = rankedWant; } }
         if (pendingAction) do_action();
     }
 done:
@@ -844,6 +877,7 @@ done:
                    shieldBlocks, shieldBreaks, shieldPerfects, shieldDenied, shieldConverted, shieldRips, hitCount[W_SHIELD]);
     }
     net_shutdown();
+    if (botMode && botRanked) rk_bot_final();
     if (botLog) fclose(botLog);
     set_capture(0);
 #ifdef _WIN32

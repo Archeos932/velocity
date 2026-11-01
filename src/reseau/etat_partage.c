@@ -184,7 +184,7 @@ static int ric_take(void) {                               /* RICOCHET arme : reb
 static int botMode;                                       /* 1 = bot hote, 2 = bot client (tests reseau) */
 static int botLevel = 1;                                  /* difficulte du bot : 0 facile, 1 normal, 2 difficile */
 static int botLocal, botHidden;                           /* --local : le bot rejoint 127.0.0.1 ; --hidden : fenetre reduite et muette */
-static int vsBot;                                         /* partie joueur contre bot : jamais annoncee en ligne */
+static int vsBot;                                         /* partie joueur contre bots : nombre de bots lances (0 = non) ; jamais annoncee en ligne */
 #ifdef _WIN32
 static HANDLE botProc[MAXP];                              /* processus des bots (partie contre des bots, un par place) */
 #else

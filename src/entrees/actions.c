@@ -35,7 +35,7 @@ static unsigned char botHeld[A_COUNT], botPress[A_COUNT];  /* ce que les bots "a
 
 /* reglages */
 static float fovBase = BASE_HFOV;
-static int secondScreen = 1;                              /* carte de la partie sur un deuxieme ecran s'il y en a un */
+static int secondScreen;                                  /* carte de la partie sur un deuxieme ecran s'il y en a un (opt-in) */
 static int mapView3d;                                     /* carte du 2e ecran : 0 vue de dessus, 1 en 3D inclinee */
 static int invertY, showFps = 1;
 static int impactFrames = 1, screenFx = 1;               /* options : impact frames (flashs) et effets d'ecran */

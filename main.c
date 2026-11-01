@@ -65,9 +65,11 @@
 #include "src/solo/ennemis_vagues.c"             /* mode solo : ennemis et vagues */
 
 #include "src/jeu/economie.c"                   /* boutique : pieces, arme de depart, achats a la mort */
+#include "src/reseau/classe.c"                   /* mode classe : etat, cote Elo, paliers, identite de classement */
 #include "src/reseau/protocole.c"                /* paquets, evenements EV_*, apply_event */
 #include "src/reseau/hote.c"                     /* hote : arbitrage (PV, kills, respawns, parry) */
 #include "src/reseau/modes.c"                    /* modes : chrono, 3 zones, drapeau, bouclier ; salles de depart ; SOUTIEN */
+#include "src/reseau/classe_match.c"             /* mode classe : suivi du match, rapport de fin, PK_JOIN */
 #include "src/reseau/client.c"                   /* client : connexion, instantanes, envoi */
 #include "src/reseau/en_ligne.c"                 /* parties en ligne : STUN, lobby WebSocket */
 
@@ -97,7 +99,9 @@
 #include "src/rendu/viewmodel.c"                 /* arme en main (viewmodel) */
 
 #include "src/interface/mise_a_jour.c"           /* mise a jour depuis GitHub : verifier, telecharger, installer */
+#include "src/plateforme/http.c"                 /* requete HTTP(S) simple : WinHTTP / curl (mode classe) */
 #include "src/interface/config.c"                /* velocity.ini : reglages et touches du joueur */
+#include "src/reseau/classe_serveur.c"           /* mode classe : requetes au serveur de classement (hello, top, rapport) */
 #include "src/interface/menus.c"                 /* boutons, menus, parametres, loadout, ecran SKIN */
 #include "src/interface/scores.c"                /* tableau des scores, killfeed, pseudos */
 

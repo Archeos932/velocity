@@ -5,6 +5,7 @@
 static float botTime = 20, botT, botNextHook, botNextDash, botSpeedSum, botAliveT, botMaxSpeed;
 static char botShot[260];
 static int botSpec;                                       /* --spec : le bot client regarde la partie au lieu d'y jouer */
+static int botRanked, botMmr0 = -1;                       /* --ranked : partie classee ; cote au debut (journal) */
 static float bot_melee_reach(float rel) {
     return P.meleeKind == MK_ANVIL ? anvil_range(rel) : P.meleeKind == MK_LANCE ? LANCE_THRUST_RANGE :
            P.meleeKind == MK_FLAIL ? flail_range(rel) : P.meleeKind == MK_FIST ? fist_range(rel) :
@@ -17,11 +18,20 @@ static int swing_start(int i) {
     return m >= 150;
 }
 
-/* Aimant de visee : quand le viseur passe pres d'une cible valide (ennemi solo ou joueur en LAN), tire
+/* Aimant de visee : quand le viseur passe pres d'une cible valide (ennemi solo ou bot local), tire
  * tres doucement le viseur vers son centre. Rayon et vitesse volontairement faibles (voir les #define
- * AIMASSIST_*) : ca doit aider sans que le joueur le remarque consciemment. */
+ * AIMASSIST_*) : ca doit aider sans que le joueur le remarque consciemment.
+ * Jamais contre un autre humain : seulement hors reseau (solo, course) ou quand j'heberge une partie contre mes
+ * bots locaux et que personne d'autre ne l'a rejointe (vsBot = nombre de bots lances). */
+static int aim_assist_on(void) {
+    if (netMode == NET_OFF) return 1;
+    if (netMode != NET_HOST || !vsBot) return 0;
+    int others = 0;
+    for (int i = 0; i < MAXP; i++) others += i != myId && NP[i].active;
+    return others <= vsBot;
+}
 static void aim_assist(float dt) {
-    if (P.dead) return;
+    if (P.dead || !aim_assist_on()) return;
     V3 eye = eye_pos();
     int haveTarget = 0;
     float bestAng = AIMASSIST_CONE;

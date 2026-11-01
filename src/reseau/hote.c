@@ -444,6 +444,7 @@ static void host_start_match(void) {
     for (int i = 0; i < MAXP; i++) NP[i].kills = NP[i].deaths = 0;
     NetEvent e = ev_new(EV_MATCH);
     e.target = (unsigned char)(mapRotate ? (curMap + 1) % NMAPS : curMap);   /* ROTATION : carte suivante a chaque match */
+    if (ranked) e.target = (unsigned char)rk_map_pick(e.target);   /* classe : jamais une carte de course */
     net_emit(&e);
     apply_event(&e);
     for (int i = 0; i < MAXP; i++) if (NP[i].active) host_respawn(i);
@@ -462,6 +463,11 @@ static void host_send_roster(void) {
     PkRoster r;
     head(&r.h, PK_ROSTER);
     for (int i = 0; i < MAXP; i++) memcpy(r.names[i], NP[i].name, 16);
+    for (int i = 0; i < MAXP; i++) {                      /* mode classe */
+        r.mmr[i] = (unsigned short)rkMmr[i]; r.rplay[i] = (unsigned char)(rkPlay[i] > 255 ? 255 : rkPlay[i]);
+        memcpy(r.rid[i], rkRid[i], 16); memcpy(r.left[i], rkLeft[i], 16);
+    }
+    r.ranked = (unsigned char)ranked; r.nleft = (unsigned char)rkLeftN; memcpy(r.mid, rkMid, 8);
     host_send_all(&r, sizeof r);
 }
 
@@ -497,7 +503,8 @@ static void host_on_join(const PkJoin *pj, const struct sockaddr_in *from) {
         for (int i = 0; i < MAXSPEC; i++) if (SP[i].active && same_addr(&SP[i].addr, from)) k = i;
         for (int i = 0; i < MAXSPEC && k < 0; i++) if (!SP[i].active) k = i;
         PkWelcome w;
-        head(&w.h, PK_WELCOME); w.id = MAXP; w.refused = k < 0; w.pad[0] = (unsigned char)curMap; w.pad[1] = 0;
+        head(&w.h, PK_WELCOME); w.id = MAXP; w.refused = k < 0; w.pad[0] = (unsigned char)curMap;
+        w.pad[1] = (unsigned char)ranked;                 /* mode classe : le spectateur affiche les paliers */
         net_send(&w, sizeof w, from);
         if (k >= 0) {
             if (!SP[k].active) netlog("spectateur %d arrive", k);
@@ -506,7 +513,14 @@ static void host_on_join(const PkJoin *pj, const struct sockaddr_in *from) {
         }
         return;
     }
+    if (ranked && !rid_set(pj->rid)) {                    /* mode classe : il faut une identite de classement */
+        PkWelcome w;
+        head(&w.h, PK_WELCOME); w.id = 0; w.refused = 2; w.pad[0] = w.pad[1] = 0;
+        net_send(&w, sizeof w, from);
+        return;
+    }
     for (int i = 1; i < MAXP; i++) if (NP[i].active && same_addr(&NP[i].addr, from)) id = i;
+    int fresh = id < 0;
     if (id < 0) {
         int count = 0;
         for (int i = 0; i < MAXP; i++) count += NP[i].active;
@@ -531,10 +545,18 @@ static void host_on_join(const PkJoin *pj, const struct sockaddr_in *from) {
         net_emit(&e);
         apply_event(&e);
     }
+    rkMmr[id] = pj->mmr ? rank_clamp(pj->mmr) : RANK_START; rkPlay[id] = pj->rplay;   /* mode classe : cache annonce */
+    memcpy(rkRid[id], pj->rid, 16);
     PkWelcome w;
-    head(&w.h, PK_WELCOME); w.id = (unsigned char)id; w.refused = 0; w.pad[0] = (unsigned char)curMap; w.pad[1] = 0;
+    head(&w.h, PK_WELCOME); w.id = (unsigned char)id; w.refused = 0; w.pad[0] = (unsigned char)curMap;
+    w.pad[1] = (unsigned char)ranked;                     /* mode classe : la partie est classee */
     net_send(&w, sizeof w, from);
     host_send_roster();
+    if (ranked && fresh && !matchOver && !rkHadOpp) {     /* classe : le match commence quand arrive le premier adversaire */
+        int n = 0;
+        for (int i = 0; i < MAXP; i++) n += NP[i].active;
+        if (n == 2) { rk_new_match(); host_start_match(); netlog("classe : premier adversaire, le match recommence"); }
+    }
 }
 
 /* evenement recu d'un client : l'hote l'arbitre, l'applique chez lui et le relaie a tout le monde,
@@ -559,6 +581,7 @@ static void host_recv(PkHead *h, int n, struct sockaddr_in *from) {
         head(&a.h, PK_ANNOUNCE);
         memcpy(a.name, myName, 16);
         a.players = (unsigned char)count; a.maxp = (unsigned char)host_max_players(); a.teams = (unsigned char)teamSize; a.map = (unsigned char)curMap;
+        a.ranked = (unsigned char)ranked; a.pad[0] = a.pad[1] = a.pad[2] = 0;   /* mode classe : [CLASSEE] dans la liste */
         net_send(&a, sizeof a, from);
         break;
     }

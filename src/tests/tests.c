@@ -3428,6 +3428,131 @@ static void run_tests(const char *path) {
         botLog = savedLog;
     }
 
+    {   /* mode classe : Elo (meme formule que worker/src/ratings.js), paliers, placement, identite, velocity.ini, JSON */
+        FILE *savedLog = botLog;
+        botLog = NULL;                                    /* pas de journal au milieu des resultats */
+        int o1000[2] = { 1000, 1000 }, o1200 = 1200;
+        float s1 = 1, s0[2] = { 0, 0 };
+        fprintf(f, "classe Elo : 1000 bat 1000 %+d, placement %+d, perd contre 1200 %+d (attendu %+d %+d -8)\n",
+                rank_delta(1000, 20, 1, o1000, &s1), rank_delta(1000, 0, 1, o1000, &s1), rank_delta(1000, 20, 1, &o1200, s0),
+                (int)RANK_K / 2, (int)RANK_K_PLACE / 2);
+        fprintf(f, "classe abandon : defaite contre 2 joueurs a 1000 %+d, en placement %+d (attendu %+d %+d)\n",
+                rank_delta(1000, 20, 2, o1000, s0), rank_delta(1000, 3, 2, o1000, s0), -(int)RANK_K / 2, -(int)RANK_K_PLACE / 2);
+        char t[6][32], pl[32];
+        int ms[6] = { 899, RANK_ARGENT, 1000, RANK_OR, 1349, RANK_MAITRE };
+        for (int k = 0; k < 6; k++) rank_name(ms[k], t[k], sizeof t[k]);
+        fprintf(f, "classe paliers : %s | %s | %s | %s | %s | %s (attendu BRONZE I | ARGENT III | ARGENT I | OR III | PLATINE I | MAITRE)\n",
+                t[0], t[1], t[2], t[3], t[4], t[5]);
+        rank_label(1000, 3, pl, sizeof pl);
+        fprintf(f, "classe placement : %s, K %.0f au 10e match puis %.0f (attendu PLACEMENT 3/10, 64 puis 32)\n", pl,
+                rank_k(RANK_PLACEMENT - 1), rank_k(RANK_PLACEMENT));
+
+        char sid[33], skey[33];                           /* identite : 2 x 128 bits, hexadecimal minuscule */
+        int sm = myMmr, sp = rankPlayed, sw = rankWins, savedBot = botMode;
+        memcpy(sid, rkId, 33); memcpy(skey, rkKey, 33);
+        rkId[0] = rkKey[0] = 0;
+        int made = rk_identity(), again = rk_identity();
+        char id1[33];
+        memcpy(id1, rkId, 33);
+        fprintf(f, "classe identite : creee=%d, recreee au 2e appel=%d, format=%d, cle differente=%d (attendu 1 0 1 1)\n", made, again,
+                hex_ok(rkId, 32) && hex_ok(rkKey, 32), strcmp(rkId, rkKey) != 0);
+        botMode = 0;                                      /* velocity.ini de test (jamais le vrai) */
+        snprintf(cfgPath, sizeof cfgPath, "cfg_rank_test.ini");
+        myMmr = 1234; rankPlayed = 12; rankWins = 5;
+        cfg_save();
+        myMmr = RANK_START; rankPlayed = rankWins = 0; rkId[0] = rkKey[0] = 0;
+        cfg_load();
+        fprintf(f, "classe velocity.ini : cote %d, matchs %d, victoires %d, identite relue %d (attendu 1234 12 5 1)\n", myMmr,
+                rankPlayed, rankWins, !strcmp(rkId, id1) && hex_ok(rkKey, 32));
+        remove(cfgPath);
+        cfgPath[0] = 0;
+        botMode = savedBot;
+
+        rk_parse_top("{\"ok\":true,\"top\":[{\"name\":\"Alice\",\"mmr\":1420,\"tier\":\"PLATINE III\",\"played\":31},"
+                     "{\"name\":\"Bob\",\"mmr\":1301,\"tier\":\"PLATINE III\",\"played\":12}],"
+                     "\"me\":{\"rank\":7,\"mmr\":1093,\"played\":14,\"wins\":6,\"tier\":\"OR II\"}}");
+        fprintf(f, "classe top : %d joueurs, 1er %s %d, 2e %s, mon rang %d, ma cote %d (attendu 2, Alice 1420, Bob, 7, 1093)\n",
+                rkTopN, rkTop[0].name, rkTop[0].mmr, rkTop[1].name, rkMeRank, myMmr);
+
+        /* rapport de fin : 3 joueurs, le 3e est parti (liste de l'hote) ; le parti revenu ne figure qu'une fois */
+        MatchRules savedRules = rules;
+        int savedTeams = teamSize;
+        memset(NP, 0, sizeof NP);
+        ranked = 1; teamSize = 0; rules = (MatchRules){ MODE_FRAGS, 1, AMMO_NORMAL, 0, 0, 10 };
+        myId = 1; myMmr = 1000; rankPlayed = 20;
+        for (int i = 0; i < 2; i++) { NP[i].active = 1; rkRid[i][0] = (unsigned char)(0x10 + i); rkMmr[i] = 1000; }
+        NP[0].kills = 15; NP[1].kills = 9; matchWinner = 0;
+        hex_of(rkRid[1], 16, rkId);
+        rkLeftN = 2; memset(rkLeft, 0, sizeof rkLeft); rkLeft[0][0] = 0x33; rkLeft[1][0] = 0x10;   /* 0x10 = l'hote, present */
+        rkQN = 0;
+        rk_send_report(0);
+        const char *rb = rkQN ? rkQ[0].body : "";
+        fprintf(f, "classe rapport : envoye=%d, gagnant=hote %d, presents=%d, partis=%d, estimation %+d (attendu 1 1 1 1 +0)\n",
+                rkQN == 1, strstr(rb, "\"winner\":\"10") != NULL, strstr(rb, "\"kills\":15") && strstr(rb, "\"kills\":9"),
+                strstr(rb, "\"left\":[\"33") != NULL && !strstr(rb, "\"left\":[\"33000000000000000000000000000000\",\""), rkEstimate);
+        rk_send_report(1);                                /* l'hote part en plein match : il rejoint les partis, pas de gagnant */
+        rb = rkQN > 1 ? rkQ[1].body : "";
+        fprintf(f, "classe hote parti : sans gagnant=%d, hote une fois dans les partis=%d (attendu 1 1)\n", strstr(rb, "\"winner\":\"\"") != NULL,
+                strstr(rb, "\"left\":[\"33000000000000000000000000000000\",\"10000000000000000000000000000000\"]") != NULL);
+        /* aucun rapport hors chacun pour soi FRAGS (equipes, autre mode) ni hors partie classee */
+        rkQN = 0;
+        teamSize = 2; rk_send_report(0);
+        int qTeams = rkQN;
+        teamSize = 0; rules.mode = MODE_CHRONO; rk_send_report(0);
+        int qMode = rkQN;
+        rules.mode = MODE_FRAGS; ranked = 0; rk_send_report(0);
+        int qOff = rkQN;
+        fprintf(f, "classe sans rapport : equipes %d, mode CHRONO %d, partie non classee %d (attendu 0 0 0)\n", qTeams, qMode, qOff);
+
+        /* une partie hebergee classee impose ses regles, quoi qu'on ait choisi dans HEBERGER */
+        int sWant = wantTeams, sMenu = menuMap, sQuick = hostQuick, sFfa = hostFfa, sFrag = fragLimit, sTest = rkFragsTest;
+        MatchRules sWantR = wantRules;
+        int rm = race_map();
+        wantTeams = 2; wantRules = (MatchRules){ MODE_CHRONO, 0, AMMO_INFINI, 1, 1, 5 }; menuMap = rm;
+        hostQuick = 1; hostFfa = 0; rkFragsTest = 0; ranked = 1;
+        int hm = host_setup_rules();
+        fprintf(f, "classe regles : equipes %d, mode %s, grappin %d, munitions %s, boutique %d, specs %d, %d min, %d frags, "
+                   "carte de course evitee %d (attendu 0, FRAGS, 1, NORMALES, 0, 0, 10 min, %d frags, 1)\n",
+                teamSize, modeNames[rules.mode], rules.hook, ammoRuleNames[rules.ammo], rules.shop, rules.specs, rules.minutes,
+                fragLimit, hm != rm && rk_map_ok(hm), FRAG_LIMIT);
+        ranked = 0; hostQuick = 0; menuMap = 0;
+        host_setup_rules();                               /* sans classe : les choix de HEBERGER restent */
+        fprintf(f, "classe regles (non classee) : equipes %d, mode %s, boutique %d (attendu 2, CHRONO, 1) ; rotation classee "
+                   "apres la carte avant la course -> %s (attendu une carte sans portes)\n",
+                teamSize, modeNames[rules.mode], rules.shop, rk_map_ok(rk_map_pick(rm)) ? "sans portes" : maps[rk_map_pick(rm)].name);
+        wantTeams = sWant; wantRules = sWantR; menuMap = sMenu; hostQuick = sQuick; hostFfa = sFfa; fragLimit = sFrag;
+        rkFragsTest = sTest;
+
+        rkQN = 0; rkRepState = RS_NONE; rkTopN = 0; rkMeRank = 0; rkLeftN = 0; myId = 0; ranked = 0;
+        rules = savedRules; teamSize = savedTeams;
+        memset(NP, 0, sizeof NP); memset(rkRid, 0, sizeof rkRid); memset(rkMmr, 0, sizeof rkMmr); memset(rkLeft, 0, sizeof rkLeft);
+        memcpy(rkId, sid, 33); memcpy(rkKey, skey, 33);
+        myMmr = sm; rankPlayed = sp; rankWins = sw;
+        botLog = savedLog;
+    }
+    {   /* fusion : aimant de visee seulement hors reseau ou contre mes bots locaux ; 2e ecran opt-in ; protocole */
+        int sNet = netMode, sVs = vsBot, sId = myId;
+        memset(NP, 0, sizeof NP);
+        netMode = NET_OFF;
+        int aSolo = aim_assist_on();
+        netMode = NET_HOST; myId = 0; vsBot = 1; NP[0].active = NP[1].active = 1;
+        int aBot = aim_assist_on();
+        NP[2].active = 1;                                 /* un humain rejoint la partie contre le bot */
+        int aHum = aim_assist_on();
+        vsBot = 0; NP[2].active = 0;
+        int aHost = aim_assist_on();
+        netMode = NET_CLIENT; myId = 1;
+        int aCli = aim_assist_on();
+        fprintf(f, "aimant de visee : solo %d, contre mon bot %d, un humain en plus %d, hote en reseau %d, client %d (attendu 1 1 0 0 0)\n",
+                aSolo, aBot, aHum, aHost, aCli);
+        netMode = sNet; vsBot = sVs; myId = sId;
+        memset(NP, 0, sizeof NP);
+        fprintf(f, "second ecran : actif par defaut %d (attendu 0)\n", secondScreen);
+        PkAnnounce pa;
+        fprintf(f, "protocole : NET_VER %d, PkAnnounce %d octets avec ranked a l'octet %d (attendu 16, %d, %d)\n", NET_VER,
+                (int)sizeof(PkAnnounce), (int)((unsigned char *)&pa.ranked - (unsigned char *)&pa), (int)sizeof(PkHead) + 16 + 8, (int)sizeof(PkHead) + 20);
+    }
+
     botLog = NULL;
     netMode = NET_OFF; dmMode = 0;
     fclose(f);

@@ -11,7 +11,8 @@
 /* HIT. Les evenements sont renvoyes 3 fois et dedoublonnes par id.    */
 /* ------------------------------------------------------------------ */
 #define NET_MAGIC 0x564C4F43u
-#define NET_VER   15      /* 15 : regles (mode, grappin, munitions, boutique, specs) et objectifs dans PkSnap, EV_OBJ, spec dans NetPState */
+#define NET_VER   16      /* 15 : regles (mode, grappin, munitions, boutique, specs) et objectifs dans PkSnap, EV_OBJ, spec dans NetPState ;
+                             16 = fusion du fork + mode classe (PkJoin, PkRoster, PkAnnounce.ranked, PkWelcome pad[1]) */
 enum { PK_QUERY = 1, PK_ANNOUNCE, PK_JOIN, PK_WELCOME, PK_STATE, PK_SNAP, PK_ROSTER, PK_EVENT, PK_LEAVE,
        PK_PUNCH, PK_KEEP };   /* PUNCH : ouvre le NAT vers un client ; KEEP : un spectateur dit qu'il est la */
 enum { EV_RAIL = 1, EV_ROCKET, EV_ROCKET_END, EV_PARRY, EV_HIT, EV_MELEE, EV_KILL, EV_RESPAWN, EV_MATCH, EV_INFO, EV_PICKUP,
@@ -33,8 +34,12 @@ typedef struct {
     unsigned char kind, from, target, sub, actor, pad[3];
     float f[7];
 } NetEvent;
-typedef struct { PkHead h; char name[16]; unsigned char players, maxp, teams, map; } PkAnnounce;   /* teams : teamSize ; map : curMap */
-typedef struct { PkHead h; char name[16]; unsigned char spec, pad[3]; } PkJoin;
+typedef struct {                                          /* teams : teamSize ; map : curMap ; ranked : partie classee */
+    PkHead h; char name[16]; unsigned char players, maxp, teams, map, ranked, pad[3];
+} PkAnnounce;
+typedef struct {                                          /* mode classe : identite, cote et matchs joues (cache) */
+    PkHead h; char name[16]; unsigned char spec, rplay; unsigned short mmr; unsigned char rid[16];
+} PkJoin;
 typedef struct { PkHead h; unsigned char id, refused, pad[2]; } PkWelcome;
 typedef struct { PkHead h; NetPState st; } PkState;
 typedef struct { unsigned char active, alive; short hp, kills, deaths; NetPState st; unsigned char team; } SnapP;
@@ -42,7 +47,12 @@ typedef struct { PkHead h; float matchT; unsigned char matchOver, winner; unsign
                  SnapP p[MAXP];
                  unsigned char rMode, rFlags, rMinutes, rAmmo;   /* regles : mode, grappin | boutique << 1 | specs << 2, duree, munitions */
                  ObjState obj; } PkSnap;
-typedef struct { PkHead h; char names[MAXP][16]; } PkRoster;
+typedef struct {
+    PkHead h; char names[MAXP][16];
+    unsigned short mmr[MAXP]; unsigned char rplay[MAXP];  /* mode classe : cote et matchs annonces par chacun */
+    unsigned char ranked, nleft, mid[8];                  /* partie classee, nombre de partis, identifiant du match */
+    unsigned char rid[MAXP][16], left[MAXP][16];          /* identites de classement des joueurs et des partis */
+} PkRoster;
 typedef struct { PkHead h; NetEvent ev; } PkEvent;
 #pragma pack(pop)
 
@@ -52,6 +62,7 @@ typedef struct {
     int teams;                                            /* LAN : mode annonce (0 chacun pour soi, N = NvN) */
     char id[8];                                           /* identifiant du salon chez le lobby */
     int map;                                              /* carte annoncee (LAN), -1 = inconnue (salon en ligne) */
+    int ranked, mmr;                                      /* mode classe : salon classe, cote moyenne (en ligne) */
 } Found;
 #define MAXFOUND 12
 static Found found[MAXFOUND];

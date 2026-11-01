@@ -18,7 +18,8 @@ quel fichier se trouve chaque partie.
   `glBegin`/`glEnd`, listes d'affichage), audio `waveOut` avec sons **synthétisés** au démarrage,
   réseau UDP Winsock pour le deathmatch LAN.
 - Aucune ressource externe : pas d'image, pas de son, pas de police à charger (la police vient de
-  `wglUseFontBitmapsA` sur « Consolas », les textures sont générées dans `make_textures`).
+  `wglUseFontBitmapsA` sur « Consolas », les textures sont générées dans `make_textures` ; les `.bmp` de
+  `graphismes/` ne font que les remplacer, §3.13).
 - Les bibliothèques système sont liées par des `#pragma comment(lib, ...)` en tête de fichier
   (`opengl32`, `gdi32`, `user32`, `winmm`, `ws2_32`, `advapi32`).
 - **Compilation** : `build.bat` trouve MSVC via `vswhere`, puis lance
@@ -104,7 +105,9 @@ velocity/
 │   ├── combat/       degats.c, loadout.c, melee.c, pieces_rail.c, roquettes.c, projectiles.c, competences.c
 │   ├── armes/        une arme = un fichier : enclume, lance, fleau, poings, egide, elan, eventail, tesla, scie, ventouse
 │   ├── solo/         ennemis_vagues.c
-│   ├── reseau/       etat_partage.c, protocole.c (paquets, EV_*), hote.c, client.c, en_ligne.c (lobby, STUN)
+│   ├── reseau/       etat_partage.c, protocole.c (paquets, EV_*), hote.c, modes.c, client.c, en_ligne.c (lobby, STUN),
+│   │                 classe.c (mode classe : Elo, paliers, identite), classe_match.c (suivi du match, rapport),
+│   │                 classe_serveur.c (requetes au serveur de classement)
 │   ├── bots/         navigation.c (graphe de la carte, plus court chemin), bot.c
 │   ├── jeu/          style.c (jauge D a S), course.c (mode COURSE), kill_zone.c (void_check, bots prudents),
 │   │                 boucle.c (pickup_tick, game_tick)
@@ -113,7 +116,8 @@ velocity/
 │   ├── rendu/        base, textures, eclairage (lightmaps), modeles, armes_rendu, viewmodel, joueurs,
 │   │                 ciel_ombres_bloom, render.c (l'image complete)
 │   ├── interface/    texte.c, mise_a_jour.c, config.c (velocity.ini), menus.c, scores.c, hud.c, carte_ecran.c
-│   ├── plateforme/   fenetre.c (Win32 + entrees communes), second_ecran.c, demarrage.c (WinMain, boucle)
+│   ├── plateforme/   http.c (requetes HTTP : WinHTTP / curl), fenetre.c (Win32 + entrees communes), second_ecran.c,
+│   │                 demarrage.c (WinMain, boucle, options de la ligne de commande)
 │   │   └── mac/      mac_platform.m / .h, mac_compat.h (port macOS, voir §8)
 │   └── tests/        tests.c (--shot, --test)
 ├── graphismes/       rendu.ini, ambiances, textures .bmp : modifiables sans recompiler (F5)
@@ -146,7 +150,11 @@ velocity/
 | `reseau/protocole.c` | paquets et événements | `NET_VER`, `PK_*`, `EV_*`, `net_emit`, `net_hit`, `net_fx_*`, `apply_event` |
 | `reseau/hote.c` | autorité de l'hôte | `host_handle`, `host_kill`, `host_tick`, `pick_spawn` |
 | `reseau/client.c` | client | `on_welcome`, `apply_snap`, `client_recv`, `net_update`, `net_connect` |
-| `reseau/en_ligne.c` | lobby et STUN (voir §4) | `stun_*`, `lb_*`, `quick_play` |
+| `reseau/en_ligne.c` | lobby et STUN (voir §4) | `stun_*`, `lb_*`, `join_found`, `quick_play`, `ranked_play` |
+| `reseau/classe.c` | mode classé (§4 « Mode classé ») : état, formule Elo, paliers, identité, cartes et règles imposées | `rank_delta`, `rank_tier`, `rank_div`, `rank_label`, `rank_col`, `rk_identity`, `rk_new_match`, `rk_map_ok`, `rk_map_pick`, `rk_counts` |
+| `reseau/classe_match.c` | mode classé : suivi du match et rapport de fin | `rk_send_report`, `rk_tick`, `rk_host_gone`, `rk_shutdown` |
+| `reseau/classe_serveur.c` | mode classé : file de requêtes au serveur de classement (fil de fond), lecture des réponses JSON | `rk_http`, `rk_thread`, `rk_push`, `rq_hello`, `rq_top`, `rk_on_hello`, `rk_on_report`, `rk_net_poll`, `rk_bot_final` |
+| `plateforme/http.c` | requête HTTP générique, bloquante (WinHTTP ; macOS : `/usr/bin/curl`) | `http_request` |
 | `bots/navigation.c` | navigation des bots (§3.19) | `nav_build`, `nav_path`, `nav_plan`, `nav_follow`, `NV`, `navBusy`, `navLanding` |
 | `bots/bot.c` | bots | `aim_assist`, `bot_think` |
 | `combat/competences.c` | compétences (touche `A_SKILL`) | `skill_mark`, `skill_allin`, `skill_decoy`, `skill_tick` |
@@ -160,8 +168,8 @@ velocity/
 | `rendu/modeles.c`, `rendu/armes_rendu.c`, `rendu/viewmodel.c` | modèles 3D, rendu des armes, arme en main | `draw_enemy`, `draw_tesla_arcs`, `draw_flails`, `draw_viewmodel` |
 | `interface/mise_a_jour.c` | bouton MISE A JOUR (§3.17) | `upd_click`, `upd_poll`, `upd_label`, `upd_install`, `sha256_file` |
 | `interface/config.c` | `velocity.ini` | `cfg_save`, `cfg_load`, `assign_bind`, `key_name` |
-| `interface/menus.c` | menus et paramètres | `button`, `slider`, `draw_settings`, `draw_loadout`, `draw_skin_menu`, `draw_main_menu`, `draw_pause` |
-| `interface/scores.c` | scores, killfeed, pseudos | `draw_scoreboard`, `draw_killfeed`, `project`, `draw_name_tags` |
+| `interface/menus.c` | menus et paramètres | `button`, `slider`, `draw_settings`, `draw_loadout`, `draw_skin_menu`, `draw_main_menu` (dont PARTIE CLASSEE), `draw_rank_box` (encadré CLASSEMENT / TOP 3), `draw_pause` |
+| `interface/scores.c` | scores, killfeed, pseudos | `draw_scoreboard` (colonne CLASSE), `draw_rank_result`, `draw_killfeed`, `project`, `draw_name_tags` |
 | `rendu/joueurs.c` | joueurs distants | `np_anim`, `draw_trails`, `draw_outlines`, `draw_remote_players` |
 | `monde/decor.c` | décor maillé (§3.22) | `dc_tri`, `dc_quad`, `dc_cone`, `dc_sphere`, `dc_bevel`, `dc_arch`, `dc_arch_fill`, `dc_roof`, `dc_window`, `dc_awning`, `dc_cypress`, `dc_palm`, `dc_railing`, `dc_lantern`, `dc_column`, `DV`, `ndv` |
 | `monde/citadelle.c` | LA CITADELLE (§3.22) | `build_map_citadelle`, `ct_house`, `ct_arcade`, `ct_belltower`, `ct_fountain`, `ct_rampart`, `ct_landscape` |
@@ -179,7 +187,7 @@ velocity/
 | `rendu/render.c` | image complète | `gfx_reload`, `render` |
 | `plateforme/second_ecran.c` | fenêtre du second écran | `map_update`, `map_begin`, `map_end`, `second_screen_frame` |
 | `plateforme/fenetre.c` | fenêtre et entrées | `in_key_down`, `in_wheel`, `wheel_accept`, `wndproc`, `plat_*` |
-| `tests/tests.c` | outils de test (§6) | `save_bmp`, `*_test_*`, `run_tests` |
+| `tests/tests.c` | outils de test (§6) | `save_bmp`, `*_test_*`, `run_tests`, export des textures (`--export-textures`) |
 | `plateforme/demarrage.c` | point d'entrée | `music_follow_game`, `do_action`, `WinMain` / `velocity_main` |
 
 À savoir pour s'y retrouver :
@@ -517,7 +525,9 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
   `GetModuleFileNameA` dans `WinMain`). Format `cle=valeur`, une par ligne, `#` pour un commentaire :
   `name`, `sens`, `fov`, `volume`, `invert_y`, `show_fps`, `fullscreen`, `impact_frames`, `screen_fx`,
   `online`, `update_check` (vérifier les mises à jour au démarrage), `map` (carte choisie, §3.18), `map_rotate`,
-  puis `bind_<actId>=code1,code2`.
+  `second_ecran` (**0 par défaut**, §3.15), `ranked_id` / `ranked_key` (identité du mode classé, créée au premier
+  lancement, §4 « Mode classé »), `mmr` / `ranked_played` / `ranked_wins` (simple **cache d'affichage** de la cote :
+  le serveur fait foi), puis `bind_<actId>=code1,code2`.
 - `cfg_load` lit au démarrage (pas en mode bot ni `--shot`), borne les valeurs (`clampf`) et ignore
   les clés inconnues. Il renvoie 1 si le plein écran est demandé.
 - `cfg_save` réécrit tout le fichier ; il ne fait rien si `botMode`, `shotMode` ou `cfgPath` vide.
@@ -531,7 +541,7 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
 - Primitives 2D : `rect`, `text` (avec ombre), `text_c` (centré), polices 0/1/2.
 - Widgets immédiats : `button` (renvoie 1 au clic), `field` (champ texte, focus `uiFocus` 1 = pseudo,
   2 = IP ; la saisie passe par `WM_CHAR`), `slider(id, ...)` (glisser ; `uiDrag` mémorise l'`id` en cours).
-- Écrans : `draw_main_menu` (pseudo, SOLO, HÉBERGER, REJOINDRE, PARAMÈTRES, QUITTER + aide
+- Écrans : `draw_main_menu` (pseudo, SOLO, PARTIE RAPIDE / PARTIE CLASSEE, HÉBERGER, REJOINDRE, encadré CLASSEMENT + TOP 3, PARAMÈTRES, QUITTER + aide
   `draw_controls`), `draw_join_menu` (parties trouvées + IP), `draw_pause` (en jeu, souris libre),
   `draw_settings` (réglages à gauche, commandes à droite ; `waitAct`/`waitSlot` = case en attente d'une
   touche ; Échap annule, Retour arrière/Suppr efface).
@@ -549,14 +559,160 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
   additif (rayons, particules, projectiles, reflets, jump pads), l'arme en main (`draw_viewmodel`),
   l'impact frame et enfin `draw_hud`.
 
+### 3.11 Mode équipes (1v1 à 4v4)
+
+- **Choix** : écran HEBERGER UNE PARTIE (`draw_host_menu`, `hostOpen`) : NOMBRE DE JOUEURS (LIBRE / 1V1 / 2V2 /
+  3V3 / 4V4 → `wantTeams`, `teams=` dans `velocity.ini`, `--teams N` pour un bot hôte), COMPLETER AVEC DES BOTS
+  (`hostBots` : aucun ou un niveau), puis LANCER (`ACT_HOST`, ou `ACT_VSBOT` avec des bots). `net_host_start`
+  copie `wantTeams` dans **`teamSize`** (0 = chacun pour soi). Une PARTIE RAPIDE et le duel « joueur contre
+  bot » du menu principal (`hostFfa`) sont toujours en chacun pour soi.
+- **Données** : `NP[i].team` (0 bleue, 1 rouge). L'hôte (id 0) est bleu ; `host_on_join` met chaque arrivant
+  dans l'équipe la moins nombreuse et refuse au-delà de `host_max_players()` = 2 × `teamSize`.
+  `host_balance_teams` (au début de chaque match) corrige un écart de 2 ou plus après un départ.
+  `teamSize` et `SnapP.team` voyagent dans `PkSnap` ; `PkAnnounce.teams` annonce le mode en LAN ; en ligne,
+  le nom du salon finit par `_2V2` et `max` = 2 × `teamSize`.
+- **Pas de dégâts entre alliés** : `same_team(a, b)`. `np_target(i)` exclut les alliés : aucune arme, aucun
+  souffle, aucune aide à la visée, aucun bot ne les vise (les roquettes et la Tesla les traversent).
+  `np_present(i)` = joueur à **dessiner** (alliés compris). Filet de sécurité : `host_handle` annule tout
+  `EV_HIT` entre alliés (sauf `W_SELF`).
+- **Score** : `team_score(t)` = somme des frags de l'équipe. Limite `team_frag_limit(n)` =
+  `TEAM_FRAG_BASE` + `TEAM_FRAG_PER` × n (2v2 : 20, 3v3 : 25, 4v4 : 30). `host_kill` termine le match quand
+  l'équipe du tueur l'atteint ; à `MATCH_TIME`, la meilleure équipe gagne (`TEAM_DRAW` = égalité).
+  En équipes, `matchWinner` est une **équipe** (texte : `winner_text`).
+- **Spawns** : `pick_spawn` prend dans `teamPts` (bleus au nord, z < 0 ; rouges au sud, miroir), le plus loin
+  des **ennemis**.
+- **Affichage** : `pcolor(i)` (couleur d'équipe, éclaircie selon le rang) remplace `pcol[i]` ; scores des deux
+  camps en haut au centre ; `draw_team_scoreboard` ; noms des alliés visibles à travers les murs (chevron) ;
+  fil des kills teinté ; musique : `music_pvp_level` reçoit les deux scores d'équipe.
+- **Contre des bots** (`ACT_VSBOT`) : en équipes, lance `host_max_players() - 1` bots (`botProc[]`) qui
+  remplissent les deux camps (2v2 : toi + 1 bot contre 2 bots).
+
+### 3.12 Éclairage, ombres, ciel, bloom
+
+- **Lightmaps précalculées** (`bake_lightmaps`, appelé par `build_world_list`, ~0,25 s) : une texture par
+  face visible de boîte (`lmaps[boite][face]`, `LM_DENS` = 3 texels/m, `face_hidden` saute les faces enfouies
+  ou hors de l'arène). `lm_light` : soleil (`sun_dir`, ombre portée par `ray_world`) + ciel × occlusion
+  ambiante (`AO_RAYS` rayons courts via la grille `lm_grid_build`/`ray_near`) + rebond du sol + lueur cyan des
+  jump pads. Flou 1-2-1. Le monde est dessiné **sans** éclairage OpenGL, puis la lightmap est multipliée ×2
+  (`GL_DST_COLOR, GL_SRC_COLOR`, 0,5 = neutre ; brouillard gris pour cette passe, blanc pour le grain).
+- **Objets mobiles** : `set_dyn_light(vis)` règle `GL_LIGHT0` sur le soleil, atténué si `sun_vis(p)` = 0
+  (joueurs distants, ennemis) ; l'arme en main suit `viewSun` (lissé). `GL_NORMALIZE` est activé (l'arme
+  est mise à l'échelle, sinon le reflet spéculaire explose).
+- **Ombres dynamiques** (`draw_dyn_shadows`, réglage `shadows=`) : silhouettes (moi, joueurs, ennemis,
+  cellules) aplaties sur le dessus de la boîte qui les reçoit le long du soleil (`shadow_caster_boxes`),
+  découpées par `glClipPlane`, assombries une seule fois grâce au **stencil**.
+- **Ciel** : `draw_sky_dome` (dôme dégradé `sky_color`, lueur autour du soleil, étoiles, disque solaire) et
+  ville lointaine `skylineList` (`build_skyline_list`, décor sans collision).
+- **Bloom** (`bloom_apply`, réglage `bloom=`) : copie de l'image, réduction au quart, seuil doux (x^8 par
+  multiplications), flou séparable, ajout. Fait avant l'impact frame et le HUD.
+- **Texte** : `glBitmap` (polices de `make_font`) est très lent sur certains pilotes (12 ms/image sur macOS). Au
+  démarrage, `make_font_atlas` dessine les 224 glyphes une fois, les relit (`glReadPixels`, par lots si la fenêtre
+  est petite) dans un atlas `GL_ALPHA` ; `text` dessine ensuite des quads texturés, au pixel près.
+- **Mesurer** : `--shot bench_dm.bmp` (ou `bench_dm_equipes.bmp`…) écrit `bench_dm.bmp.txt` : ms/image avec et sans
+  bloom/ombres, puis le détail par étape (`BT(k)` dans `render`). Référence (MacBook Air, 1372×891) : ~1,9 ms/image.
+- **Bots cachés** (`--hidden`, ceux de « contre des bots ») : aucun rendu ni lightmap, boucle limitée à ~250 Hz.
+
+### 3.13 Réglages graphiques modifiables (`graphismes/`)
+
+- **`graphismes/rendu.ini`** (lu au démarrage par `gfx_load_all`, et à chaque **F5** par `gfx_reload`) : toutes les
+  valeurs d'aspect, déclarées en tête de la section Rendu (`gx*`, `sunCol`, `skyCol`…) avec leur défaut, et listées
+  dans **`gfxKeys`** (nom de clé → variable, nombre de valeurs). Ajouter un réglage = une variable + une ligne de
+  `gfxKeys` + sa ligne commentée dans `rendu.ini`. `gfx_clamp` borne les valeurs ; `gfx_defaults` remet les défauts
+  avant chaque relecture. Les tests (`--test`) n'ouvrent pas ce fichier (valeurs par défaut).
+- **Textures** : `sol.bmp`, `mur.bmp`, `grain.bmp`, `pierre.bmp`, `enduit.bmp` du même dossier (`tex_override`,
+  `load_bmp_square`) remplacent `texGrid`, `texWall`, `texGrime`, `texStone`, `texPlaster`.
+- **Export** : `velocity.exe --export-textures <dossier>` écrit les textures générées par le code dans ce dossier,
+  aux noms ci-dessus (sans fenêtre visible, puis quitte). Le dossier `graphismes/` du dépôt contient ces exports :
+  on part de l'image actuelle pour la retoucher. Après un changement de `make_textures`, relancer l'export pour
+  que `graphismes/` reste fidèle au code (sinon les `.bmp` masquent le nouveau rendu).
+- **Recherche du dossier** (`gfx_find_dir`) : macOS `~/Library/Application Support/Velocity/graphismes`, puis à côté
+  de `Velocity.app`, puis `Velocity.app/Contents/Resources/graphismes` (copié par `build_mac.sh`) ; Windows : à côté de
+  l'exe ; enfin `./graphismes`.
+- Purement visuel : rien dans ce dossier ne touche au gameplay ni au réseau.
+
+### 3.14 Skins, effets du monde, ambiances
+
+- **Skins** (`SKN_ROBOT`, `SKN_POUSSIN`, `SKN_NINJA`, `SKN_CHAT`, `SKN_CHEVALIER`) : `wantSkin` (`skin=` dans
+  `velocity.ini`, écran SKIN du menu principal avec aperçu 3D `draw_skin_menu`), envoyé dans `NetPState.skin`
+  (`NET_VER` 13). Modèles en boîtes : `draw_skin` → `skin_robot`… (pieds à l'origine, regard vers −z, échelle selon
+  la hauteur). La couleur principale vient de `pcolor` (équipe), les accents (bec, acier) sont fixes. Animation
+  `SkinAnim` (`np_anim` : course, saut, glissade, visée) ; `skc` gère le mode « tout d'une couleur » (`skinFlat`,
+  contours) et le flash de touche (`skinFlash`). Les bots prennent un skin au hasard. Ajouter un skin : un `SKN_*`
+  avant `SKN_COUNT`, son nom dans `skinNames`, sa fonction et son `case` dans `draw_skin`.
+- **Contours** (`draw_outlines`, clé `contours`) : coque inversée (modèle un peu agrandi, faces arrière seules).
+  Ne pas utiliser `glPolygonMode` avec des modes différents avant/arrière : rendu logiciel sur macOS.
+- **Traînées de vitesse** (`trail_tick`, `draw_trails`, clé `trainees`) : ruban à la couleur du joueur au-delà de
+  16 m/s.
+- **Effets d'impact** (section Effets) : `add_light` (lumières dynamiques posées sur sol et murs, `light_splat`),
+  `add_decal`/`decal_at` (marques), ondes au sol (`Ring`), fumée (`Smoke`), regroupés dans `fx_explosion` (appelé par
+  `explode_ex` et `explode_fx`) ; `add_beam` éclaire et marque son point d'arrivée ; les roquettes éclairent en vol.
+  Kill : éclats à la couleur de l'équipe. Tout est décompté en temps réel (`fx_world_tick`).
+- **Néons** (`build_neon`, `draw_world_glow`, clés `neon*`) : bandes sur le haut des plateformes (cyan), des murs de
+  wall-run (magenta) et du centre (orange), repérées par la couleur des boîtes ; leur lueur est précalculée dans les
+  lightmaps (`lmnP`, listes par case). **Rebond coloré** (`rebond_couleur`) : les rayons d'occlusion qui touchent une
+  boîte ajoutent sa couleur.
+- **Ciel et météo** : nuages (`nuages`), poussière (`poussiere`), pluie (`pluie`), orage (`orage`, `storm_tick` :
+  flash et tonnerre), reflets du soleil (`draw_flare`, `reflets_soleil`).
+- **Ambiances** : `gfxAmbiance` (PARAMETRES > CIEL, `ambiance=`) charge `graphismes/ambiance_nuit|jour|orage.ini`
+  par-dessus `rendu.ini`. **Qualité** : `gfxQuality` (PARAMETRES > QUALITE, `quality=`) plafonne les coûts
+  (`gfx_quality_apply`) et règle ombres/bloom. Captures : `--shot arene_nuit.bmp`, `skins.bmp`, `skins_course.bmp`,
+  `skinmenu.bmp`.
+- **Radar des alliés** (`draw_radar`) : mode équipes, en haut à gauche.
+- **Anticrénelage** : macOS demande un format 4x MSAA (`src/plateforme/mac/mac_platform.m`), sinon le format simple. Pas encore sous
+  Windows (il faudrait `wglChoosePixelFormatARB`).
+
+### 3.15 Second écran : carte de la partie
+
+Si un deuxième écran est branché, une fenêtre sans bordure le couvre et affiche **la carte vue de dessus en direct**
+(blocs ombrés selon leur hauteur, jump pads, recharges, pièces, roquettes, ennemis en solo ; joueurs en flèches à leur
+couleur avec nom, PV et traînée de 2 s ; mon cône de vision) et **les statistiques** (mode, chrono, scores d'équipe,
+classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, arme, derniers kills).
+
+- **Pas de radar contre l'adversaire** (`maps_sees`) : pendant une partie on ne voit que soi et ses équipiers (en
+  chacun pour soi : soi seul), avec leurs projectiles et pièces. Tout le monde apparaît en spectateur et à la fin.
+- Dessin : `src/interface/carte_ecran.c` (`draw_map_screen(w, h)`, ne dépend d'aucun état laissé par `render`).
+- Fenêtre : `src/plateforme/second_ecran.c`. `second_screen_frame(dt)` est appelé après chaque image : toutes les
+  `SCREEN_POLL_T` (1 s) `map_update` recompte les écrans (branché, débranché, fenêtre du jeu déplacée), puis la carte
+  est redessinée à `SCREEN_MAP_FPS` (30). Elle a son propre contexte OpenGL **partagé** avec celui du jeu (police,
+  textures) — Windows : `wglShareLists`, fenêtre `WS_EX_NOACTIVATE` ; macOS : `mac_map_update/begin/end`,
+  `NSOpenGLContext ... shareContext:gCtx`, fenêtre qui ignore la souris. Pas de synchro verticale sur ce contexte
+  (sinon deux attentes par image).
+- **Deux vues** : de dessus (`maps_draw_map`) ou **en 3D inclinée** (`maps_draw_3d` : blocs ombrés par face, pions à
+  la couleur des joueurs avec flèche du regard, ombre au sol et poteau pointillé quand ils sont en l'air, traînées en
+  3D ; noms projetés par `maps_proj3`). Angle, recul et champ : `carte_3d` dans `graphismes/rendu.ini` (`gxMap3d`).
+- **Courbe de vitesse** (`maps_speed_tick`, `maps_draw_speed`) : un point toutes les 0,5 s par joueur (`mapsSpd`,
+  vitesse ×4 sur un octet), interrompue pendant les morts ; 60 dernières secondes en partie, toute la partie à la fin.
+  Seulement les joueurs visibles (`maps_sees`). Remise à zéro hors partie et quand le chrono du match repart.
+- **Carte de chaleur** (`maps_heat_add` appelé par `apply_event` sur `EV_KILL`, `maps_draw_heat`) : position de la
+  victime (rouge) et du tireur (jaune) à chaque kill ; taches additives de rayon `MAPS_HEAT_R`. Affichée à la fin du
+  match (`matchOver`), toujours en vue de dessus. Capture : `--shot carte_dm_equipes_fin.bmp`.
+- Réglage : PARAMETRES > « 2e ECRAN : NON / HAUT / 3D » (`second_ecran=`, `carte_vue=` dans `velocity.ini`).
+  **Désactivé par défaut** (`secondScreen` = 0) : la fenêtre ne s'ouvre que si le joueur l'a demandée.
+  Jamais en `--bot`/`--shot`. Capture de la vue 3D : `--shot carte3d.bmp`, `carte3d_dm.bmp`…
+- Capture : `--shot carte.bmp` (solo), `carte_dm.bmp`, `carte_dm_equipes.bmp` dessinent cet écran dans la fenêtre du jeu.
+
+### 3.16 Caméra de mort
+
+`src/effets/camera_mort.c`. À la mort (`apply_event` sur `EV_KILL` en LAN, `damage_player` en solo), `killcam_start`
+retient l'œil, le cap et le tueur (en solo : l'ennemi vivant le plus proche qui me voit, dans `KILLCAM_SOLO_R`). Pendant
+`KILLCAM_T` (1,6 s, le respawn reste à `RESPAWN_TIME` 2,5 s), `render` prend la vue de `killcam_view` : la caméra
+recule et monte (`KILLCAM_BACK`, `KILLCAM_UP`, sans traverser les murs), pivote vers le tueur en `KILLCAM_TURN` et
+zoome (`KILLCAM_ZOOM`). `draw_killcam_hud` : bandes noires, « ELIMINE PAR … », arme, PV qui lui restent, crochets autour
+de lui ; le bas du HUD est masqué, le choix du loadout reste. Ni suicide ni chute. Réglage : PARAMETRES > CAM. MORT
+(`camera_mort=`). Capture : `--shot dm_mort.bmp`.
+
 ### 3.17 Mise à jour depuis GitHub (bouton MISE A JOUR)
 
 Fichier `src/interface/mise_a_jour.c`, inclus juste avant `interface/config.c`.
 
-- **Source** : la branche `release` du dépôt public `Archeos932/velocity` (`UPD_REPO` dans `src/interface/mise_a_jour.c`), remplie par `.github/workflows/release.yml`
-  à chaque push sur `stable` : `velocity.exe`, `Velocity-macOS.zip` et **`version.txt`** (`build`, `sha`,
-  `win_size`, `win_sha256`, `mac_size`, `mac_sha256`). Lu à `https://raw.githubusercontent.com/Archeos932/velocity/release/`
-  (`UPD_HOST`, `UPD_DIR`).
+- **Source** : la branche `release` du dépôt public **`void19845/velocity`** (`UPD_REPO` dans
+  `src/interface/mise_a_jour.c`), remplie par `.github/workflows/release.yml` à chaque push sur `stable` :
+  `velocity.exe`, `Velocity-Windows.zip` (l'exe + le dossier `graphismes/`, pour un premier téléchargement),
+  `Velocity-macOS.zip` et **`version.txt`** (`build`, `sha`, `win_size`, `win_sha256`, `mac_size`, `mac_sha256`).
+  Lu à `https://raw.githubusercontent.com/void19845/velocity/release/` (`UPD_HOST`, `UPD_DIR`). Un fork qui publie
+  ses propres versions change `UPD_REPO` (ou le passe à la compilation : `/DUPD_REPO=...`).
+- Le bouton ne remplace que l'exécutable (Windows) ou le `.app` (macOS) : le dossier `graphismes/` d'une
+  installation existante n'est pas touché (les réglages visuels du joueur sont conservés).
 - **Numéro de build** : `VELOCITY_BUILD`, passé par `build.bat` / `build_mac.sh` si la variable d'environnement
   existe (la CI y met `github.run_number`, le même numéro que `version.txt`). Absent = `0` = « dev ».
   Une version est proposée si `build` de `version.txt` > `VELOCITY_BUILD`.
@@ -646,145 +802,6 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
 - **Bots** : `bot_void_guard` (appelée dans la boucle principale juste après `bot_think`) annule un saut ou un dash
   dont la trajectoire balistique (`bot_lands`) ne retombe sur aucun sol avant `killY`, freine au bord (dos au vide),
   et en chute sans issue tente le double saut puis un **grappin de secours** vers le dessus de boîte le plus proche.
-
----
-
-### 3.11 Mode équipes (1v1 à 4v4)
-
-- **Choix** : écran HEBERGER UNE PARTIE (`draw_host_menu`, `hostOpen`) : NOMBRE DE JOUEURS (LIBRE / 1V1 / 2V2 /
-  3V3 / 4V4 → `wantTeams`, `teams=` dans `velocity.ini`, `--teams N` pour un bot hôte), COMPLETER AVEC DES BOTS
-  (`hostBots` : aucun ou un niveau), puis LANCER (`ACT_HOST`, ou `ACT_VSBOT` avec des bots). `net_host_start`
-  copie `wantTeams` dans **`teamSize`** (0 = chacun pour soi). Une PARTIE RAPIDE et le duel « joueur contre
-  bot » du menu principal (`hostFfa`) sont toujours en chacun pour soi.
-- **Données** : `NP[i].team` (0 bleue, 1 rouge). L'hôte (id 0) est bleu ; `host_on_join` met chaque arrivant
-  dans l'équipe la moins nombreuse et refuse au-delà de `host_max_players()` = 2 × `teamSize`.
-  `host_balance_teams` (au début de chaque match) corrige un écart de 2 ou plus après un départ.
-  `teamSize` et `SnapP.team` voyagent dans `PkSnap` ; `PkAnnounce.teams` annonce le mode en LAN ; en ligne,
-  le nom du salon finit par `_2V2` et `max` = 2 × `teamSize`.
-- **Pas de dégâts entre alliés** : `same_team(a, b)`. `np_target(i)` exclut les alliés : aucune arme, aucun
-  souffle, aucune aide à la visée, aucun bot ne les vise (les roquettes et la Tesla les traversent).
-  `np_present(i)` = joueur à **dessiner** (alliés compris). Filet de sécurité : `host_handle` annule tout
-  `EV_HIT` entre alliés (sauf `W_SELF`).
-- **Score** : `team_score(t)` = somme des frags de l'équipe. Limite `team_frag_limit(n)` =
-  `TEAM_FRAG_BASE` + `TEAM_FRAG_PER` × n (2v2 : 20, 3v3 : 25, 4v4 : 30). `host_kill` termine le match quand
-  l'équipe du tueur l'atteint ; à `MATCH_TIME`, la meilleure équipe gagne (`TEAM_DRAW` = égalité).
-  En équipes, `matchWinner` est une **équipe** (texte : `winner_text`).
-- **Spawns** : `pick_spawn` prend dans `teamPts` (bleus au nord, z < 0 ; rouges au sud, miroir), le plus loin
-  des **ennemis**.
-- **Affichage** : `pcolor(i)` (couleur d'équipe, éclaircie selon le rang) remplace `pcol[i]` ; scores des deux
-  camps en haut au centre ; `draw_team_scoreboard` ; noms des alliés visibles à travers les murs (chevron) ;
-  fil des kills teinté ; musique : `music_pvp_level` reçoit les deux scores d'équipe.
-- **Contre des bots** (`ACT_VSBOT`) : en équipes, lance `host_max_players() - 1` bots (`botProc[]`) qui
-  remplissent les deux camps (2v2 : toi + 1 bot contre 2 bots).
-
-### 3.12 Éclairage, ombres, ciel, bloom
-
-- **Lightmaps précalculées** (`bake_lightmaps`, appelé par `build_world_list`, ~0,25 s) : une texture par
-  face visible de boîte (`lmaps[boite][face]`, `LM_DENS` = 3 texels/m, `face_hidden` saute les faces enfouies
-  ou hors de l'arène). `lm_light` : soleil (`sun_dir`, ombre portée par `ray_world`) + ciel × occlusion
-  ambiante (`AO_RAYS` rayons courts via la grille `lm_grid_build`/`ray_near`) + rebond du sol + lueur cyan des
-  jump pads. Flou 1-2-1. Le monde est dessiné **sans** éclairage OpenGL, puis la lightmap est multipliée ×2
-  (`GL_DST_COLOR, GL_SRC_COLOR`, 0,5 = neutre ; brouillard gris pour cette passe, blanc pour le grain).
-- **Objets mobiles** : `set_dyn_light(vis)` règle `GL_LIGHT0` sur le soleil, atténué si `sun_vis(p)` = 0
-  (joueurs distants, ennemis) ; l'arme en main suit `viewSun` (lissé). `GL_NORMALIZE` est activé (l'arme
-  est mise à l'échelle, sinon le reflet spéculaire explose).
-- **Ombres dynamiques** (`draw_dyn_shadows`, réglage `shadows=`) : silhouettes (moi, joueurs, ennemis,
-  cellules) aplaties sur le dessus de la boîte qui les reçoit le long du soleil (`shadow_caster_boxes`),
-  découpées par `glClipPlane`, assombries une seule fois grâce au **stencil**.
-- **Ciel** : `draw_sky_dome` (dôme dégradé `sky_color`, lueur autour du soleil, étoiles, disque solaire) et
-  ville lointaine `skylineList` (`build_skyline_list`, décor sans collision).
-- **Bloom** (`bloom_apply`, réglage `bloom=`) : copie de l'image, réduction au quart, seuil doux (x^8 par
-  multiplications), flou séparable, ajout. Fait avant l'impact frame et le HUD.
-- **Texte** : `glBitmap` (polices de `make_font`) est très lent sur certains pilotes (12 ms/image sur macOS). Au
-  démarrage, `make_font_atlas` dessine les 224 glyphes une fois, les relit (`glReadPixels`, par lots si la fenêtre
-  est petite) dans un atlas `GL_ALPHA` ; `text` dessine ensuite des quads texturés, au pixel près.
-- **Mesurer** : `--shot bench_dm.bmp` (ou `bench_dm_equipes.bmp`…) écrit `bench_dm.bmp.txt` : ms/image avec et sans
-  bloom/ombres, puis le détail par étape (`BT(k)` dans `render`). Référence (MacBook Air, 1372×891) : ~1,9 ms/image.
-- **Bots cachés** (`--hidden`, ceux de « contre des bots ») : aucun rendu ni lightmap, boucle limitée à ~250 Hz.
-
-### 3.13 Réglages graphiques modifiables (`graphismes/`)
-
-- **`graphismes/rendu.ini`** (lu au démarrage par `gfx_load_all`, et à chaque **F5** par `gfx_reload`) : toutes les
-  valeurs d'aspect, déclarées en tête de la section Rendu (`gx*`, `sunCol`, `skyCol`…) avec leur défaut, et listées
-  dans **`gfxKeys`** (nom de clé → variable, nombre de valeurs). Ajouter un réglage = une variable + une ligne de
-  `gfxKeys` + sa ligne commentée dans `rendu.ini`. `gfx_clamp` borne les valeurs ; `gfx_defaults` remet les défauts
-  avant chaque relecture. Les tests (`--test`) n'ouvrent pas ce fichier (valeurs par défaut).
-- **Textures** : `sol.bmp`, `mur.bmp`, `grain.bmp` du même dossier (`tex_override`, `load_bmp_square`) remplacent
-  `texGrid`, `texWall`, `texGrime`.
-- **Recherche du dossier** (`gfx_find_dir`) : macOS `~/Library/Application Support/Velocity/graphismes`, puis à côté
-  de `Velocity.app`, puis `Velocity.app/Contents/Resources/graphismes` (copié par `build_mac.sh`) ; Windows : à côté de
-  l'exe ; enfin `./graphismes`.
-- Purement visuel : rien dans ce dossier ne touche au gameplay ni au réseau.
-
-### 3.14 Skins, effets du monde, ambiances
-
-- **Skins** (`SKN_ROBOT`, `SKN_POUSSIN`, `SKN_NINJA`, `SKN_CHAT`, `SKN_CHEVALIER`) : `wantSkin` (`skin=` dans
-  `velocity.ini`, écran SKIN du menu principal avec aperçu 3D `draw_skin_menu`), envoyé dans `NetPState.skin`
-  (`NET_VER` 13). Modèles en boîtes : `draw_skin` → `skin_robot`… (pieds à l'origine, regard vers −z, échelle selon
-  la hauteur). La couleur principale vient de `pcolor` (équipe), les accents (bec, acier) sont fixes. Animation
-  `SkinAnim` (`np_anim` : course, saut, glissade, visée) ; `skc` gère le mode « tout d'une couleur » (`skinFlat`,
-  contours) et le flash de touche (`skinFlash`). Les bots prennent un skin au hasard. Ajouter un skin : un `SKN_*`
-  avant `SKN_COUNT`, son nom dans `skinNames`, sa fonction et son `case` dans `draw_skin`.
-- **Contours** (`draw_outlines`, clé `contours`) : coque inversée (modèle un peu agrandi, faces arrière seules).
-  Ne pas utiliser `glPolygonMode` avec des modes différents avant/arrière : rendu logiciel sur macOS.
-- **Traînées de vitesse** (`trail_tick`, `draw_trails`, clé `trainees`) : ruban à la couleur du joueur au-delà de
-  16 m/s.
-- **Effets d'impact** (section Effets) : `add_light` (lumières dynamiques posées sur sol et murs, `light_splat`),
-  `add_decal`/`decal_at` (marques), ondes au sol (`Ring`), fumée (`Smoke`), regroupés dans `fx_explosion` (appelé par
-  `explode_ex` et `explode_fx`) ; `add_beam` éclaire et marque son point d'arrivée ; les roquettes éclairent en vol.
-  Kill : éclats à la couleur de l'équipe. Tout est décompté en temps réel (`fx_world_tick`).
-- **Néons** (`build_neon`, `draw_world_glow`, clés `neon*`) : bandes sur le haut des plateformes (cyan), des murs de
-  wall-run (magenta) et du centre (orange), repérées par la couleur des boîtes ; leur lueur est précalculée dans les
-  lightmaps (`lmnP`, listes par case). **Rebond coloré** (`rebond_couleur`) : les rayons d'occlusion qui touchent une
-  boîte ajoutent sa couleur.
-- **Ciel et météo** : nuages (`nuages`), poussière (`poussiere`), pluie (`pluie`), orage (`orage`, `storm_tick` :
-  flash et tonnerre), reflets du soleil (`draw_flare`, `reflets_soleil`).
-- **Ambiances** : `gfxAmbiance` (PARAMETRES > CIEL, `ambiance=`) charge `graphismes/ambiance_nuit|jour|orage.ini`
-  par-dessus `rendu.ini`. **Qualité** : `gfxQuality` (PARAMETRES > QUALITE, `quality=`) plafonne les coûts
-  (`gfx_quality_apply`) et règle ombres/bloom. Captures : `--shot arene_nuit.bmp`, `skins.bmp`, `skins_course.bmp`,
-  `skinmenu.bmp`.
-- **Radar des alliés** (`draw_radar`) : mode équipes, en haut à gauche.
-- **Anticrénelage** : macOS demande un format 4x MSAA (`src/plateforme/mac/mac_platform.m`), sinon le format simple. Pas encore sous
-  Windows (il faudrait `wglChoosePixelFormatARB`).
-
-### 3.16 Caméra de mort
-
-`src/effets/camera_mort.c`. À la mort (`apply_event` sur `EV_KILL` en LAN, `damage_player` en solo), `killcam_start`
-retient l'œil, le cap et le tueur (en solo : l'ennemi vivant le plus proche qui me voit, dans `KILLCAM_SOLO_R`). Pendant
-`KILLCAM_T` (1,6 s, le respawn reste à `RESPAWN_TIME` 2,5 s), `render` prend la vue de `killcam_view` : la caméra
-recule et monte (`KILLCAM_BACK`, `KILLCAM_UP`, sans traverser les murs), pivote vers le tueur en `KILLCAM_TURN` et
-zoome (`KILLCAM_ZOOM`). `draw_killcam_hud` : bandes noires, « ELIMINE PAR … », arme, PV qui lui restent, crochets autour
-de lui ; le bas du HUD est masqué, le choix du loadout reste. Ni suicide ni chute. Réglage : PARAMETRES > CAM. MORT
-(`camera_mort=`). Capture : `--shot dm_mort.bmp`.
-
-### 3.15 Second écran : carte de la partie
-
-Si un deuxième écran est branché, une fenêtre sans bordure le couvre et affiche **la carte vue de dessus en direct**
-(blocs ombrés selon leur hauteur, jump pads, recharges, pièces, roquettes, ennemis en solo ; joueurs en flèches à leur
-couleur avec nom, PV et traînée de 2 s ; mon cône de vision) et **les statistiques** (mode, chrono, scores d'équipe,
-classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, arme, derniers kills).
-
-- **Pas de radar contre l'adversaire** (`maps_sees`) : pendant une partie on ne voit que soi et ses équipiers (en
-  chacun pour soi : soi seul), avec leurs projectiles et pièces. Tout le monde apparaît en spectateur et à la fin.
-- Dessin : `src/interface/carte_ecran.c` (`draw_map_screen(w, h)`, ne dépend d'aucun état laissé par `render`).
-- Fenêtre : `src/plateforme/second_ecran.c`. `second_screen_frame(dt)` est appelé après chaque image : toutes les
-  `SCREEN_POLL_T` (1 s) `map_update` recompte les écrans (branché, débranché, fenêtre du jeu déplacée), puis la carte
-  est redessinée à `SCREEN_MAP_FPS` (30). Elle a son propre contexte OpenGL **partagé** avec celui du jeu (police,
-  textures) — Windows : `wglShareLists`, fenêtre `WS_EX_NOACTIVATE` ; macOS : `mac_map_update/begin/end`,
-  `NSOpenGLContext ... shareContext:gCtx`, fenêtre qui ignore la souris. Pas de synchro verticale sur ce contexte
-  (sinon deux attentes par image).
-- **Deux vues** : de dessus (`maps_draw_map`) ou **en 3D inclinée** (`maps_draw_3d` : blocs ombrés par face, pions à
-  la couleur des joueurs avec flèche du regard, ombre au sol et poteau pointillé quand ils sont en l'air, traînées en
-  3D ; noms projetés par `maps_proj3`). Angle, recul et champ : `carte_3d` dans `graphismes/rendu.ini` (`gxMap3d`).
-- **Courbe de vitesse** (`maps_speed_tick`, `maps_draw_speed`) : un point toutes les 0,5 s par joueur (`mapsSpd`,
-  vitesse ×4 sur un octet), interrompue pendant les morts ; 60 dernières secondes en partie, toute la partie à la fin.
-  Seulement les joueurs visibles (`maps_sees`). Remise à zéro hors partie et quand le chrono du match repart.
-- **Carte de chaleur** (`maps_heat_add` appelé par `apply_event` sur `EV_KILL`, `maps_draw_heat`) : position de la
-  victime (rouge) et du tireur (jaune) à chaque kill ; taches additives de rayon `MAPS_HEAT_R`. Affichée à la fin du
-  match (`matchOver`), toujours en vue de dessus. Capture : `--shot carte_dm_equipes_fin.bmp`.
-- Réglage : PARAMETRES > « 2e ECRAN : NON / HAUT / 3D » (`second_ecran=`, `carte_vue=` dans `velocity.ini`).
-  Jamais en `--bot`/`--shot`. Capture de la vue 3D : `--shot carte3d.bmp`, `carte3d_dm.bmp`…
-- Capture : `--shot carte.bmp` (solo), `carte_dm.bmp`, `carte_dm_equipes.bmp` dessinent cet écran dans la fenêtre du jeu.
 
 ### 3.19 Navigation des bots (`src/bots/navigation.c`)
 
@@ -910,8 +927,10 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
   drapeau (et bouclier des BLEUS), maisons à terrasse qui séparent 3 couloirs : A à l'ouest (ruines à colonnade,
   bassins), B au centre (place surélevée d'un temple, autel), C à l'est (bazar sous les tentes). Deux tours de guet
   par escalier. LA CITADELLE a aussi ses zones, drapeaux, bouclier et départs par équipe (sans salles fermées).
-- `NET_VER` 15. Captures : `--shot boutique.bmp`, `--shot armedepart.bmp`. Tests : zones, drapeau, bouclier,
+- `NET_VER` 15 (16 depuis le mode classé, §4). Captures : `--shot boutique.bmp`, `--shot armedepart.bmp`. Tests : zones, drapeau, bouclier,
   spécialisations, SOUTIEN, salle de départ, grappin interdit, boutique.
+
+---
 
 ## 4. Réseau LAN
 
@@ -932,6 +951,9 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
 - La géométrie n'est **pas** transmise, seulement l'**id de carte** (`PkWelcome.pad[0]`, `EV_MATCH.target`, §3.18) :
   chaque exécutable la reconstruit (`build_level(m)` est déterministe, graine `rng = 777` pour l'Arène). Tous les
   joueurs doivent donc avoir le même exécutable.
+- **Aimant de visée** (`aim_assist`, `src/bots/bot.c`) : seulement en solo ou contre des bots ; il est **coupé dès
+  qu'un autre humain est dans la partie** en réseau (aucun avantage d'un joueur sur l'autre, en particulier en
+  PARTIE CLASSEE).
 
 ### Paquets `PK_*`
 
@@ -1056,7 +1078,7 @@ Plan et protocole complet : [`PLAN_EN_LIGNE.md`](PLAN_EN_LIGNE.md). Le jeu de co
 - **Lobby** (`worker/`, Cloudflare Worker + Durable Object, gratuit) : lignes de texte sur un WebSocket.
   `worker/src/lobby.js` = logique pure (testée par `worker/test.js`), `index.js` = Worker/DO hibernable,
   `dev-server.js` = même logique en local (`node dev-server.js 8787`).
-- **Client** (`main.c`, section « Parties en ligne », après `net_connect_ex`) :
+- **Client** (`src/reseau/en_ligne.c`, inclus après `client.c` qui définit `net_connect_ex`) :
   - fil WinHTTP (`lb_reader`) qui lit le WebSocket et fil d'écriture (`lb_writer`, `ping` toutes les 25 s),
     deux files protégées par `lbCs` ; le jeu ne touche aux sockets du lobby que via `lb_send` / `lb_update`.
   - `lb_update(dt)` (appelé par `net_update`) : (re)connexion avec attente de 4 s, lecture des lignes
@@ -1084,12 +1106,110 @@ Plan et protocole complet : [`PLAN_EN_LIGNE.md`](PLAN_EN_LIGNE.md). Le jeu de co
   `draw_spec_hud` remplace le HUD (classement, minuteur, fil des kills) et `draw_viewmodel` est sauté.
 - Le spectateur n'envoie que `PK_KEEP` ; l'hôte le retire après 5 s sans nouvelle.
 
+### Mode classé (PARTIE CLASSEE, cote Elo tenue par le serveur)
+
+Pas de compte : le classement est tenu par le **serveur de classement** (Durable Object `Ratings` du worker, SQLite),
+qui calcule lui-même l'Elo à partir des rapports de fin de match. L'hôte fait autorité sur le déroulement du match
+(frags, gagnant, joueurs partis), comme pour le reste du jeu.
+
+**Où est le code** : `src/reseau/classe.c` (état, formule, paliers, identité, cartes et règles imposées) et
+`src/reseau/classe_match.c` (suivi du match, rapports de fin, `rk_tick`) ;
+`src/reseau/classe_serveur.c` (requêtes au serveur en fil de fond, réponses JSON), sur `http_request` de `src/plateforme/http.c` ; paquets dans `src/reseau/protocole.c`, accueil et fin de
+match dans `hote.c`, réception dans `client.c`, salon classé du lobby et `ranked_play` dans `en_ligne.c` ; clés de
+`velocity.ini` dans `src/interface/config.c` ; bouton et encadré TOP 3 dans `menus.c`, colonne CLASSE et résultat
+dans `scores.c`, titre « PARTIE CLASSEE » dans `hud.c` ; `hello` au démarrage et options `--ranked` / `--frags`
+dans `src/plateforme/demarrage.c` ; tests dans `src/tests/tests.c`.
+
+**Identité** — au premier lancement, `rk_identity` tire `ranked_id` (128 bits) et `ranked_key` (128 bits secrets,
+`RtlGenRandom` sous Windows, `arc4random_buf` sous macOS), écrits dans `velocity.ini`. Le serveur enregistre le SHA-256
+de la clé au premier contact (confiance au premier usage) ; toute requête ensuite doit présenter la clé (sinon 403).
+Le pseudo peut changer. Les bots (`--bot … --ranked`) utilisent une identité temporaire (jamais sauvegardée).
+
+**Requêtes HTTP** (`rk_http` dans `src/reseau/classe_serveur.c`, sur `http_request` de `src/plateforme/http.c`, une à la fois dans un fil : WinHTTP sous Windows, `curl` du système sous macOS ; même
+hôte que le lobby, `lobbyAddr`, donc `--lobby 127.0.0.1:8787` vise le `dev-server.js`) :
+
+| Requête | Corps / paramètres | Réponse |
+|---|---|---|
+| `POST /ranked/hello` | `{id, key, name}` | `{ok, mmr, played, wins, tier, rank}` (enregistre l'identité si nouvelle) |
+| `POST /ranked/report` | `{id, key, match, host, winner, players:[{id, kills}], left:[id]}` | `{ok, state:"pending"}` ou `{ok, state:"applied", delta, mmr, played, wins, tier}` ; `expired`, `ignored` |
+| `GET /ranked/top?id=…` | — | `{ok, top:[{name, mmr, tier, played}] (10 max, placement fini), me:{rank, mmr, …}}` |
+
+Au démarrage (hors `--shot`/`--test`, et hors bots sans `--ranked`) : `hello` puis `top`. Le menu principal affiche
+l'encadré **CLASSEMENT** (`draw_rank_box`) : mon palier et ma cote, `#rang`, puis le **TOP 3** (podium or / argent /
+bronze) et une 4e ligne « toi : #rang, cote » si je n'y suis pas ; « classement indisponible » sans réseau. Sous
+~1540 px de large, l'encadré devient une ligne sous le titre. Il est rafraîchi après chaque match classé.
+
+**Formule (référence unique, appliquée par `worker/src/ratings.js` ; `rank_delta` dans `src/reseau/classe.c` est
+identique)** :
+- cote de départ `RANK_START` = 1000, bornée à [`RANK_MIN`, `RANK_MAX`] = [100, 3000] ;
+- Elo multijoueur **par paires** : pour le joueur `a` contre chacun des `n` autres participants `b`,
+  `E = 1 / (1 + 10^((Rb − Ra) / 400))`, `S` = 1 / 0,5 / 0 selon le classement final ;
+  `delta = K × Σ(S − E) / n`, arrondi au plus proche (0,5 s'éloigne de zéro, comme `lroundf`). En 1 contre 1 à
+  1000 contre 1000, le gagnant prend `K / 2` ;
+- `K` = `RANK_K_PLACE` = 64 pendant les `RANK_PLACEMENT` = 10 premiers matchs (affichés « PLACEMENT x/10 »),
+  puis `RANK_K` = 32 ;
+- classement final : le gagnant désigné par l'hôte d'abord, puis les frags (égalité = 0,5) ; tout présent bat tout
+  joueur parti ; entre partis, le dernier parti passe devant le premier. **Quitter un match en cours = défaite**
+  contre tous ;
+- paliers (`RANK_ARGENT` 900, `RANK_OR` 1050, `RANK_PLATINE` 1200, `RANK_DIAMANT` 1350, `RANK_MAITRE` 1500) :
+  BRONZE, ARGENT, OR, PLATINE, DIAMANT découpés en divisions III (bas) / II / I (haut) de 50 points ; MAITRE sans
+  division. BRONZE commence à 750 pour le calcul des divisions.
+
+**Déroulement** :
+1. **PARTIE CLASSEE** (`ACT_RANKED` → `ranked_play`) : il faut `online=1` et un `hello` réussi (sinon message clair :
+   « PARTIE CLASSEE indisponible … »). Partie rapide du lobby avec `quick <ver> <ep> 1 <cote>` : salon **classé**
+   de cote la plus proche ; `none` → on héberge une partie classée (`hostRanked`). La partie rapide normale évite les
+   salons classés. Le salon classé publie `host … <nom> 1 <cote moyenne>` ; REJOINDRE affiche « [CLASSEE] » (LAN :
+   champ `PkAnnounce.ranked`). Rejoindre une partie classée sans serveur de classement est refusé.
+2. **Règles figées** : une partie classée est toujours en **chacun pour soi** (`teamSize` = 0, quel que soit
+   `wantTeams`), avec les **règles par défaut** (`MatchRules` : FRAGS, grappin autorisé, munitions normales, sans
+   boutique ni spécialisations, 10 min ; `wantRules` est ignoré), limite `FRAG_LIMIT`, `MATCH_TIME`, et **sans
+   bots** (ni `vsBot`, ni `hostBots`) ; les spectateurs ne comptent pas. La carte doit avoir un vrai match à mort :
+   `rk_map_pick` saute les cartes à portes de course (LA TOILE). Un match ne compte que si `rk_counts()` (classée,
+   chacun pour soi, mode FRAGS). L'hôte refuse (`PkWelcome.refused = 2`) un joueur sans identité de classement.
+   Le premier adversaire qui arrive relance le match (`host_start_match`) ; si tous les adversaires partent, l'hôte
+   gagne (`host_end_match`).
+3. **Réseau** : `PkJoin` porte `rid` (16 octets), `mmr` et `rplay` (cache) ; l'hôte les diffuse dans `PkRoster`
+   (`mmr[]`, `rplay[]`, `rid[]`, `ranked`, `mid` = identifiant du match tiré par l'hôte à chaque match, `left[]` /
+   `nleft` = joueurs partis pendant le match, listés par l'hôte). `PkWelcome.pad[1]` = partie classée
+   (`pad[0]` = carte) ; `PkAnnounce.ranked` = partie classée, à côté de `teams` et `map`.
+4. **Fin de match** (`rk_tick`, appelé par `net_update`) : `RANK_END_WAIT` (0,5 s) après `matchOver`, l'hôte **et**
+   chaque client envoient le même rapport (`rk_send_report`) ; il est renvoyé toutes les `RANK_RETRY` s tant que le
+   serveur répond `pending` (`RANK_TRIES` fois). Si l'hôte part en plein match (`PK_LEAVE` ou silence de 5 s), les
+   clients rapportent l'hôte comme parti et sans gagnant (`rk_host_gone`). Après `applied`, le client renvoie un
+   `PK_JOIN` (même adresse = même id) pour que l'hôte diffuse sa nouvelle cote.
+5. **Affichage** : palier + cote dans le tableau des scores (colonne CLASSE), à côté des noms en jeu, titre
+   « PARTIE CLASSEE » dans le HUD, et sous le tableau de fin de match « +18 MMR -> OR II (1093) » (`draw_rank_result` ;
+   estimation locale en attendant le serveur).
+
+**Concordance côté serveur** (`accepted` dans `ratings.js`) : les rapports d'un même `match` sont groupés par forme
+canonique (hôte, gagnant, présents triés avec frags, partis). Un groupe est appliqué si une **majorité stricte des
+présents** l'a envoyé (1 contre 1 : les deux) ; s'il déclare des partis, l'hôte doit être dans le groupe, ou bien
+l'hôte est lui-même parti et au moins 2 joueurs confirment. Un match non confirmé en 10 min (`EXPIRE_MS`) est perdu ;
+un match appliqué ne l'est qu'une fois (anti-rejeu, gardé 7 jours). Limite de débit : 30 requêtes/min par identité.
+
+**Limites (pas de vrai anti-triche sans serveur de jeu)** : un hôte truqué peut mentir sur les frags ou déclarer
+parti un client en 1 contre 1 (l'hôte fait déjà autorité sur tout le match) ; plusieurs identités jetables peuvent
+s'arranger entre elles (pas de compte) ; en 1 contre 1, un hôte qui quitte n'est pas sanctionné (un client seul ne
+peut pas le déclarer parti) ; la cote annoncée dans `PkJoin` (affichage, matchmaking) est déclarative.
+
+Tests : lignes `classe …` de `run_tests()` (`src/tests/tests.c` : Elo, abandon, paliers, placement, identité, `velocity.ini` de test,
+lecture du TOP, construction du rapport) ; `node test.js` (lobby classé, Elo, enregistrement, mauvaise clé,
+concordance, désaccord, rapport seul, abandon, hôte parti, expiration, top, limite de débit) ;
+`--shot ranked.bmp` (fin de match classée) et `--shot menu.bmp` (encadré TOP 3 avec données factices).
+
 ### `NET_VER`
 
 `NET_VER` est comparé à chaque paquet reçu. **Incrémentez-le à chaque changement** de structure de
 paquet (`PkHead`, `NetPState`, `NetEvent`, `Pk*`, `SnapP`), de signification d'un champ, d'ajout d'un
 `EV_*` ou d'un `PK_*`, et aussi de **carte** (les index de cellules et `pickMask` doivent coïncider).
 Une version différente rend simplement les parties invisibles l'une à l'autre.
+
+Historique récent : 12 équipes ; 13 skin dans `NetPState` (dev) / carte et `W_VOID` (dépôt original) ; 14 fusion des
+deux ; 15 règles de partie et objectifs (`PkSnap` : `rMode`…, `obj` ; `EV_OBJ` ; spécialisation dans `NetPState`) ;
+**16** fusion avec le mode classé du dépôt original (qui avait pris 14 de son côté) : `PkJoin` (`rid`, `mmr`,
+`rplay`), `PkRoster` (cotes, identifiants, `ranked`, `mid`, partis), `PkAnnounce.ranked`, `PkWelcome.pad[1]` et
+`refused = 2`. La valeur fait foi dans `src/reseau/protocole.c`.
 
 ---
 
@@ -1215,7 +1335,7 @@ Une version différente rend simplement les parties invisibles l'une à l'autre.
 
 | Nom | Valeur | Effet |
 |---|---|---|
-| `MAXB` | 256 | boîtes de la carte (`boxes`) |
+| `MAXB` | 768 | boîtes de la carte (`boxes`) |
 | `MAP_S` | 1,4 | échelle horizontale de la carte (`ms()`) ; les hauteurs ne changent pas |
 | `MAXPICK` | 16 | cellules de recharge (limité aussi par les 16 bits de `pickMask`) |
 | `SPEED_ACCEL` / `SPEED_MAX` | 30 m/s² / 28 m/s | bande d'accélération `B_SPEED` (La Boucle) |
@@ -1241,7 +1361,8 @@ Une version différente rend simplement les parties invisibles l'une à l'autre.
 | `PVP_SCALE` | 0,7 | dégâts contre les joueurs = 70 % des dégâts contre les monstres |
 | `KILL_HEAL` | 30 PV | soin du tueur |
 | `NET_MAGIC` | `0x564C4F43` | signature des paquets (« VLOC ») |
-| `NET_VER` | 14 | version du protocole (voir §4) ; 12 = équipes, 13 = skin dans `NetPState` (dev) / carte dans WELCOME, ANNOUNCE, EV_MATCH et `W_VOID` (original) ; 14 = fusion des deux (`PkAnnounce` : `teams` + `map`) |
+| `NET_VER` | 16 | version du protocole (historique : §4, « `NET_VER` ») ; 15 = règles et objectifs, 16 = mode classé |
+| `RANK_*` | voir §4 | mode classé : `RANK_START` 1000, bornes 100 à 3000, `RANK_K` 32, `RANK_K_PLACE` 64 sur `RANK_PLACEMENT` 10 matchs, paliers, `RANK_END_WAIT`, `RANK_RETRY`, `RANK_TRIES` |
 | `MAXSPEC` | 4 | spectateurs en direct sur l'hôte |
 | `MAXFOUND` | 12 | parties mémorisées (LAN + en ligne ; 7 affichées) |
 | `LOBBY_DEFAULT` | `velocity-lobby.velocity-void.workers.dev` | adresse du lobby déployé (`lobby=` dans `velocity.ini` la remplace) |
@@ -1286,7 +1407,7 @@ main tout de suite : utilisez `start /wait`.
   `cfg_test.ini`, supprimé ensuite), contre-jeu sur une pièce adverse.
 - En fin de fichier : analyse d'une réponse STUN, adresses `ip:port`, lignes `room` / `gone` du lobby
   (`lb_line`), places de spectateurs (`MAXSPEC` acceptés, un retour ne prend pas une 2ᵉ place).
-- Le lobby a ses propres tests : `cd worker && node test.js` (24 vérifications, port 8799).
+- Le lobby a ses propres tests : `cd worker && node test.js` (54 vérifications avec le serveur de classement, port 8799).
 - Pendant la partie LAN simulée, `botLog` pointe sur le fichier de résultats : les lignes `netlog`
   (`[   0.96] degats : ...`) s'y mêlent.
 - Les scénarios utilisent un **couloir dégagé** autour de x = −20, z entre 12 et 70 : `build_level`
@@ -1315,6 +1436,15 @@ Ouvre la fenêtre sans l'activer, prépare une scène, la dessine une fois (`ren
 | `heberger` | écran HEBERGER UNE PARTIE (2v2, bots normaux) |
 | `dm_equipes` | scène de deathmatch en 2v2 (HUD d'équipes, allié marqué) ; `_fin` : fin de match ; `_bas` : regard vers le sol (ombres des joueurs) |
 | `sansbloom` / `sansombre` | (à combiner) coupe le bloom / les ombres dynamiques pour comparer |
+| `ranked` | fin de match classée : colonne CLASSE, « +18 MMR -> OR II » (`draw_rank_result`) |
+| `menu` (aussi) | l'encadré CLASSEMENT / TOP 3 est rempli de données factices |
+
+Autres noms reconnus (voir `src/plateforme/demarrage.c`, chercher `strstr(shotPath`) : `loadout` (`_charge`),
+`update`, `skinmenu`, `skins` (`_course`), `small` (fenêtre 1024 × 640), `carte` / `carte3d` (second écran, avec
+`_dm`, `_equipes`, `_fin`), `arene_nuit` / `_jour` / `_orage`, `dm_mort`, `dm_<arme>` (`enclume`, `lance`, `fleau`,
+`poings`, `egide`, `eventail`, `tesla`), `skills`, `bench_dm` (mesure), `boutique`, `armedepart`, `course`
+(`_depart`, `_fin`, `_aimant`), et dans la scène solo : `changearme`, `vie`, `style`, `elan`, `enclume`, `lance`,
+`fleau` (`_vide`), `poings` (`_upper`), `egide` (`_bas`), `scie` (`_main`), `tesla`, `eventail`.
 
 Options après le nom : `--map N` (carte, §3.18) et `--yaw A` (orientation). Sur une carte autre que l'Arène
 (hors `menu`/`settings`/`dm`), la scène est une vue de la carte depuis la caméra du menu ; le nom peut contenir
@@ -1327,6 +1457,7 @@ Pas de son, `velocity.ini` n'est ni lu ni écrit.
 
 ```
 velocity.exe --bot host|join [--name N] [--time S] [--log fichier.txt] [--botshot fichier.bmp] [--teams N] [--map N]
+             [--regles m,g,mu,b,s,min] [--loadout a,b[,m[,c]]] [--level 0-2] [--ranked] [--frags N]
 ```
 
 - `--bot host` → `botMode = 1` : héberge automatiquement (`ACT_HOST`). Tout autre mot → `botMode = 2` :
@@ -1353,7 +1484,8 @@ velocity.exe --bot host|join [--name N] [--time S] [--log fichier.txt] [--botsho
 
 Options réseau en ligne : `--lobby hote[:port]` (adresse du lobby), `--lanep` (adresses locales à la place de
 STUN : tout sur une machine), `--nolan` (pas de broadcast, pour que seule la voie du lobby soit testée),
-`--spec` (le bot client regarde la partie au lieu d'y jouer).
+`--spec` (le bot client regarde la partie au lieu d'y jouer). Mode classé : `--ranked` (partie classée, identité
+temporaire) et `--frags N` (limite de frags abaissée pour les tests), voir « Match classé » ci-dessous.
 
 ### Match bot via le lobby local
 
@@ -1367,6 +1499,30 @@ sleep 3; ./velocity.exe --bot join --spec --name Spec --time 30 --log spec.txt -
 Les journaux montrent `lobby >> host …`, `lobby << room …`, `lobby >> join …`, `lobby << go …`, `punch`, puis
 `connecte a la partie` ; le spectateur reçoit `id 8` (= `MAXP`) et le journal de l'hôte note `spectateur 0 arrive`.
 Arrêtez ensuite le lobby de test (pas de `taskkill` global sur `node`).
+
+**Match classé** (même lobby de test, qui sert aussi `/ranked/…` sur une base en mémoire) : ajouter `--ranked` aux
+deux bots (identité temporaire, rien n'est sauvegardé) ; `--frags N` (bots seulement) abaisse la limite de frags
+pour voir plusieurs matchs complets en 90 s :
+
+```bash
+F="--ranked --lobby 127.0.0.1:8787 --lanep --nolan --frags 2"
+./velocity.exe --bot host --name Hote --time 90 --log host.txt $F &
+sleep 2; ./velocity.exe --bot join --name Client --time 86 --log client.txt $F; wait
+```
+
+Les journaux montrent `classe : rapport de fin de match …`, `classe (serveur) : cote 1000 -> 1032 (+32) …` à chaque
+match, l'abandon du client à 86 s (`Client quitte le match en cours`, l'hôte gagne), puis
+`classe : cote finale (serveur) …, variation …` : les variations de l'hôte et du client doivent s'annuler.
+
+### `--export-textures dossier` (textures en `.bmp`)
+
+```
+velocity.exe --export-textures graphismes
+```
+
+Génère les textures du code (`make_textures`, sans lire les `.bmp` existants) et les écrit dans le dossier donné :
+`sol.bmp`, `mur.bmp`, `grain.bmp`, `pierre.bmp`, `enduit.bmp` (les noms lus par `tex_override`, §3.13), puis quitte.
+Rien n'est lu ni écrit dans `velocity.ini`.
 
 ### Match bot contre bot sur une seule machine
 
@@ -1582,5 +1738,7 @@ Même `main.c`, compilé avec `clang` (pas de MSVC). Tout ce qui est propre à l
 - **Lobby en ligne** : `mac_ws_open/send/recv/close/free` (bloquants, appelés depuis les fils `lb_reader`/`lb_writer`).
   `mac_ws_close` coupe la connexion ; `mac_ws_free` n'est appelé qu'après l'arrêt des fils (`lb_stop`).
 - **Bot adverse** (`ACT_VSBOT`) : `posix_spawn` du même exécutable (`_NSGetExecutablePath`).
+- **Mode classé** : requêtes HTTP par `/usr/bin/curl` (`http_request` de `src/plateforme/http.c`, comme `upd_http_get`), clé
+  d'identité tirée par `arc4random_buf` (Windows : `RtlGenRandom`).
 - **Statut** : écrit sans pouvoir compiler ni lancer sur un Mac (développé sous Windows). À valider sur machine réelle :
   clavier/souris, son, texte, plein écran, lobby, partie contre bot.

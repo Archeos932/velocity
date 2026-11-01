@@ -262,6 +262,39 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
 - Corrigé au passage : le sol d'une carte pouvait disparaître quand ses coins et son centre étaient sous d'autres
   boîtes (test de face enfouie sur une grille 5 × 5).
 
+## 22. Fusion avec le dépôt original (mode classé)
+
+Le dépôt original (`void19845/velocity`, branche `dev`) a ajouté le **mode classé** dans l'ancien `main.c` d'un seul
+bloc. Cette branche part de notre `dev` et y fusionne le sien : on garde l'arborescence `src/` et on y reporte son
+code.
+
+- **PARTIE CLASSEE** (bouton à côté de PARTIE RAPIDE) : cote Elo **calculée et stockée par le serveur** (Durable
+  Object `Ratings` du worker Cloudflare, `worker/src/ratings.js`), sans compte (identité anonyme `ranked_id` /
+  `ranked_key` dans `velocity.ini`). Matchmaking par cote via le lobby, 10 matchs de placement, paliers BRONZE à
+  MAITRE, encadré **CLASSEMENT / TOP 3** dans le menu principal, colonne CLASSE dans le tableau des scores et
+  « +18 MMR -> OR II » en fin de match. Quitter un match classé en cours = défaite.
+- **Où est le code** : nouveaux fichiers `src/reseau/classe.c` (formule Elo, paliers, identité),
+  `src/reseau/classe_match.c` (suivi du match, rapport de fin), `src/reseau/classe_serveur.c` (requêtes au serveur de classement) et `src/plateforme/http.c` (requêtes HTTP : WinHTTP sous Windows, `curl` sous macOS) ; le reste dans les
+  fichiers existants (`protocole.c`, `hote.c`, `client.c`, `en_ligne.c`, `config.c`, `menus.c`, `scores.c`, `hud.c`,
+  `demarrage.c`, `tests.c`). Détails : §4 « Mode classé » de `docs/CODE.md`.
+- **Une partie classée force chacun pour soi**, les règles par défaut (FRAGS, grappin, munitions normales, ni
+  boutique ni spécialisations), une carte sans portes de course et **aucun bot**, quels que soient les choix de HEBERGER : les nouveaux modes et la
+  boutique de cette branche ne faussent pas la cote.
+- **`NET_VER` passe à 16** : les deux côtés avaient pris des numéros différents (14 pour le mode classé chez
+  l'original, 15 pour les règles et objectifs ici). `PkAnnounce` gagne un champ **`ranked`** explicite (l'original
+  utilisait `pad[1]`, que notre `PkAnnounce` n'a plus depuis le champ `map`).
+- **Corrections au passage** :
+  - le bouton **MISE A JOUR** revient sur le dépôt `void19845/velocity` (`UPD_REPO`) au lieu du fork ;
+  - l'**aimant de visée** est coupé dès qu'un autre humain est dans la partie en réseau (il reste en solo et contre
+    des bots) ;
+  - le **second écran** est désactivé par défaut (`second_ecran=0`) : à activer dans PARAMETRES > 2e ECRAN.
+- **Textures exportées** : `velocity.exe --export-textures <dossier>` écrit les textures générées par le code en
+  `.bmp` (`sol`, `mur`, `grain`, `pierre`, `enduit`). Le dossier `graphismes/` du dépôt les contient (prêtes à
+  retoucher), et la release publie un **`Velocity-Windows.zip`** (exe + `graphismes/`) à côté de `velocity.exe`.
+- Tests : lignes `classe …` de `--test`, `node test.js` (lobby classé, Elo, concordance des rapports, abandon, TOP),
+  captures `--shot ranked.bmp` et `--shot menu.bmp`, match de bots classé sur le lobby local
+  (`--ranked --frags 2`, §6 de `docs/CODE.md`).
+
 ---
 
 ## Vérifications faites

@@ -511,3 +511,21 @@ static const SkillDef skillDef[SK_COUNT] = {
 static int wantSkill = SK_COIN;
 static int botSkillSet;                                   /* --skill / --loadout a,b,m,s : competence imposee au bot */
 static const float wpCd[WP_COUNT] = { RAIL_CD, ROCKET_CD, SG_CD, KIN_CD, 0.4f, MINE_CD, 0.1f };  /* barre de recharge du HUD */
+
+/* Mode classe : formule et paliers documentes dans docs/CODE.md ("Mode classe") ; worker/src/ratings.js
+ * (le serveur, qui fait autorite) utilise exactement les memes valeurs */
+#define RANK_START     1000   /* cote de depart */
+#define RANK_K         32.0f  /* facteur K apres le placement */
+#define RANK_K_PLACE   64.0f  /* facteur K pendant le placement */
+#define RANK_PLACEMENT 10     /* matchs de placement */
+#define RANK_MIN       100
+#define RANK_MAX       3000
+#define RANK_TIERS     6      /* BRONZE, ARGENT, OR, PLATINE, DIAMANT, MAITRE */
+#define RANK_ARGENT    900    /* seuils des paliers (chaque palier sauf MAITRE : divisions III, II, I) */
+#define RANK_OR        1050
+#define RANK_PLATINE   1200
+#define RANK_DIAMANT   1350
+#define RANK_MAITRE    1500
+#define RANK_END_WAIT  0.5f   /* fin de match : attente des derniers frags (PK_SNAP) avant le rapport */
+#define RANK_RETRY     2.5f   /* rapport en attente des autres joueurs : renvoye toutes les 2,5 s ... */
+#define RANK_TRIES     24     /* ... pendant 60 s au plus */

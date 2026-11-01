@@ -419,6 +419,55 @@ static void draw_host_menu(float cx, float cy) {
     if (uiClick) uiClick = 0;
 }
 
+/* encadre du menu : ma cote, puis le TOP 3 (podium or / argent / bronze) et mon rang */
+static void draw_rank_box(float cx, float cy) {
+    static const float medal[3][3] = { { 1.0f, 0.8f, 0.25f }, { 0.78f, 0.82f, 0.88f }, { 0.8f, 0.5f, 0.28f } };
+    char buf[128], tl[32];
+    const float *c = rank_col(myMmr);
+    rank_label(myMmr, rankPlayed, tl, sizeof tl);
+    float w = 380, x = cx + 380, y = cy - 214;
+    if (x + w > winW - 8) {                               /* fenetre etroite : une seule ligne sous le titre */
+        int k = snprintf(buf, sizeof buf, "%s %d", tl, myMmr);
+        if (rkTopState == 1)
+            for (int i = 0; i < rkTopN && k < (int)sizeof buf - 30; i++)
+                k += snprintf(buf + k, sizeof buf - k, "   %d. %s %d", i + 1, rkTop[i].name, rkTop[i].mmr);
+        text_c(0, cx, cy - 240, buf, c[0], c[1], c[2], 1);
+        return;
+    }
+    rect(x, y, w, 290, 0.03f, 0.04f, 0.08f, 0.82f);
+    rect(x, y, 4, 290, c[0], c[1], c[2], 1);
+    text(1, x + 18, y + 34, "CLASSEMENT", 0.5f, 0.9f, 1.0f, 1);
+    snprintf(buf, sizeof buf, "%s  -  %d", tl, myMmr);
+    text(1, x + 18, y + 70, buf, c[0], c[1], c[2], 1);
+    if (rkRank > 0 || rkMeRank > 0) snprintf(buf, sizeof buf, "#%d  -  %d match%s, %d victoire%s", rkMeRank ? rkMeRank : rkRank,
+                                           rankPlayed, rankPlayed > 1 ? "s" : "", rankWins, rankWins > 1 ? "s" : "");
+    else snprintf(buf, sizeof buf, "%d match%s classe%s, %d victoire%s", rankPlayed, rankPlayed > 1 ? "s" : "",
+                  rankPlayed > 1 ? "s" : "", rankWins, rankWins > 1 ? "s" : "");
+    text(0, x + 18, y + 96, buf, 0.7f, 0.75f, 0.85f, 1);
+    text(0, x + 18, y + 132, "TOP 3", 0.9f, 0.9f, 1.0f, 1);
+    rect(x + 18, y + 140, w - 36, 2, 0.4f, 0.85f, 1.0f, 0.35f);
+    if (rkTopState != 1) {
+        text(0, x + 18, y + 176, rkTopState == 2 ? "classement indisponible" : "chargement ...", 0.6f, 0.6f, 0.7f, 1);
+        return;
+    }
+    if (!rkTopN) text(0, x + 18, y + 176, "personne n'a fini son placement", 0.6f, 0.6f, 0.7f, 1);
+    for (int i = 0; i < rkTopN; i++) {
+        float yy = y + 150 + i * 32.0f;
+        const float *m = medal[i];
+        rect(x + 18, yy, 26, 26, m[0], m[1], m[2], 1);
+        snprintf(buf, sizeof buf, "%d", i + 1);
+        text_c(0, x + 31, yy + 19, buf, 0.08f, 0.08f, 0.1f, 1);
+        text(0, x + 54, yy + 19, rkTop[i].name, m[0], m[1], m[2], 1);
+        snprintf(buf, sizeof buf, "%d  %s", rkTop[i].mmr, rkTop[i].tier);
+        text(0, x + w - 18 - fontW[0] * (float)strlen(buf), yy + 19, buf, 0.85f, 0.85f, 0.9f, 1);
+    }
+    if (rkMeRank > 3 || (!rkMeRank && rankPlayed < RANK_PLACEMENT)) {   /* 4e ligne : moi, si je ne suis pas sur le podium */
+        if (rkMeRank) snprintf(buf, sizeof buf, "toi : #%d, cote %d", rkMeRank, myMmr);
+        else snprintf(buf, sizeof buf, "toi : en placement (%d/%d), cote %d", rankPlayed, RANK_PLACEMENT, myMmr);
+        text(0, x + 18, y + 270, buf, c[0], c[1], c[2], 1);
+    }
+}
+
 static void draw_main_menu(float cx, float cy) {
     /* assombri surtout en haut (lisibilite du titre) ; vers le bas, le decor (sol, arene) reste visible */
     rect_vgrad(0, 0, (float)winW, (float)winH, 0.02f, 0.02f, 0.06f, 0.78f, 0.30f);
@@ -448,7 +497,9 @@ static void draw_main_menu(float cx, float cy) {
     for (int lv = 0; lv < 3; lv++)                        /* un duel contre un bot : trois niveaux */
         if (button(bx + lv * 142, y, 136, 46, botLevelNames[lv])) { pendingAction = ACT_VSBOT; pendingArg = lv; hostFfa = 1; }
     y += 54;
-    if (button(bx, y, bw, 46, "PARTIE RAPIDE  -  EN LIGNE")) pendingAction = ACT_QUICK;
+    if (button(bx, y, 200, 46, "PARTIE RAPIDE")) pendingAction = ACT_QUICK;
+    if (button(bx + 208, y, bw - 208, 46, "PARTIE CLASSEE")) pendingAction = ACT_RANKED;
+    rect(bx + 208, y + 43, bw - 208, 3, 1.0f, 0.8f, 0.3f, 0.9f);   /* liseret dore : mode classe */
     y += 54;
     if (button(bx, y, bw, 46, "HEBERGER UNE PARTIE")) { hostOpen = 1; uiFocus = 0; }
     y += 54;
@@ -468,6 +519,7 @@ static void draw_main_menu(float cx, float cy) {
     if (button(bx, y, bw, 46, "QUITTER")) pendingAction = ACT_QUIT;
     draw_status(bx, y + 72);
     draw_controls(cx - 130, cy - 200);
+    draw_rank_box(cx, cy);
     if (uiClick) { uiClick = 0; uiFocus = 0; }
 }
 
@@ -487,12 +539,12 @@ static void draw_join_menu(float cx, float cy) {
             for (int j = 0; j < nFound; j++) if (!found[j].online && !strcmp(found[j].name, found[i].name)) dup = 1;
         if (dup) continue;
         if (found[i].online)
-            snprintf(buf, sizeof buf, "[EN LIGNE]  %s    %d/%d joueurs%s", found[i].name, found[i].players, found[i].maxp,
-                     found[i].spec ? "  (spectateurs)" : "");
+            snprintf(buf, sizeof buf, "[EN LIGNE]%s  %s    %d/%d joueurs%s", found[i].ranked ? " [CLASSEE]" : "", found[i].name,
+                     found[i].players, found[i].maxp, found[i].spec ? "  (spectateurs)" : "");
         else {
             char mode[16];
             if (found[i].teams > 0) snprintf(mode, sizeof mode, "%dV%d", found[i].teams, found[i].teams); else snprintf(mode, sizeof mode, "LIBRE");
-            snprintf(buf, sizeof buf, "[LAN %s]  %s  -  %s    %d/%d    %s", mode, found[i].name,
+            snprintf(buf, sizeof buf, "[LAN %s]%s  %s  -  %s    %d/%d    %s", mode, found[i].ranked ? " [CLASSEE]" : "", found[i].name,
                      found[i].map >= 0 ? maps[found[i].map].name : "?", found[i].players, found[i].maxp,
                      inet_ntoa(found[i].addr.sin_addr));
         }

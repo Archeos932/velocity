@@ -845,7 +845,8 @@ static void draw_hud(void) {
             text_c(0, cx, by + bh + 20, buf, 0.6f, 0.6f, 0.7f, 0.9f);
             draw_radar(30, 84, winH < 800 ? 120.0f : 160.0f);
         } else {
-            snprintf(buf, sizeof buf, "DEATHMATCH LAN   %d joueur%s   %d:%02d", count, count > 1 ? "s" : "", left / 60, left % 60);
+            snprintf(buf, sizeof buf, "%s   %d joueur%s   %d:%02d", ranked ? "PARTIE CLASSEE" : "DEATHMATCH LAN", count,
+                     count > 1 ? "s" : "", left / 60, left % 60);
             text(0, 30, 40, buf, 0.85f, 0.85f, 0.95f, 1);
             snprintf(buf, sizeof buf, "FRAGS %d / %d", NP[myId].kills, fragLimit);
             text(1, 30, 78, buf, 1, 1, 1, 1);
@@ -881,6 +882,7 @@ static void draw_hud(void) {
         const float *wc = teamSize > 0 && matchWinner < TEAM_DRAW ? teamCol[matchWinner & 1] : NULL;
         text_c(2, cx, cy - 250, buf, wc ? wc[0] : 1, wc ? wc[1] : 0.85f, wc ? wc[2] : 0.3f, 1);
         draw_scoreboard(cx, cy);
+        if (ranked && !spectating) draw_rank_result(cx, cy);
         snprintf(buf, sizeof buf, "nouveau match dans %d s", (int)ceilf(fmaxf(matchEndT, 0)));
         text_c(1, cx, winH - 150.0f, buf, 0.9f, 0.9f, 0.9f, 1);
     } else if (P.dead && killcam_active()) {              /* camera de mort : qui, avec quoi, combien de PV il lui reste */

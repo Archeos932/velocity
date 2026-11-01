@@ -324,7 +324,7 @@ static void lb_safe_name(char *out, int n) {                 /* le lobby n'accep
     if (!k) snprintf(out, n, "joueur");
 }
 
-static void lb_room(const char *id, int players, int maxp, int spec, const char *ep, const char *name) {
+static void lb_room(const char *id, int players, int maxp, int spec, const char *ep, const char *name, int rk, int mmr) {
     struct sockaddr_in a;
     if (!parse_ep(ep, &a)) return;
     int k = -1;
@@ -337,14 +337,15 @@ static void lb_room(const char *id, int players, int maxp, int spec, const char 
     snprintf(found[k].id, sizeof found[k].id, "%s", id);
     snprintf(found[k].name, sizeof found[k].name, "%s", name);
     found[k].addr = a; found[k].players = players; found[k].maxp = maxp; found[k].spec = spec;
+    found[k].ranked = rk; found[k].mmr = mmr;             /* mode classe */
     found[k].online = 1; found[k].seen = nowT; found[k].map = -1;
 }
 
 static void lb_line(const char *s) {
     char a[64], b[64], c[64];
-    int n1, n2, n3;
+    int n1, n2, n3, n4 = 0, n5 = 0;
     netlog("lobby << %s", s);
-    if (sscanf(s, "room %7s %d %d %d %63s %63s", a, &n1, &n2, &n3, b, c) == 6) lb_room(a, n1, n2, n3, b, c);
+    if (sscanf(s, "room %7s %d %d %d %63s %63s %d %d", a, &n1, &n2, &n3, b, c, &n4, &n5) >= 6) lb_room(a, n1, n2, n3, b, c, n4 & 1, n5);
     else if (sscanf(s, "gone %7s", a) == 1) {
         for (int i = 0; i < nFound; i++) if (found[i].online && !strcmp(found[i].id, a)) { found[i] = found[--nFound]; break; }
     } else if (sscanf(s, "go %63s %d", a, &n1) == 2) {
@@ -357,7 +358,7 @@ static void lb_line(const char *s) {
         for (int i = 0; i < 4; i++) if (punchQ[i].left <= 0) { k = i; break; }
         punchQ[k].addr = t; punchQ[k].left = 4; punchQ[k].acc = 1;
     } else if (!strcmp(s, "none")) {
-        set_status("aucune partie en ligne : tu en crees une");
+        set_status(rankedWant ? "aucune partie classee : tu en crees une" : "aucune partie en ligne : tu en crees une");
         lbWantHost = 1;
     } else if (!strcmp(s, "err full")) set_status("partie pleine");
     else if (!strcmp(s, "err unknown")) set_status("cette partie n'existe plus");
@@ -407,12 +408,14 @@ static void lb_update(float dt) {
         for (int i = 0; i < MAXP; i++) pl += NP[i].active;
         if (pl != lbLastPlayers || sp != lbLastSpec || nowT - lbHostT > 20) {
             char pub[40], lan[40], nm[16];
+            int sum = 0;                                  /* mode classe : cote moyenne du salon */
+            for (int i = 0; i < MAXP; i++) if (NP[i].active) sum += rkMmr[i] ? rkMmr[i] : RANK_START;
             lbLastPlayers = pl; lbLastSpec = sp; lbHostT = nowT;
             ep_text(&myPub, pub, sizeof pub);
             lan_ep_text(lan, sizeof lan, NET_PORT);
             lb_safe_name(nm, sizeof nm);
             if (teamSize > 0) snprintf(nm + (strlen(nm) > 11 ? 11 : strlen(nm)), 5, "_%dV%d", teamSize, teamSize);   /* le mode se lit dans le nom (15 car. max) */
-            lb_send("host %d %d %d %d %s %s %s", NET_VER, pl, host_max_players(), sp, pub, lan, nm);
+            lb_send("host %d %d %d %d %s %s %s %d %d", NET_VER, pl, host_max_players(), sp, pub, lan, nm, ranked, pl ? sum / pl : 0);
         }
     }
 
@@ -421,7 +424,7 @@ static void lb_update(float dt) {
             char me[40];
             ep_text(&myPub, me, sizeof me);
             if (reqKind == 'j') lb_send("join %s %s %d", reqId, me, reqSpec);
-            else lb_send("quick %d %s", NET_VER, me);
+            else lb_send("quick %d %s %d %d", NET_VER, me, rankedWant, myMmr);   /* mode classe : salon classe de cote proche */
             reqKind = 0; reqSentT = nowT;
         } else if (nowT - reqT > 10) {
             set_status(lbState == LB_ON ? "adresse publique introuvable (STUN bloque ?)" : "lobby injoignable");
@@ -444,11 +447,32 @@ static void lb_update(float dt) {
 /* rejoindre / regarder la partie found[i] : directement (LAN) ou via le lobby (en ligne) */
 static void join_found(int i, int spec) {
     if (i < 0 || i >= nFound) return;
+    if (found[i].ranked && !spec && !rkOnline) {          /* mode classe : sans serveur de classement, pas de resultat */
+        set_status("partie classee : serveur de classement injoignable");
+        return;
+    }
     if (found[i].online) {
         reqKind = 'j'; reqSpec = spec; reqT = nowT;
         snprintf(reqId, sizeof reqId, "%s", found[i].id);
         set_status(spec ? "demande pour regarder la partie ..." : "demande de connexion ...");
     } else net_connect_ex(found[i].addr, spec, 0);
+}
+
+/* PARTIE CLASSEE : il faut le serveur de classement (hello reussi) ; la partie rapide du lobby cherche un salon
+ * classe de cote proche, sinon on heberge une partie classee */
+static void ranked_play(void) {
+    if (!onlineOn) { set_status("PARTIE CLASSEE : active les parties en ligne (PARAMETRES)"); return; }
+    if (!rkOnline) {
+        rkAfterHello = 1;
+        if (!rkHelloBusy) rkHelloAt = nowT;               /* relance le hello tout de suite */
+        set_status("connexion au serveur de classement ...");
+        return;
+    }
+    if (!net_browse_start()) return;
+    appState = APP_JOIN;
+    rankedWant = 1;
+    reqKind = 'q'; reqT = nowT;
+    set_status("recherche d'une partie classee ...");
 }
 
 static void quick_play(void) {

@@ -22,6 +22,7 @@ static void stop_bot_proc(void) {
 }
 
 static void net_shutdown(void) {
+    rk_shutdown();                                        /* mode classe : rapport en suspens, remise a zero */
     stop_bot_proc();
     if (sock != INVALID_SOCKET) {
         PkHead l;
@@ -50,6 +51,7 @@ static void menu_backdrop(void) {
 }
 
 static void net_disconnect_to_menu(const char *why) {
+    rk_host_gone();                                       /* mode classe : l'hote parti en plein match */
     net_shutdown();
     set_status(why);
     set_capture(0);
@@ -121,6 +123,7 @@ static void found_add(const PkAnnounce *a, const struct sockaddr_in *from) {
     found[k].addr = *from;
     found[k].players = a->players; found[k].maxp = a->maxp; found[k].teams = a->teams;
     found[k].map = a->map < NMAPS ? a->map : -1;
+    found[k].ranked = a->ranked & 1;                      /* mode classe */
     found[k].seen = nowT;
 }
 
@@ -133,10 +136,13 @@ static void client_recv(PkHead *h, int n, struct sockaddr_in *from) {
     case PK_WELCOME:
         if (joining && n >= (int)sizeof(PkWelcome)) {
             const PkWelcome *w = (const PkWelcome *)h;
-            if (w->refused) { joining = 0; set_status(joinSpec ? "plus de place pour les spectateurs" : "partie pleine"); }
+            if (w->refused == 2) { joining = 0; set_status("partie classee : identite de classement requise"); }
+            else if (w->refused) { joining = 0; set_status(joinSpec ? "plus de place pour les spectateurs" : "partie pleine"); }
             else {
                 if (w->pad[0] < NMAPS && w->pad[0] != curMap) load_map(w->pad[0]);   /* la carte de l'hote, avant de demarrer */
+                ranked = w->pad[1] & 1;                   /* mode classe */
                 on_welcome(w->id);
+                if (ranked) netlog("classe : partie classee");
             }
         }
         break;
@@ -147,6 +153,11 @@ static void client_recv(PkHead *h, int n, struct sockaddr_in *from) {
         if (fromHost && n >= (int)sizeof(PkRoster)) {
             const PkRoster *r = (const PkRoster *)h;
             for (int i = 0; i < MAXP; i++) { memcpy(NP[i].name, r->names[i], 16); NP[i].name[15] = 0; }
+            for (int i = 0; i < MAXP; i++) {              /* mode classe */
+                rkMmr[i] = r->mmr[i]; rkPlay[i] = r->rplay[i];
+                memcpy(rkRid[i], r->rid[i], 16); memcpy(rkLeft[i], r->left[i], 16);
+            }
+            ranked = r->ranked & 1; rkLeftN = r->nleft > MAXP ? MAXP : r->nleft; memcpy(rkMid, r->mid, 8);
         }
         break;
     case PK_EVENT:
@@ -248,11 +259,7 @@ static void net_update(float dt) {
             }
             if (joining && joinAcc >= (joinOnline ? 0.2f : 0.4f)) {   /* en ligne : les paquets repetes percent le NAT */
                 joinAcc = 0;
-                PkJoin j;
-                head(&j.h, PK_JOIN);
-                memcpy(j.name, myName, 16);
-                j.spec = (unsigned char)joinSpec; j.pad[0] = j.pad[1] = j.pad[2] = 0;
-                net_send(&j, sizeof j, &hostAddr);
+                client_send_join();                       /* nom, spectateur et identite / cote du mode classe */
                 if (nowT - joinStartT > (joinOnline ? 10 : 5)) {
                     joining = 0;
                     set_status(joinOnline ? "connexion impossible (NAT strict ?) - essaie la saisie d'IP" : "pas de reponse de l'hote");
@@ -278,6 +285,7 @@ static void net_update(float dt) {
             if (nowT - lastSnapT > 5) { net_disconnect_to_menu("connexion perdue avec l'hote"); return; }
         }
     }
+    rk_tick(dt);                                          /* mode classe */
     for (int i = 0; i < MAXP; i++) {                     /* lissage des autres joueurs */
         if (i == myId || !NP[i].active) continue;
         float ahead = (float)fmin(nowT - NP[i].recvT, 0.1);
@@ -285,6 +293,23 @@ static void net_update(float dt) {
         if (vlen(vsub(target, NP[i].disp)) > 4) NP[i].disp = target;
         else NP[i].disp = vlerp(NP[i].disp, target, fminf(1, dt * 25));
     }
+}
+
+/* regles de la partie hebergee : celles de HEBERGER (wantTeams, wantRules), ou les regles par defaut pour une partie
+ * rapide, le duel du menu et une partie classee (chacun pour soi, FRAGS, grappin selon la carte, munitions normales,
+ * sans boutique ni specialisations, duree par defaut). Fixe teamSize, rules et fragLimit ; renvoie la carte a charger
+ * (classee : une carte qui a un deathmatch FRAGS, pas une carte de course) */
+static int host_setup_rules(void) {
+    int dflt = hostQuick || hostFfa || ranked, m = ranked ? rk_map_pick(menuMap) : menuMap;
+    teamSize = dflt ? 0 : wantTeams;                      /* partie rapide, duel du menu, classee : chacun pour soi */
+    rules = dflt ? (MatchRules){ MODE_FRAGS, 1, AMMO_NORMAL, 0, 0, 10 } : wantRules;   /* regles de HEBERGER */
+    if (!mode_ok(rules.mode, m)) rules.mode = MODE_FRAGS;        /* objectifs absents de cette carte */
+    if (mode_team(rules.mode) && teamSize <= 0) teamSize = 2;    /* modes d'equipe : 2 contre 2 au moins */
+    hostFfa = 0;
+    fragLimit = hostQuick ? FRAG_LIMIT_QUICK : team_frag_limit(teamSize); hostQuick = 0;
+    if (rules.mode != MODE_FRAGS) fragLimit = 255;        /* chrono et objectifs : pas de limite de frags */
+    if (ranked) fragLimit = rkFragsTest > 0 ? rkFragsTest : FRAG_LIMIT;   /* classe : limite par defaut (--frags : tests) */
+    return m;
 }
 
 static int net_host_start(void) {
@@ -295,21 +320,20 @@ static int net_host_start(void) {
     NP[0].active = 1;
     memcpy(NP[0].name, myName, 16);
     find_local_ip();
-    if (curMap != menuMap) load_map(menuMap);             /* carte choisie dans le menu (ou --map) */
+    ranked = hostRanked && rkOnline; hostRanked = 0;      /* mode classe : regles figees (host_setup_rules) */
+    int m = host_setup_rules();
+    if (curMap != m) load_map(m);                         /* carte choisie dans le menu (ou --map) */
     dm_local_start();
     matchOver = 0; matchT = 0;
-    teamSize = hostQuick || hostFfa ? 0 : wantTeams;      /* partie rapide et duel du menu : chacun pour soi */
-    rules = hostQuick || hostFfa ? (MatchRules){ MODE_FRAGS, 1, AMMO_NORMAL, 0, 0, 10 } : wantRules;   /* regles de HEBERGER */
-    if (!mode_ok(rules.mode, curMap)) rules.mode = MODE_FRAGS;   /* objectifs absents de cette carte */
-    if (mode_team(rules.mode) && teamSize <= 0) teamSize = 2;    /* modes d'equipe : 2 contre 2 au moins */
-    hostFfa = 0;
-    fragLimit = hostQuick ? FRAG_LIMIT_QUICK : team_frag_limit(teamSize); hostQuick = 0;
-    if (rules.mode != MODE_FRAGS) fragLimit = 255;        /* chrono et objectifs : pas de limite de frags */
+    if (ranked) rk_new_match();
+    rkMmr[0] = myMmr; rkPlay[0] = rankPlayed;
+    if (hex_ok(rkId, 32)) bin_of(rkId, rkRid[0], 16);
     mode_reset(); eco_reset();
     NP[0].team = 0;
     host_respawn(0);
-    netlog("partie hebergee, ip %s, %d frags, equipes %d, mode %s, grappin %d, munitions %s, boutique %d, specs %d, %d min",
-           hostIpText, fragLimit, teamSize, modeNames[rules.mode], rules.hook, ammoRuleNames[rules.ammo], rules.shop, rules.specs, rules.minutes);
+    netlog("partie hebergee, ip %s, %d frags, equipes %d, mode %s, grappin %d, munitions %s, boutique %d, specs %d, %d min%s",
+           hostIpText, fragLimit, teamSize, modeNames[rules.mode], rules.hook, ammoRuleNames[rules.ammo], rules.shop, rules.specs, rules.minutes,
+           ranked ? ", CLASSEE" : "");
     return 1;
 }
 
