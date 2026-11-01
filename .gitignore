@@ -7,6 +7,8 @@ musique.exe
 *.ilk
 test.txt
 *.bmp
+# sauf les textures du jeu, exportees par --export-textures (modifiables)
+!graphismes/*.bmp
 *.png
 host.txt
 client.txt

@@ -167,6 +167,22 @@ static int velocity_main(const char *cmd) {
 #endif
     memcpy(binds, bindDefault, sizeof binds);
     if (cmd && strncmp(cmd, "--test ", 7) == 0) { run_tests(cmd + 7); return 0; }
+    if (cmd && strncmp(cmd, "--export-textures ", 18) == 0) {   /* --export-textures dossier : textures generees -> .bmp, sans fenetre */
+        char dir[512];
+        const char *q = cmd + 18;
+        while (*q == ' ' || *q == '"') q++;
+        snprintf(dir, sizeof dir, "%s", q);               /* tout le reste : le dossier peut contenir des espaces */
+        for (size_t n = strlen(dir); n > 0 && (dir[n - 1] == ' ' || dir[n - 1] == '"' || dir[n - 1] == '/' || dir[n - 1] == '\\'); n--)
+            dir[n - 1] = 0;
+        if (!dir[0]) return 1;
+#ifdef _WIN32
+        CreateDirectoryA(dir, NULL);                      /* deja present : sans effet */
+#else
+        mkdir(dir, 0755);
+#endif
+        gfx_load_all();                                   /* reglages de graphismes/rendu.ini, comme le jeu */
+        return export_textures(dir) == TEXG_N ? 0 : 1;
+    }
     const char *shotPath = NULL;
     static char shotBuf[512];
     float shotYaw = 0, shotPitch = -1000;

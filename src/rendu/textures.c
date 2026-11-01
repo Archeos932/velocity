@@ -58,7 +58,7 @@ static void upload_rgb_mip(GLuint *tex, unsigned char *img, int N) {
     }
 }
 
-/* texture remplacee par une image du dossier graphismes (sol.bmp, mur.bmp, grain.bmp) ? */
+/* texture remplacee par une image du dossier graphismes (sol.bmp, mur.bmp, pierre.bmp, enduit.bmp, grain.bmp) ? */
 static int tex_override(GLuint *tex, const char *name) {
     char p[600];
     int n = 0;
@@ -71,151 +71,233 @@ static int tex_override(GLuint *tex, const char *name) {
     return 1;
 }
 
-static void make_textures(void) {
+/* ---- textures generees ----------------------------------------------------------------------------------
+ * Chaque generateur calcule une image RGB (de haut en bas, malloc) sur le processeur, sans OpenGL, a partir
+ * des reglages de rendu.ini (sol_texture, mur_texture, pierre, enduit, grain_force) ; make_textures l'envoie
+ * telle quelle (upload_rgb_mip), --export-textures l'ecrit en .bmp sous le nom que tex_override cherche.
+ * Rien ne depend de la carte, de l'ambiance ni de la qualite : une seule image par texture. */
+/* --- sol/plafond : dalles biseautees, boulons, taches d'usure ---------------------- */
+static unsigned char *tex_gen_sol(int *size) {
     unsigned int s;
-
-    /* --- sol/plafond : dalles biseautees, boulons, taches d'usure ---------------------- */
-    if (!tex_override(&texGrid, "sol.bmp")) {
-        int N = 256, panel = (int)gxFloorTex[0];
-        unsigned char *img = (unsigned char *)malloc(N * N * 3);
-        float stx[10], sty[10], str[10], stp[10];
-        s = 0xA17Eu;
-        for (int i = 0; i < 10; i++) {
-            stx[i] = tnoise(&s) * N; sty[i] = tnoise(&s) * N;
-            str[i] = 10 + tnoise(&s) * 22; stp[i] = 0.08f + tnoise(&s) * 0.14f;
+    int N = 256, panel = (int)gxFloorTex[0];
+    unsigned char *img = (unsigned char *)malloc(N * N * 3);
+    float stx[10], sty[10], str[10], stp[10];
+    s = 0xA17Eu;
+    for (int i = 0; i < 10; i++) {
+        stx[i] = tnoise(&s) * N; sty[i] = tnoise(&s) * N;
+        str[i] = 10 + tnoise(&s) * 22; stp[i] = 0.08f + tnoise(&s) * 0.14f;
+    }
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            int px = x % panel, py = y % panel;
+            float dx = (float)(px < panel - px ? px : panel - px), dy = (float)(py < panel - py ? py : panel - py);
+            float v = gxFloorTex[1];
+            v += sinf(x * 0.045f + 1.3f) * cosf(y * 0.037f + 0.7f) * 0.05f;       /* grain large */
+            v += sinf(x * 0.21f + py * 0.3f) * cosf(y * 0.17f) * 0.015f;          /* ondulation fine */
+            v += (tnoise(&s) * 2 - 1) * 0.035f;                                  /* grain fin */
+            /* joint biseaute en degrade (pas de marches nettes = moins "dessine") */
+            v -= 0.15f * fmaxf(expf(-dx * dx / 1.3f), expf(-dy * dy / 1.3f));            /* fond du joint */
+            v += 0.08f * fmaxf(expf(-(dx - 2.4f) * (dx - 2.4f) / 1.1f),
+                                expf(-(dy - 2.4f) * (dy - 2.4f) / 1.1f));                  /* arete eclairee */
+            {                                                                     /* un boulon par dalle, en degrade */
+                float bx = (float)px - 9, by = (float)py - 9, br2 = bx * bx + by * by;
+                v -= 0.12f * expf(-br2 / 5.0f);
+                v += 0.17f * expf(-br2 / 0.6f);
+            }
+            for (int i = 0; i < 10; i++) {                                       /* taches, repetition sans couture */
+                float ddx = x - stx[i], ddy = y - sty[i];
+                if (fabsf(ddx) > N * 0.5f) ddx -= (ddx > 0 ? (float)N : -(float)N);
+                if (fabsf(ddy) > N * 0.5f) ddy -= (ddy > 0 ? (float)N : -(float)N);
+                float d = sqrtf(ddx * ddx + ddy * ddy);
+                if (d < str[i]) { float k = 1 - d / str[i]; v -= stp[i] * k * k; }
+            }
+            float warm = sinf(x * 0.013f + y * 0.021f + 4.0f) * 0.02f;   /* teinte minerale tres legere */
+            img[(y * N + x) * 3 + 0] = (unsigned char)(clampf(v + warm, 0, 1) * 255);
+            img[(y * N + x) * 3 + 1] = (unsigned char)(clampf(v, 0, 1) * 255);
+            img[(y * N + x) * 3 + 2] = (unsigned char)(clampf(v - warm, 0, 1) * 255);
         }
-        for (int y = 0; y < N; y++)
-            for (int x = 0; x < N; x++) {
-                int px = x % panel, py = y % panel;
-                float dx = (float)(px < panel - px ? px : panel - px), dy = (float)(py < panel - py ? py : panel - py);
-                float v = gxFloorTex[1];
-                v += sinf(x * 0.045f + 1.3f) * cosf(y * 0.037f + 0.7f) * 0.05f;       /* grain large */
-                v += sinf(x * 0.21f + py * 0.3f) * cosf(y * 0.17f) * 0.015f;          /* ondulation fine */
-                v += (tnoise(&s) * 2 - 1) * 0.035f;                                  /* grain fin */
-                /* joint biseaute en degrade (pas de marches nettes = moins "dessine") */
-                v -= 0.15f * fmaxf(expf(-dx * dx / 1.3f), expf(-dy * dy / 1.3f));            /* fond du joint */
-                v += 0.08f * fmaxf(expf(-(dx - 2.4f) * (dx - 2.4f) / 1.1f),
-                                    expf(-(dy - 2.4f) * (dy - 2.4f) / 1.1f));                  /* arete eclairee */
-                {                                                                     /* un boulon par dalle, en degrade */
-                    float bx = (float)px - 9, by = (float)py - 9, br2 = bx * bx + by * by;
-                    v -= 0.12f * expf(-br2 / 5.0f);
-                    v += 0.17f * expf(-br2 / 0.6f);
-                }
-                for (int i = 0; i < 10; i++) {                                       /* taches, repetition sans couture */
-                    float ddx = x - stx[i], ddy = y - sty[i];
-                    if (fabsf(ddx) > N * 0.5f) ddx -= (ddx > 0 ? (float)N : -(float)N);
-                    if (fabsf(ddy) > N * 0.5f) ddy -= (ddy > 0 ? (float)N : -(float)N);
-                    float d = sqrtf(ddx * ddx + ddy * ddy);
-                    if (d < str[i]) { float k = 1 - d / str[i]; v -= stp[i] * k * k; }
-                }
-                float warm = sinf(x * 0.013f + y * 0.021f + 4.0f) * 0.02f;   /* teinte minerale tres legere */
-                img[(y * N + x) * 3 + 0] = (unsigned char)(clampf(v + warm, 0, 1) * 255);
-                img[(y * N + x) * 3 + 1] = (unsigned char)(clampf(v, 0, 1) * 255);
-                img[(y * N + x) * 3 + 2] = (unsigned char)(clampf(v - warm, 0, 1) * 255);
-            }
-        upload_rgb_mip(&texGrid, img, N);
-        free(img);
-    }
+    *size = N;
+    return img;
+}
 
-    /* --- murs : plaques metalliques boulonnees, brossage vertical, haut de plaque eclaire --- */
-    if (!tex_override(&texWall, "mur.bmp")) {
-        int N = 256, panelX = (int)gxWallTex[0], panelY = (int)gxWallTex[1];
-        unsigned char *img = (unsigned char *)malloc(N * N * 3);
-        float colTint[256];
-        s = 0x5EEDu;
-        for (int x = 0; x < N; x++) colTint[x] = (tnoise(&s) * 2 - 1) * 0.03f;        /* stries de brossage */
-        for (int y = 0; y < N; y++)
-            for (int x = 0; x < N; x++) {
-                int panelI = x / panelX, panelJ = y / panelY;
-                unsigned int ph = (unsigned int)(panelI * 97 + panelJ * 193 + 71);
-                ph = ph * 1664525u + 1013904223u;
-                float tint = ((float)(ph >> 8) * (1.0f / 16777216.0f) * 2 - 1) * 0.045f;  /* teinte par plaque */
-                int px = x % panelX, py = y % panelY;
-                float dx = (float)(px < panelX - px ? px : panelX - px), dy = (float)(py < panelY - py ? py : panelY - py);
-                float v = gxWallTex[2] + tint + colTint[x];
-                /* joint en degrade, comme le sol : evite l'effet "trait d'encre" */
-                v -= 0.14f * fmaxf(expf(-dx * dx / 1.3f), expf(-dy * dy / 1.3f));
-                v += 0.09f * fmaxf(expf(-(dx - 2.4f) * (dx - 2.4f) / 1.1f),
-                                    expf(-(dy - 2.4f) * (dy - 2.4f) / 1.1f));
-                if (py > 2 && py < 7) v += 0.05f;                                     /* le haut accroche la lumiere */
-                {                                                                      /* boulons aux 4 coins de la plaque */
-                    int cx = px < panelX / 2 ? 8 : panelX - 9, cy = py < panelY / 2 ? 8 : panelY - 9;
-                    float bdx = (float)(px - cx), bdy = (float)(py - cy), br2 = bdx * bdx + bdy * bdy;
-                    v -= 0.11f * expf(-br2 / 4.5f);
-                    v += 0.16f * expf(-br2 / 0.55f);
-                }
-                v += (tnoise(&s) * 2 - 1) * 0.02f;
-                float warm = tint * 0.5f;                     /* plaques legerement plus froides ou rouillees entre elles */
-                img[(y * N + x) * 3 + 0] = (unsigned char)(clampf(v + warm, 0, 1) * 255);
-                img[(y * N + x) * 3 + 1] = (unsigned char)(clampf(v, 0, 1) * 255);
-                img[(y * N + x) * 3 + 2] = (unsigned char)(clampf(v - warm * 1.4f, 0, 1) * 255);
+/* --- murs : plaques metalliques boulonnees, brossage vertical, haut de plaque eclaire --- */
+static unsigned char *tex_gen_mur(int *size) {
+    unsigned int s;
+    int N = 256, panelX = (int)gxWallTex[0], panelY = (int)gxWallTex[1];
+    unsigned char *img = (unsigned char *)malloc(N * N * 3);
+    float colTint[256];
+    s = 0x5EEDu;
+    for (int x = 0; x < N; x++) colTint[x] = (tnoise(&s) * 2 - 1) * 0.03f;        /* stries de brossage */
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            int panelI = x / panelX, panelJ = y / panelY;
+            unsigned int ph = (unsigned int)(panelI * 97 + panelJ * 193 + 71);
+            ph = ph * 1664525u + 1013904223u;
+            float tint = ((float)(ph >> 8) * (1.0f / 16777216.0f) * 2 - 1) * 0.045f;  /* teinte par plaque */
+            int px = x % panelX, py = y % panelY;
+            float dx = (float)(px < panelX - px ? px : panelX - px), dy = (float)(py < panelY - py ? py : panelY - py);
+            float v = gxWallTex[2] + tint + colTint[x];
+            /* joint en degrade, comme le sol : evite l'effet "trait d'encre" */
+            v -= 0.14f * fmaxf(expf(-dx * dx / 1.3f), expf(-dy * dy / 1.3f));
+            v += 0.09f * fmaxf(expf(-(dx - 2.4f) * (dx - 2.4f) / 1.1f),
+                                expf(-(dy - 2.4f) * (dy - 2.4f) / 1.1f));
+            if (py > 2 && py < 7) v += 0.05f;                                     /* le haut accroche la lumiere */
+            {                                                                      /* boulons aux 4 coins de la plaque */
+                int cx = px < panelX / 2 ? 8 : panelX - 9, cy = py < panelY / 2 ? 8 : panelY - 9;
+                float bdx = (float)(px - cx), bdy = (float)(py - cy), br2 = bdx * bdx + bdy * bdy;
+                v -= 0.11f * expf(-br2 / 4.5f);
+                v += 0.16f * expf(-br2 / 0.55f);
             }
-        upload_rgb_mip(&texWall, img, N);
-        free(img);
-    }
+            v += (tnoise(&s) * 2 - 1) * 0.02f;
+            float warm = tint * 0.5f;                     /* plaques legerement plus froides ou rouillees entre elles */
+            img[(y * N + x) * 3 + 0] = (unsigned char)(clampf(v + warm, 0, 1) * 255);
+            img[(y * N + x) * 3 + 1] = (unsigned char)(clampf(v, 0, 1) * 255);
+            img[(y * N + x) * 3 + 2] = (unsigned char)(clampf(v - warm * 1.4f, 0, 1) * 255);
+        }
+    *size = N;
+    return img;
+}
 
-    /* --- pierre (LA CITADELLE) : paves en appareil decale, joints creuses, teinte par pave, usure ----------- */
-    if (!tex_override(&texStone, "pierre.bmp")) {
-        int N = 256, P = (int)gxStoneTex[0];
-        if (P < 8) P = 8;
-        unsigned char *img = (unsigned char *)malloc(N * N * 3);
-        s = 0x570Eu;
-        for (int y = 0; y < N; y++)
-            for (int x = 0; x < N; x++) {
-                int row = y / P, ox = (row & 1) ? P / 2 : 0;
-                int px = (x + ox) % P, py = y % P, col = ((x + ox) / P) % (N / P);
-                unsigned int h = (unsigned int)(row * 131 + col * 977 + 17);
-                h = h * 1664525u + 1013904223u;
-                float tint = ((float)(h >> 8) * (1.0f / 16777216.0f) * 2 - 1);
-                float dx = (float)(px < P - px ? px : P - px), dy = (float)(py < P - py ? py : P - py), dm = fminf(dx, dy);
-                float v = gxStoneTex[1] + tint * 0.07f;
-                v += sinf(x * 0.09f + y * 0.05f + tint * 3) * 0.025f + (tnoise(&s) * 2 - 1) * 0.03f;
-                v -= 0.32f * expf(-dm * dm / 2.0f);                                  /* joint de mortier */
-                v += 0.05f * expf(-(dm - 3) * (dm - 3) / 2.0f);                      /* bord du pave use, plus clair */
-                float warm = 0.03f + tint * 0.02f;
-                img[(y * N + x) * 3 + 0] = (unsigned char)(clampf(v + warm, 0, 1) * 255);
-                img[(y * N + x) * 3 + 1] = (unsigned char)(clampf(v + warm * 0.3f, 0, 1) * 255);
-                img[(y * N + x) * 3 + 2] = (unsigned char)(clampf(v - warm, 0, 1) * 255);
-            }
-        upload_rgb_mip(&texStone, img, N);
-        free(img);
-    }
-    /* --- enduit : taches douces, passes de truelle, grain fin ------------------------------------------------ */
-    if (!tex_override(&texPlaster, "enduit.bmp")) {
-        int N = 256;
-        unsigned char *img = (unsigned char *)malloc(N * N * 3);
-        s = 0x91A5u;
-        for (int y = 0; y < N; y++)
-            for (int x = 0; x < N; x++) {
-                float fx = x * 2 * PI / N, fy = y * 2 * PI / N;            /* frequences entieres : repetition sans couture */
-                float v = gxPlasterTex[0];
-                v += (sinf(fx * 2 + 1.3f) * cosf(fy * 3 + 0.4f) + sinf(fx * 5 + fy * 2) * 0.5f) * 0.025f;   /* taches */
-                v += sinf(fx * 9 + sinf(fy * 4) * 2.5f) * 0.012f;                                           /* truelle */
-                v += (tnoise(&s) * 2 - 1) * gxPlasterTex[1];
-                img[(y * N + x) * 3 + 0] = (unsigned char)(clampf(v + 0.02f, 0, 1) * 255);
-                img[(y * N + x) * 3 + 1] = (unsigned char)(clampf(v + 0.005f, 0, 1) * 255);
-                img[(y * N + x) * 3 + 2] = (unsigned char)(clampf(v - 0.02f, 0, 1) * 255);
-            }
-        upload_rgb_mip(&texPlaster, img, N);
-        free(img);
-    }
+/* --- pierre (LA CITADELLE) : paves en appareil decale, joints creuses, teinte par pave, usure ----------- */
+static unsigned char *tex_gen_pierre(int *size) {
+    unsigned int s;
+    int N = 256, P = (int)gxStoneTex[0];
+    if (P < 8) P = 8;
+    unsigned char *img = (unsigned char *)malloc(N * N * 3);
+    s = 0x570Eu;
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            int row = y / P, ox = (row & 1) ? P / 2 : 0;
+            int px = (x + ox) % P, py = y % P, col = ((x + ox) / P) % (N / P);
+            unsigned int h = (unsigned int)(row * 131 + col * 977 + 17);
+            h = h * 1664525u + 1013904223u;
+            float tint = ((float)(h >> 8) * (1.0f / 16777216.0f) * 2 - 1);
+            float dx = (float)(px < P - px ? px : P - px), dy = (float)(py < P - py ? py : P - py), dm = fminf(dx, dy);
+            float v = gxStoneTex[1] + tint * 0.07f;
+            v += sinf(x * 0.09f + y * 0.05f + tint * 3) * 0.025f + (tnoise(&s) * 2 - 1) * 0.03f;
+            v -= 0.32f * expf(-dm * dm / 2.0f);                                  /* joint de mortier */
+            v += 0.05f * expf(-(dm - 3) * (dm - 3) / 2.0f);                      /* bord du pave use, plus clair */
+            float warm = 0.03f + tint * 0.02f;
+            img[(y * N + x) * 3 + 0] = (unsigned char)(clampf(v + warm, 0, 1) * 255);
+            img[(y * N + x) * 3 + 1] = (unsigned char)(clampf(v + warm * 0.3f, 0, 1) * 255);
+            img[(y * N + x) * 3 + 2] = (unsigned char)(clampf(v - warm, 0, 1) * 255);
+        }
+    *size = N;
+    return img;
+}
 
-    /* --- grain fin, 2e passe multiplicative pour casser la repetition vue de pres --------- */
-    if (!tex_override(&texGrime, "grain.bmp")) {
-        int N = 64;
-        unsigned char *img = (unsigned char *)malloc(N * N * 3);
-        s = 0xC0FFEEu;
-        for (int y = 0; y < N; y++)
-            for (int x = 0; x < N; x++) {
-                float v = 0.92f;
-                v += sinf(x * 0.5f + 2.1f) * cosf(y * 0.41f) * 0.03f;
-                v -= tnoise(&s) * gxGrain;                                           /* poussiere/micro-rayures */
-                float sp = tnoise(&s);                                               /* quelques specks, bord adouci */
-                if (sp < 0.04f) v -= 0.14f * (1 - sp / 0.04f);
-                unsigned char c = (unsigned char)(clampf(v, 0.55f, 1) * 255);
-                img[(y * N + x) * 3 + 0] = img[(y * N + x) * 3 + 1] = img[(y * N + x) * 3 + 2] = c;
-            }
-        upload_rgb_mip(&texGrime, img, N);
+/* --- enduit : taches douces, passes de truelle, grain fin ------------------------------------------------ */
+static unsigned char *tex_gen_enduit(int *size) {
+    unsigned int s;
+    int N = 256;
+    unsigned char *img = (unsigned char *)malloc(N * N * 3);
+    s = 0x91A5u;
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            float fx = x * 2 * PI / N, fy = y * 2 * PI / N;            /* frequences entieres : repetition sans couture */
+            float v = gxPlasterTex[0];
+            v += (sinf(fx * 2 + 1.3f) * cosf(fy * 3 + 0.4f) + sinf(fx * 5 + fy * 2) * 0.5f) * 0.025f;   /* taches */
+            v += sinf(fx * 9 + sinf(fy * 4) * 2.5f) * 0.012f;                                           /* truelle */
+            v += (tnoise(&s) * 2 - 1) * gxPlasterTex[1];
+            img[(y * N + x) * 3 + 0] = (unsigned char)(clampf(v + 0.02f, 0, 1) * 255);
+            img[(y * N + x) * 3 + 1] = (unsigned char)(clampf(v + 0.005f, 0, 1) * 255);
+            img[(y * N + x) * 3 + 2] = (unsigned char)(clampf(v - 0.02f, 0, 1) * 255);
+        }
+    *size = N;
+    return img;
+}
+
+/* --- grain fin, 2e passe multiplicative pour casser la repetition vue de pres --------- */
+static unsigned char *tex_gen_grain(int *size) {
+    unsigned int s;
+    int N = 64;
+    unsigned char *img = (unsigned char *)malloc(N * N * 3);
+    s = 0xC0FFEEu;
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            float v = 0.92f;
+            v += sinf(x * 0.5f + 2.1f) * cosf(y * 0.41f) * 0.03f;
+            v -= tnoise(&s) * gxGrain;                                           /* poussiere/micro-rayures */
+            float sp = tnoise(&s);                                               /* quelques specks, bord adouci */
+            if (sp < 0.04f) v -= 0.14f * (1 - sp / 0.04f);
+            unsigned char c = (unsigned char)(clampf(v, 0.55f, 1) * 255);
+            img[(y * N + x) * 3 + 0] = img[(y * N + x) * 3 + 1] = img[(y * N + x) * 3 + 2] = c;
+        }
+    *size = N;
+    return img;
+}
+
+enum { TEXG_SOL, TEXG_MUR, TEXG_PIERRE, TEXG_ENDUIT, TEXG_GRAIN, TEXG_N };
+static const char *const texGenFile[TEXG_N] = { "sol.bmp", "mur.bmp", "pierre.bmp", "enduit.bmp", "grain.bmp" };
+
+static unsigned char *tex_generate(int k, int *size) {
+    switch (k) {
+    case TEXG_SOL:    return tex_gen_sol(size);
+    case TEXG_MUR:    return tex_gen_mur(size);
+    case TEXG_PIERRE: return tex_gen_pierre(size);
+    case TEXG_ENDUIT: return tex_gen_enduit(size);
+    case TEXG_GRAIN:  return tex_gen_grain(size);
+    }
+    *size = 0;
+    return NULL;
+}
+
+static void bmp_put32(unsigned char *p, unsigned int v) {
+    p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8); p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24);
+}
+
+/* image RGB carree (de haut en bas) -> BMP 24 bits non compresse : lignes de bas en haut, octets B V R,
+ * lignes completees a 4 octets ; exactement ce que load_bmp_square relit. C standard (Windows et macOS) */
+static int save_bmp_rgb(const char *path, const unsigned char *img, int N) {
+    int stride = (N * 3 + 3) & ~3, ok = 1;
+    unsigned int data = (unsigned int)stride * (unsigned int)N;
+    unsigned char h[54] = { 0 };
+    FILE *f = fopen(path, "wb");
+    if (!f) return 0;
+    h[0] = 'B'; h[1] = 'M';
+    bmp_put32(h + 2, 54 + data);                          /* taille du fichier */
+    bmp_put32(h + 10, 54);                                /* debut des pixels */
+    bmp_put32(h + 14, 40);                                /* en-tete BITMAPINFOHEADER */
+    bmp_put32(h + 18, (unsigned int)N); bmp_put32(h + 22, (unsigned int)N);   /* hauteur positive : de bas en haut */
+    h[26] = 1; h[28] = 24;                                /* 1 plan, 24 bits, compression 0 */
+    bmp_put32(h + 34, data);
+    bmp_put32(h + 38, 2835); bmp_put32(h + 42, 2835);     /* 72 dpi */
+    unsigned char *row = (unsigned char *)calloc((size_t)stride, 1);
+    if (!row || fwrite(h, 1, 54, f) != 54) ok = 0;
+    for (int y = N - 1; y >= 0 && ok; y--) {
+        for (int x = 0; x < N; x++) {
+            row[x * 3 + 0] = img[((size_t)y * N + x) * 3 + 2];
+            row[x * 3 + 1] = img[((size_t)y * N + x) * 3 + 1];
+            row[x * 3 + 2] = img[((size_t)y * N + x) * 3 + 0];
+        }
+        if (fwrite(row, 1, (size_t)stride, f) != (size_t)stride) ok = 0;
+    }
+    free(row);
+    if (fclose(f) != 0) ok = 0;
+    return ok;
+}
+
+/* --export-textures : chaque texture generee ecrite dans dir (sol.bmp, mur.bmp...) ; nombre de fichiers ecrits */
+static int export_textures(const char *dir) {
+    int done = 0;
+    for (int k = 0; k < TEXG_N; k++) {
+        char p[700];
+        int n = 0;
+        unsigned char *img = tex_generate(k, &n);
+        snprintf(p, sizeof p, "%s/%s", dir, texGenFile[k]);
+        if (img && save_bmp_rgb(p, img, n)) done++;
+        free(img);
+    }
+    return done;
+}
+
+static void make_textures(void) {
+    GLuint *dst[TEXG_N] = { &texGrid, &texWall, &texStone, &texPlaster, &texGrime };
+    for (int k = 0; k < TEXG_N; k++) {                   /* un .bmp du dossier graphismes, sinon la texture generee */
+        int n = 0;
+        if (tex_override(dst[k], texGenFile[k])) continue;
+        unsigned char *img = tex_generate(k, &n);
+        upload_rgb_mip(dst[k], img, n);
         free(img);
     }
 
