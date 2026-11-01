@@ -889,7 +889,8 @@ static void apply_event(const NetEvent *ev) {
             P.dashCharge = 2; P.airJumps = 1; P.crouch = P.sliding = P.wallrun = 0;
             loadout_apply();
             anvil_reset();
-            P.skillCh = (float)skillDef[P.skill].max; P.ricArmed = 0; P.chargeT = P.chargeHold = 0;
+            if (P.skill != SK_AIM) P.skillCh = (float)skillDef[P.skill].max;   /* AIMANT : la recharge continue */
+            P.ricArmed = 0; P.chargeT = P.chargeHold = 0; P.aimT = 0;
             P.yaw = atan2f(-a.x, a.z); P.pitch = 0; P.eyeH = EYE_STAND; P.roll = 0;
             shotStreak = 0;
         }
@@ -954,6 +955,7 @@ static void apply_event(const NetEvent *ev) {
             }
         } else if (ev->sub == SK_CHARGE) burst(a, v3(1, 0.55f, 0.2f), 30, 5, 0.4f, 0.1f);
         else if (ev->sub == SK_ALLIN) { play(S_EXPLO, 0.5f * atten(a), 1.5f); }
+        else if (ev->sub == SK_AIM) { burst(a, v3(1, 0.95f, 0.45f), 24, 4, 0.4f, 0.1f); play(S_PAD, 0.4f * atten(a), 1.8f); }
         break;
     case EV_COIN:                                         /* piece d'un autre joueur : visible, mais pas a nous */
         if (ev->sub == 4) {                               /* MIRAGE : leurre immobile (f[3] = orientation) */

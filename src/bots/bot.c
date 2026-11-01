@@ -18,20 +18,11 @@ static int swing_start(int i) {
     return m >= 150;
 }
 
-/* Aimant de visee : quand le viseur passe pres d'une cible valide (ennemi solo ou bot local), tire
- * tres doucement le viseur vers son centre. Rayon et vitesse volontairement faibles (voir les #define
- * AIMASSIST_*) : ca doit aider sans que le joueur le remarque consciemment.
- * Jamais contre un autre humain : seulement hors reseau (solo, course) ou quand j'heberge une partie contre mes
- * bots locaux et que personne d'autre ne l'a rejointe (vsBot = nombre de bots lances). */
-static int aim_assist_on(void) {
-    if (netMode == NET_OFF) return 1;
-    if (netMode != NET_HOST || !vsBot) return 0;
-    int others = 0;
-    for (int i = 0; i < MAXP; i++) others += i != myId && NP[i].active;
-    return others <= vsBot;
-}
+/* Aimant de visee : seulement pendant la competence AIMANT (P.aimT > 0, partout, PvP compris). Quand le viseur
+ * passe pres d'une cible valide (ennemi solo, joueur adverse), il est tire vers son centre (#define AIMASSIST_*) :
+ * une aide nette mais jamais un verrou ; l'equilibrage passe par la duree courte et la longue recharge (AIM_*). */
 static void aim_assist(float dt) {
-    if (P.dead || !aim_assist_on()) return;
+    if (P.dead || P.aimT <= 0) return;
     V3 eye = eye_pos();
     int haveTarget = 0;
     float bestAng = AIMASSIST_CONE;
@@ -133,6 +124,12 @@ static void bot_skill(float dt, int best, float bd, int see, float seeT, float a
             P.yaw = aimYaw + errY; P.pitch = aimPitch + errP;
             botPress[A_SKILL] = 1; next = botT + 1;
             netlog("competence : all in one sur %s (%.1f m, %d munitions)", pname(best), bd, P.ammo[P.weapon]);
+        }
+        break;
+    case SK_AIM:                                          /* AIMANT : a l'engagement, cible vue a portee */
+        if (best >= 0 && react && bd < AIMASSIST_RANGE * 0.7f && P.aimT <= 0 && botT > next) {
+            botPress[A_SKILL] = 1; next = botT + 2;
+            netlog("competence : aimant sur %s (%.1f m)", pname(best), bd);
         }
         break;
     case SK_DECOY: {                                      /* MIRAGE : bas en PV ou sous le feu (apres le temps de reaction) */

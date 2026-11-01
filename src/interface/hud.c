@@ -741,7 +741,9 @@ static void draw_hud(void) {
             }
             snprintf(kb, sizeof kb, "%s [%s]", sd->name, bind_text(A_SKILL));
             text(0, winW - 36.0f - sd->max * 20.0f - fontW[0] * (float)strlen(kb), winH - 83.0f, kb, sd->r * 0.8f, sd->g * 0.8f, sd->b * 0.8f, 0.9f);
-            const char *st = P.ricArmed ? "RICOCHET ARME" : P.chargeT > 0 ? "CHARGE PRETE x1,5" : NULL;
+            char aimBuf[24];
+            snprintf(aimBuf, sizeof aimBuf, "AIMANT %.1f s", P.aimT);
+            const char *st = P.ricArmed ? "RICOCHET ARME" : P.chargeT > 0 ? "CHARGE PRETE x1,5" : P.aimT > 0 ? aimBuf : NULL;
             if (st) text_c(0, cx, cy + 74, st, sd->r, sd->g, sd->b, 0.6f + 0.4f * sinf(gameTime * 12));
             if (P.chargeHold > 0) {                           /* CHARGE : jauge de maintien */
                 rect(cx - 40, cy + 62, 80, 4, 0.1f, 0.1f, 0.15f, 0.7f);

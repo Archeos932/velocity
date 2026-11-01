@@ -1,4 +1,4 @@
-/* VELOCITY - competences (touche A_SKILL) : PIECE, MARQUE, CHARGE, RICOCHET, ALL IN ONE, MIRAGE
+/* VELOCITY - competences (touche A_SKILL) : PIECE, MARQUE, CHARGE, RICOCHET, ALL IN ONE, MIRAGE, AIMANT
    Morceau de main.c : inclus dans l'ordre, ne se compile pas seul (voir main.c). */
 
 /* --- Competences : utilisation (touche A_SKILL) ------------------------- */
@@ -82,6 +82,14 @@ static void skill_decoy(void) {                           /* MIRAGE : leurre a m
         return;
     }
 }
+static void skill_aim(void) {                             /* AIMANT : aimant de visee pendant AIM_T (aim_assist) */
+    P.skillCh -= 1; P.aimT = AIM_T; skillUse[SK_AIM]++;
+    play(S_PAD, 0.5f, 1.8f);
+    burst(pcenter(), v3(1, 0.95f, 0.45f), 24, 4, 0.4f, 0.1f);
+    snprintf(popText, sizeof popText, "AIMANT !"); popT = 0.8f;
+    if (botMode) netlog("competence : aimant (%.0f s)", AIM_T);
+    if (dmMode) net_fx_skill(SK_AIM, -1, pcenter(), v3(0, 0, 0));   /* les autres voient l'activation */
+}
 static void skill_tick(float dt, int press, int held) {
     const SkillDef *d = &skillDef[P.skill];
     if (!P.ricArmed && P.skillCh < d->max) P.skillCh = fminf((float)d->max, P.skillCh + dt / d->recharge);
@@ -89,18 +97,20 @@ static void skill_tick(float dt, int press, int held) {
     for (int i = 0; i < MAXE; i++) if (markE[i] > 0) { markE[i] -= dt; if (!E[i].alive) markE[i] = 0; }
     if (markedMeT > 0) markedMeT -= dt;
     if (P.chargeT > 0) P.chargeT -= dt;
+    if (P.aimT > 0) P.aimT -= dt;
     if (P.hp < lastHpSeen - 0.5f && (P.chargeT > 0 || P.chargeHold > 0)) {   /* CHARGE : perdue si on est touche */
         P.chargeT = P.chargeHold = 0;
         snprintf(popText, sizeof popText, "CHARGE PERDUE"); popT = 0.8f;
         if (botMode) netlog("competence : charge perdue (touche)");
     }
     lastHpSeen = P.hp;
-    if (P.dead) { P.chargeT = P.chargeHold = 0; return; }
+    if (P.dead) { P.chargeT = P.chargeHold = 0; P.aimT = 0; return; }
     switch (P.skill) {
     case SK_COIN:  if (press && P.skillCh >= 1) { throw_coin(); skillUse[SK_COIN]++; } break;
     case SK_MARK:  if (press && P.skillCh >= 1) skill_mark(); break;
     case SK_ALLIN: if (press && P.skillCh >= 1) skill_allin(); break;
     case SK_DECOY: if (press && P.skillCh >= 1) skill_decoy(); break;
+    case SK_AIM:   if (press && P.skillCh >= 1 && P.aimT <= 0) skill_aim(); break;
     case SK_RICOCHET:
         if (press && P.skillCh >= 1 && !P.ricArmed) {     /* la recharge ne repart qu'au tir */
             P.skillCh -= 1; P.ricArmed = 1; skillUse[SK_RICOCHET]++;

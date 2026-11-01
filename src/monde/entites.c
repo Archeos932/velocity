@@ -23,6 +23,7 @@ typedef struct {
     int skill;                                            /* SK_* */
     int ricArmed;                                         /* RICOCHET : le prochain projectile rebondit */
     float chargeHold, chargeT;                            /* CHARGE : maintien en cours, fenetre ouverte restante */
+    float aimT;                                           /* AIMANT : temps restant de l'aimant de visee */
     int hookPlayer;                                       /* 0 = aucun, sinon id du joueur accroche + 1 (LAN) */
     int loadout[2];                                       /* deux WP_* distincts ; weapon = WP_* en main */
     int meleeKind;                                        /* MK_* */

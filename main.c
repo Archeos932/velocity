@@ -76,7 +76,7 @@
 #include "src/bots/navigation.c"                 /* bots : graphe de la carte (sols, pads, ancres), plus court chemin */
 #include "src/bots/bot.c"                        /* bots : visee, decisions */
 
-#include "src/combat/competences.c"              /* competences : MARQUE, CHARGE, RICOCHET, ALL IN ONE, MIRAGE (la piece en est une) */
+#include "src/combat/competences.c"              /* competences : MARQUE, CHARGE, RICOCHET, ALL IN ONE, MIRAGE, AIMANT (la piece en est une) */
 #include "src/jeu/course.c"                     /* mode COURSE : portes, chrono, fantome du record */
 #include "src/jeu/kill_zone.c"                  /* kill zone : chute dans le vide (killY de la carte), bots prudents au bord */
 

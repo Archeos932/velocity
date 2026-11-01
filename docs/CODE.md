@@ -345,7 +345,7 @@ vitesse **relative** : foncer sur quelqu'un qui fonce sur vous frappe très fort
 
 #### Compétences (`skill_tick`, `skillDef`, design : `docs/COMPETENCES_MARKSMAN.md`)
 
-La pièce est une **compétence** parmi six (`enum SK_*`), choisie au LOADOUT (`wantSkill`, clé `skill=` de
+La pièce est une **compétence** parmi sept (`enum SK_*`), choisie au LOADOUT (`wantSkill`, clé `skill=` de
 `velocity.ini`, `--skill N` ou `--loadout a,b,m,s` pour les bots ; sans eux, un bot en tire une au hasard).
 Touche `A_SKILL` (ancien `A_COIN`), charges `P.skillCh` (max et recharge par `skillDef[]`).
 
@@ -357,12 +357,14 @@ Touche `A_SKILL` (ancien `A_COIN`), charges `P.skillCh` (max et recharge par `sk
 | `SK_RICOCHET` RICOCHET | `ric_take`, `hitscan_shot` | `P.ricArmed` : le prochain rail / Élan est réfléchi (`r = d − 2(d·n)n`, 3 rebonds, 120 m), la roquette rebondit (`p->ricLeft`, ×0,8) ; recharge seulement après le tir ; retour sur soi à partir du 2e rebond, une fois par tir |
 | `SK_ALLIN` ALL IN ONE | `skill_allin` | toute la munition (rail, roquettes, Éventail, Élan) en éventail régulier, demi-angle `allin_half(n)` ; refus à 1 munition, Scie / Ventouse / Tesla, bouclier levé |
 | `SK_DECOY` MIRAGE | `skill_decoy` | `Coin` avec `decoy = 1` : immobile 3 s, absorbe un rail / Élan / plomb adverse (`decoy_absorb`), mon rail y ricoche ×1 ; ignoré par le yoyo, la scie, le tesla et le viseur adverse ; `decoy_skip` : un tir parti de l'intérieur le traverse |
+| `SK_AIM` AIMANT | `skill_aim`, `aim_assist` | `P.aimT` = `AIM_T` (4 s) : le viseur est attiré vers la cible la plus proche du centre (cône `AIMASSIST_CONE` ~6°, `AIMASSIST_RATE`, 70 m, ligne de vue ; alliés exclus), jamais verrouillé ; 1 charge, recharge `AIM_RECHARGE` 45 s **non remplie au respawn** ; pas de 2e activation pendant l'effet ; les autres joueurs voient l'activation (`EV_SKILL`) |
 
 - Bonus centralisé : `skill_out()` dans `damage_enemy`, `net_hit*`, `hit_player_ex` (une fois par touche).
-- Réseau : `EV_SKILL` (marque, charge, all in one), `EV_COIN` sous-type 4 (leurre), `EV_ROCKET.sub` = rebonds.
+- Réseau : `EV_SKILL` (marque, charge, all in one, aimant), `EV_COIN` sous-type 4 (leurre), `EV_ROCKET.sub` = rebonds.
 - Bots (`bot_skill`, appelé en fin de `bot_think`) : MARQUE sur une cible vue à 10–60 m, CHARGE maintenue
   quand une cible approche, RICOCHET armé cible à couvert / près d'un mur (puis tir par le sol si elle reste
-  cachée), ALL IN ONE à 4–14 m avec ≥ 3 munitions, MIRAGE sous 45 PV ou juste après une touche. Un bot vise
+  cachée), ALL IN ONE à 4–14 m avec ≥ 3 munitions, MIRAGE sous 45 PV ou juste après une touche, AIMANT à l'engagement
+  (cible vue à moins de 49 m ; l'aimant s'applique alors à la visée imprécise du bot, après `bot_think`). Un bot vise
   le leurre adverse une fois sur deux pendant 0,4 à 1 s. Journal : ligne `competences : ...`, et
   `salves mortelles` dans la ligne `equilibre` (kill depuis la pleine vie en < 0,1 s, en plusieurs touches).
 - Captures : `--shot skills.bmp` (marque, leurres), `--shot loadout_small.bmp` (fenêtre 1024×640),
@@ -957,9 +959,9 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
 - La géométrie n'est **pas** transmise, seulement l'**id de carte** (`PkWelcome.pad[0]`, `EV_MATCH.target`, §3.18) :
   chaque exécutable la reconstruit (`build_level(m)` est déterministe, graine `rng = 777` pour l'Arène). Tous les
   joueurs doivent donc avoir le même exécutable.
-- **Aimant de visée** (`aim_assist`, `src/bots/bot.c`) : seulement en solo ou contre des bots ; il est **coupé dès
-  qu'un autre humain est dans la partie** en réseau (aucun avantage d'un joueur sur l'autre, en particulier en
-  PARTIE CLASSEE).
+- **Aimant de visée** (`aim_assist`, `src/bots/bot.c`) : uniquement par la compétence **AIMANT** (`SK_AIM`), pour
+  tout le monde, PvP et PARTIE CLASSEE compris : aucune aide passive. L'équilibrage passe par la durée courte et la
+  longue recharge (`AIM_T`, `AIM_RECHARGE`), et l'activation est visible des adversaires.
 
 ### Paquets `PK_*`
 

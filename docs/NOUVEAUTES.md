@@ -285,8 +285,8 @@ code.
   utilisait `pad[1]`, que notre `PkAnnounce` n'a plus depuis le champ `map`).
 - **Corrections au passage** :
   - le bouton **MISE A JOUR** revient sur le dépôt `void19845/velocity` (`UPD_REPO`) au lieu du fork ;
-  - l'**aimant de visée** est coupé dès qu'un autre humain est dans la partie en réseau (il reste en solo et contre
-    des bots) ;
+  - l'**aimant de visée** n'est plus une aide passive : c'est la compétence **AIMANT** (LOADOUT), 4 s d'aimant puis
+    45 s de recharge non remplie au respawn, utilisable partout (solo, PvP, classé), activation visible des adversaires ;
   - le **second écran** est désactivé par défaut (`second_ecran=0`) : à activer dans PARAMETRES > 2e ECRAN.
 - **Textures exportées** : `velocity.exe --export-textures <dossier>` écrit les textures générées par le code en
   `.bmp` (`sol`, `mur`, `grain`, `pierre`, `enduit`). Le dossier `graphismes/` du dépôt les contient (prêtes à

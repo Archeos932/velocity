@@ -86,7 +86,7 @@ static void do_action(void) {
             }
 #endif
         }
-        if (ok) { vsBot = ok; botLevel = lv; appState = APP_GAME; set_capture(1); }   /* vsBot : nombre de bots (aimant de visee) */
+        if (ok) { vsBot = ok; botLevel = lv; appState = APP_GAME; set_capture(1); }   /* vsBot : nombre de bots lances */
         else { set_status("impossible de lancer le bot"); net_shutdown(); }
         break;
     }
@@ -748,6 +748,7 @@ static int velocity_main(const char *cmd) {
             bot_void_guard(dt);                           /* kill zone : pas de saut dans le vide, grappin de secours */
             if (nowT > botTime) break;
             if (botLocal && appState != APP_GAME && botT > 12) break;   /* l'hote est parti : le bot adverse se ferme */
+            if (appState == APP_GAME) aim_assist(dt);     /* AIMANT du bot : tire sa visee imprecise vers la cible */
         }
         if (appState == APP_GAME) {
             if (captured) {
@@ -756,7 +757,7 @@ static int velocity_main(const char *cmd) {
                     P.pitch = clampf(P.pitch - mdy * sens * (invertY ? -1.0f : 1.0f), -1.55f, 1.55f);
                     P.swayX = clampf(P.swayX - mdx * 0.00004f, -0.04f, 0.04f);
                     P.swayY = clampf(P.swayY + mdy * 0.00004f, -0.04f, 0.04f);
-                    if (!botMode) aim_assist(dt);             /* bots visent deja parfaitement, pas besoin */
+                    if (!botMode) aim_assist(dt);             /* AIMANT (les bots l'appliquent apres bot_think) */
                 }
                 P.swayX *= expf(-dt * 10); P.swayY *= expf(-dt * 10);
             }
@@ -823,11 +824,11 @@ done:
         netlog("munitions : points touche %.0f, kill %.0f, parry %.0f, cellules %.0f (%d prises), perdus %.0f ; a sec %.0f%% du temps",
                apStat[AP_HIT], apStat[AP_KILL], apStat[AP_PARRY], apStat[AP_CELL], cellsTaken, apStat[AP_LOST],
                100 * dryT / fmaxf(botAliveT, 0.01f));
-        netlog("competences : %s ; utilisations piece %d, marque %d, charge %d, ricochet %d, all in one %d, mirage %d ; "
+        netlog("competences : %s ; utilisations piece %d, marque %d, charge %d, ricochet %d, all in one %d, mirage %d, aimant %d ; "
                "touches bonifiees %d ; ricochets : %d tirs, %d rebonds, %d retours sur soi ; dernier all in one %d projectiles ; "
                "tirs absorbes par un leurre adverse %d",
                skillDef[P.skill].name, skillUse[SK_COIN], skillUse[SK_MARK], skillUse[SK_CHARGE], skillUse[SK_RICOCHET],
-               skillUse[SK_ALLIN], skillUse[SK_DECOY], skillBonus, ricStat[0], ricStat[1], ricStat[2], allinLast, decoyHits);
+               skillUse[SK_ALLIN], skillUse[SK_DECOY], skillUse[SK_AIM], skillBonus, ricStat[0], ricStat[1], ricStat[2], allinLast, decoyHits);
         if (slamDives || slamWaves || slamParried || hitCount[W_SLAM])
             netlog("enclume : %d piques, ondes qui touchent %d / %d, |vy| moyen %.1f, degats moyens par onde %.1f, "
                    "immobilisations %d ; arbitre : touches %d, ondes parees %d, combos onde + rail %d",

@@ -35,9 +35,10 @@
 #define WALLRUN_MAX    1.8f
 #define BASE_HFOV      105.0f
 
-#define AIMASSIST_CONE  0.07f  /* rayon (rad, ~4 deg) du cone pres du viseur ou l'aimant agit */
-#define AIMASSIST_RATE  1.4f   /* vitesse de correction au centre du cone (s'annule au bord) ; faible expres */
-#define AIMASSIST_RANGE 60.0f  /* portee max */
+/* Aimant de visee : competence AIMANT (plus d'aide passive) ; actif AIM_T secondes, recharge AIM_RECHARGE */
+#define AIMASSIST_CONE  0.10f  /* rayon (rad, ~6 deg) du cone pres du viseur ou l'aimant agit */
+#define AIMASSIST_RATE  3.0f   /* vitesse de correction au centre du cone (s'annule au bord) : aide, jamais verrou */
+#define AIMASSIST_RANGE 70.0f  /* portee max */
 
 #define GRAPPLE_RANGE    55.0f   /* portee max du crochet */
 #define GRAPPLE_SPEED    120.0f  /* vitesse de vol du crochet */
@@ -70,7 +71,7 @@
 
 /* Competences : l'emplacement de la piece (touche A_SKILL) recoit une competence au choix du LOADOUT
  * (docs/COMPETENCES_MARKSMAN.md). Charges et recharge par competence : skillDef. */
-enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_COUNT };
+enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_AIM, SK_COUNT };
 #define MARK_T            4.0f    /* MARQUE : duree de la marque */
 #define MARK_RANGE        90.0f
 #define MARK_MULT         1.25f   /* toute touche du marqueur sur une cible marquee */
@@ -86,6 +87,8 @@ enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_COUNT };
 #define ALLIN_SPREAD_MAX  6.0f
 #define DECOY_T           3.0f    /* MIRAGE : duree du leurre */
 #define DECOY_MULT        1.0f    /* un de mes rails qui le traverse ricoche sans bonus */
+#define AIM_T             4.0f    /* AIMANT : duree de l'aimant de visee (reglages AIMASSIST_*) */
+#define AIM_RECHARGE      45.0f   /* longue recharge, non remplie au respawn (equilibrage) */
 #define RAIL_DMG       100.0f
 #define ROCKET_CD      0.75f
 #define ROCKET_SPEED   38.0f
@@ -507,6 +510,7 @@ static const SkillDef skillDef[SK_COUNT] = {
     { "RICOCHET",   1, 15, 0.40f, 1.00f, 0.70f, "le prochain rail / elan / roquette rebondit 3 fois sur le decor" },
     { "ALL IN ONE", 1, 20, 1.00f, 0.30f, 0.30f, "tire toute la munition de l'arme en main d'un coup, en eventail" },
     { "MIRAGE",     2, 7,  0.40f, 0.85f, 1.00f, "leurre immobile 3 s : absorbe un tir adverse, ton rail y ricoche" },
+    { "AIMANT",     1, AIM_RECHARGE, 1.00f, 0.95f, 0.45f, "4 s : le viseur est attire vers la cible proche du centre" },
 };
 static int wantSkill = SK_COIN;
 static int botSkillSet;                                   /* --skill / --loadout a,b,m,s : competence imposee au bot */

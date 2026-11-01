@@ -371,8 +371,9 @@ static void run_tests(const char *path) {
     memset(act, 0, sizeof act);
     fprintf(f, "bhop : vitesse depart=%.1f max=%.1f (attendu max > %.1f)\n", startSpeed, maxSpeed, RUN_SPEED + 3);
 
-    reset_game();                                         /* aimant de visee : doit corriger un petit ecart, doucement */
+    reset_game();                                         /* aimant de visee (competence AIMANT active) : corrige un petit ecart */
     P.pos = P.prevPos = v3(-20, 0, 40); P.yaw = 0; P.pitch = 0; P.grounded = 1;   /* couloir degage des tests */
+    P.aimT = AIM_T;
     for (int i = 0; i < MAXE; i++) E[i].alive = 0;
     V3 eyeNow = eye_pos();
     E[0].alive = 1; E[0].type = EN_DRONE; E[0].hp = 100; E[0].pos = v3(eyeNow.x + 0.7f, eyeNow.y, eyeNow.z - 20);
@@ -382,6 +383,23 @@ static void run_tests(const char *path) {
     float targetYaw = atan2f(0.7f, 20.0f);
     fprintf(f, "aimant de visee : apres 1 tick=%.5f (attendu petit, < 0.01), apres 0.5 s=%.4f sur %.4f vise (attendu entre 0 et %.4f, sans depasser)\n",
             yawOneTick, P.yaw, targetYaw, targetYaw);
+    {   /* AIMANT : rien sans la competence ; activation, duree, pas de 2e activation, longue recharge */
+        P.yaw = 0; P.aimT = 0;
+        for (int i = 0; i < 60; i++) aim_assist(TICK);
+        float yawOff = P.yaw;
+        P.skill = SK_AIM; P.skillCh = 1;
+        skill_tick(TICK, 1, 0);
+        float t0 = P.aimT, ch0 = P.skillCh;
+        P.skillCh = 1; skill_tick(TICK, 1, 0);            /* deja actif : la charge n'est pas reprise */
+        int again = P.skillCh < 0.5f;
+        for (int i = 0; i < (int)((AIM_T + 0.2f) / TICK); i++) skill_tick(TICK, 0, 0);
+        float tEnd = P.aimT;
+        P.skillCh = 0;
+        for (int i = 0; i < (int)(10 / TICK); i++) skill_tick(TICK, 0, 0);
+        fprintf(f, "competence AIMANT : sans elle yaw=%.4f, active %.1f s charge %.2f, 2e appui %d, fini %d, charge apres 10 s %.2f (attendu 0, %.1f, ~0, 0, 1, %.2f)\n",
+                yawOff, t0, ch0, again, tEnd <= 0, P.skillCh, AIM_T, 10 / AIM_RECHARGE);
+        P.skill = SK_COIN;
+    }
     E[0].alive = 0;
 
     reset_game();                                         /* rocket jump */
@@ -3239,10 +3257,10 @@ static void run_tests(const char *path) {
             for (int k = 0; k < SK_COUNT; k++) {
                 SK_LAB(k, 0);
                 int ticks = 0;
-                while (P.skillCh < 1 && ticks < 30 * 120) { skill_tick(TICK, 0, 0); ticks++; }
+                while (P.skillCh < 1 && ticks < 60 * 120) { skill_tick(TICK, 0, 0); ticks++; }
                 rn += snprintf(rb + rn, sizeof rb - rn, "%s %.1f s, ", skillDef[k].name, ticks * TICK);
             }
-            fprintf(f, "competences : recharge d'une charge : %s(attendu 2.0, 6.0, 8.0, 15.0, 20.0, 7.0)\n", rb);
+            fprintf(f, "competences : recharge d'une charge : %s(attendu 2.0, 6.0, 8.0, 15.0, 20.0, 7.0, 45.0)\n", rb);
         }
 
         SK_LAB(SK_MARK, 2); SK_DRONE(20, 100);            /* MARQUE : drone a 20 m, x1,25 pendant 4 s */
@@ -3545,23 +3563,7 @@ static void run_tests(const char *path) {
         myMmr = sm; rankPlayed = sp; rankWins = sw;
         botLog = savedLog;
     }
-    {   /* fusion : aimant de visee seulement hors reseau ou contre mes bots locaux ; 2e ecran opt-in ; protocole */
-        int sNet = netMode, sVs = vsBot, sId = myId;
-        memset(NP, 0, sizeof NP);
-        netMode = NET_OFF;
-        int aSolo = aim_assist_on();
-        netMode = NET_HOST; myId = 0; vsBot = 1; NP[0].active = NP[1].active = 1;
-        int aBot = aim_assist_on();
-        NP[2].active = 1;                                 /* un humain rejoint la partie contre le bot */
-        int aHum = aim_assist_on();
-        vsBot = 0; NP[2].active = 0;
-        int aHost = aim_assist_on();
-        netMode = NET_CLIENT; myId = 1;
-        int aCli = aim_assist_on();
-        fprintf(f, "aimant de visee : solo %d, contre mon bot %d, un humain en plus %d, hote en reseau %d, client %d (attendu 1 1 0 0 0)\n",
-                aSolo, aBot, aHum, aHost, aCli);
-        netMode = sNet; vsBot = sVs; myId = sId;
-        memset(NP, 0, sizeof NP);
+    {   /* fusion : 2e ecran opt-in ; protocole */
         fprintf(f, "second ecran : actif par defaut %d (attendu 0)\n", secondScreen);
         PkAnnounce pa;
         fprintf(f, "protocole : NET_VER %d, PkAnnounce %d octets avec ranked a l'octet %d (attendu 16, %d, %d)\n", NET_VER,

@@ -96,8 +96,8 @@ Sur Mac : `./build_mac.sh`, puis `Velocity.app/Contents/MacOS/velocity --test te
   dans `host_handle()`. Nouvel événement = `EV_*` + `net_fx_*()` émetteur + cas dans
   `apply_event()` (+ `host_handle()` s'il faut arbitrer). **Incrémenter `NET_VER`** dès qu'un
   paquet ou un événement change (actuellement **16**, `src/reseau/protocole.c`).
-- **Équité en réseau** : l'aimant de visée (`aim_assist`) est coupé dès qu'un autre humain est dans la partie ; il
-  ne reste qu'en solo et contre des bots.
+- **Équité en réseau** : pas d'aide à la visée passive. L'aimant de visée (`aim_assist`) n'existe que comme
+  compétence AIMANT (`SK_AIM`, `AIM_T` / `AIM_RECHARGE`), la même pour tous.
 - **Texte à l'écran** : la police ne couvre que CP1252 et le source est en UTF-8 → **pas
   d'accents dans les chaînes C** (écrire `PARAMETRES`, ou échapper `\xE9`). Commentaires du code
   en français sans accents, comme l'existant.
