@@ -108,7 +108,7 @@ static void draw_settings_gfx(float cx, float cy) {
     text(1, rx, ry + 140, "QUALITE", 0.5f, 0.9f, 1.0f, 1);
     for (int q = 0; q < GFX_Q_COUNT; q++) {
         float yy = ry + 176 + q * 52.0f, k = q == gfxQuality ? 1.0f : 0.6f;
-        if (q == gfxQuality) rect(rx - 10, yy - 20, 720, q == GFX_Q_TOASTER ? 50 : 30, 0.4f, 0.85f, 1.0f, 0.12f);
+        if (q == gfxQuality) rect(rx - 10, yy - 20, 720, q == GFX_Q_TOASTER ? 50.0f : 30.0f, 0.4f, 0.85f, 1.0f, 0.12f);
         text(0, rx, yy, qualityHelp[q], k, k, k * 1.05f, 1);
         if (q == GFX_Q_TOASTER) text(0, rx, yy + 22, "  ni ombres ni bloom, 60 images/s, sol et murs unis, decor simple", k, k, k * 1.05f, 1);
     }
