@@ -72,10 +72,10 @@ static void mcam_pose(V3 *eye, float *yaw, float *pitch) {
     }
     case MCAM_TRAVEL: {                                   /* d'un depart vers le plus lointain, au-dessus du decor */
         V3 a = mcam_spawn(mcamVar), b = a;
-        float far = 0;
+        float farD = 0;
         for (int k = 0; k < (m->nspawns > 0 ? m->nspawns : 1); k++)
-            if (hlen(vsub(mcam_spawn(k), a)) > far) { far = hlen(vsub(mcam_spawn(k), a)); b = mcam_spawn(k); }
-        if (far < 10) b = vadd(mcamCenter, vsub(mcamCenter, a));
+            if (hlen(vsub(mcam_spawn(k), a)) > farD) { farD = hlen(vsub(mcam_spawn(k), a)); b = mcam_spawn(k); }
+        if (farD < 10) b = vadd(mcamCenter, vsub(mcamCenter, a));
         float h = a.y + 8;                                /* marge : les toits mailles depassent un peu des boites */
         for (int k = 0; k <= 24; k++) { V3 p = vlerp(a, b, k / 24.0f); h = fmaxf(h, mcam_ground(p.x, p.z) + 10); }
         V3 p = vlerp(a, b, 0.1f + 0.8f * mcam_smooth(t / MENU_SHOT_T));
