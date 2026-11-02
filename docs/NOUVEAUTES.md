@@ -387,6 +387,18 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
 - Mesure : un pilote qui se contente de regarder la porte et de garder le bouton enfoncé finit en **20,6 s sans
   chute** (26 m/s de moyenne, 40 au maximum) ; l'ancien pilote passe de 41,2 s / 1 chute à 15,2 s / 0 chute.
 
+## 29. Bots : plus de demi-tours instantanés, combat plus malin, difficulté revue
+
+- **Avant** : les bots changeaient de direction de regard d'un coup (parry, grappin, pièce, cible) et tiraient dans
+  le même instant ; ils fonçaient toujours vers la cible.
+- **Maintenant** : leur vue tourne comme une souris tenue par un humain (vitesse maxi, accélération, suivi), et ils ne
+  tirent, ne grappinent, ne dashent et ne frappent qu'une fois la vue arrivée. Ils gardent leur cible au lieu de
+  sauter de l'une à l'autre, tiennent la distance de leur arme, se décalent de gauche à droite, anticipent les
+  roquettes (visée aux pieds), font un pas de côté quand ils sont touchés et reculent quand ils sont blessés.
+- **Difficulté** : FACILE (vue lente 200 °/s, réaction 0,9 s, pas de cross-up), NORMAL (370 °/s, 0,38 s), DIFFICILE
+  (540 °/s, 0,22 s, jamais surhumain) ; parries et tirs cadrés un peu moins fréquents qu'avant en DIFFICILE.
+- Non mesuré ici (à vérifier en jeu) : le propriétaire teste lui-même.
+
 ## Vérifications faites
 
 - Compilation macOS sans avertissement ; tous les tests `--test` conformes, y compris ceux d'`origin/dev` (stéréo,

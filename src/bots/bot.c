@@ -140,7 +140,8 @@ static void bot_skill(float dt, int best, float bd, int see, float seeT, float a
     }
 }
 
-static void bot_think(float dt) {
+static float botTgtDist = 20;                             /* distance de la cible (tolerance de visee de bot_view) */
+static void bot_think_inner(float dt) {
     botT += dt;
     if (appState == APP_JOIN && botLocal && !join_busy()) {
         struct sockaddr_in a;
@@ -394,13 +395,22 @@ static void bot_think(float dt) {
         }
     }
 
+    /* cible : la plus proche, une cible visible comptant pour 25 m de moins, et on garde la sienne tant qu'une
+     * autre n'est pas nettement meilleure (8 m) : pas de va-et-vient de la vue entre deux adversaires */
+    static int keepTgt = -1;
     int best = -1;
-    float bd = 1e9f;
+    float bd = 1e9f, bestSc = 1e9f, keepSc = 1e9f;
     for (int i = 0; i < MAXP; i++) {
         if (!np_target(i)) continue;
         float d = vlen(vsub(NP[i].disp, P.pos));
-        if (d < bd) { bd = d; best = i; }
+        float sc = d - (los(eye_pos(), np_center(i)) ? 25 : 0) - (NP[i].hp > 0 && NP[i].hp < 40 ? 6 : 0);   /* blesse : un peu prefere */
+        if (i == keepTgt) keepSc = sc;
+        if (sc < bestSc) { bestSc = sc; best = i; }
     }
+    if (keepTgt >= 0 && keepSc < 1e8f && keepSc < bestSc + 8) best = keepTgt;
+    keepTgt = best;
+    if (best >= 0) bd = vlen(vsub(NP[best].disp, P.pos));
+    botTgtDist = best >= 0 ? bd : 20;
     /* bhop : on ne touche jamais le sol longtemps -- sauf en facile, qui perd son chainage une bonne partie
      * du temps (sinon, meme avec une mauvaise visee, un bot qui garde un bhop parfait reste trop fuyant) */
     botHeld[A_JUMP] = botLevel > 0 || fmodf(botT, 1.4f) < 0.8f;
@@ -411,9 +421,15 @@ static void bot_think(float dt) {
     int see = 0;
     if (best >= 0) {
         V3 eye = eye_pos(), c = np_center(best), d = vsub(c, eye);
+        see = los(eye, c);
+        if (P.weapon == WP_ROCKET) {                      /* roquette : on vise ou la cible sera, et plutot les pieds */
+            float tt = vlen(d) / ROCKET_SPEED;
+            V3 lead = vadd(c, vmul(np_vel(best), tt * botLeadK[botLevel]));
+            if (anvil_ground_dist(NP[best].disp) < 1.5f) lead.y -= 0.7f;   /* au sol : le souffle fait le reste */
+            if (los(eye, lead)) d = vsub(lead, eye);
+        }
         aimYaw = atan2f(d.x, -d.z);
         aimPitch = asinf(clampf(d.y / fmaxf(vlen(d), 0.01f), -1, 1));
-        see = los(eye, c);
         searchYaw = aimYaw;
     } else {
         aimYaw = (searchYaw += dt * 0.6f);                /* personne : on tourne en cherchant */
@@ -625,7 +641,8 @@ static void bot_think(float dt) {
     if (best >= 0) {
         V3 tp = NP[best].disp, hd = v3(tp.x - P.pos.x, 0, tp.z - P.pos.z);
         float dy = P.pos.y - tp.y, hdist = hlen(hd);
-        if (crossPhase == 0 && crossCd <= 0 && see && hdist > 4 && hdist < 12 && P.dashCharge >= 1 && P.hook == HOOK_NONE) {
+        if (crossPhase == 0 && crossCd <= 0 && botCrossUp[botLevel] && P.hp > 40 && see && hdist > 4 && hdist < 12 &&
+            P.dashCharge >= 1 && P.hook == HOOK_NONE) {
             crossPhase = 1; crossT = 0;
             netlog("cross-up : elan vers %s (%.1f m, %.1f m plus haut)", pname(best), hdist, dy);
         }
@@ -675,9 +692,37 @@ static void bot_think(float dt) {
     }
 
     /* air-strafe : la vue oscille de +-0.45 rad autour de la cible, strafe du cote ou elle tourne */
-    float phase = botT * 2.6f, swing = 0.45f * sinf(phase);
+    float phase = botT * 2.6f, swing = (see ? 0.1f : 0.45f) * sinf(phase);   /* cible en vue : la vue reste dessus */
     if (P.grounded || P.hook != HOOK_NONE || bd < 6) { swing = 0; botHeld[A_FWD] = 1; }
     else botHeld[cosf(phase) > 0 ? A_RIGHT : A_LEFT] = 1;
+    /* au combat (cible en vue, NORMAL et DIFFICILE) : on garde la distance de son arme, on se decale de gauche a
+     * droite a intervalles irreguliers (plus dur a viser), on recule quand on est blesse */
+    static float strafeT, dodgeT, lastHp = 100;
+    static int strafeSide = A_LEFT, dodgeSide = A_LEFT;
+    if (P.hp < lastHp - 5 && dodgeT <= 0 && frand() < botDodgeP[botLevel]) {   /* touche : pas de cote */
+        dodgeT = 0.45f; dodgeSide = frand() < 0.5f ? A_LEFT : A_RIGHT;
+        if (botLevel >= 2 && P.dashCharge >= 1 && P.hook == HOOK_NONE) botPress[A_DASH] = 1;
+    }
+    lastHp = P.hp;
+    if (best >= 0 && see && botLevel >= 1 && P.hook == HOOK_NONE) {
+        float lo = 6, hi = 25;                            /* distance de confort selon l'arme en main */
+        switch (P.weapon) {
+        case WP_RAIL: case WP_KINETIC: lo = 14; hi = 40; break;
+        case WP_ROCKET: lo = 9; hi = 26; break;
+        case WP_SHOTGUN: lo = 0; hi = 9; break;
+        case WP_TESLA: lo = 4; hi = 16; break;
+        case WP_SAW: case WP_MINE: lo = 6; hi = 20; break;
+        default: break;
+        }
+        if (P.hp < 35) { lo += 8; hi += 10; }             /* blesse : plus loin */
+        if ((strafeT -= dt) <= 0) { strafeT = frange(0.4f, 1.3f); strafeSide = frand() < 0.5f ? A_LEFT : A_RIGHT; }
+        botHeld[A_LEFT] = botHeld[A_RIGHT] = 0;
+        if (bd > hi) botHeld[A_FWD] = 1;                  /* trop loin : on approche (en se decalant) */
+        else { botHeld[A_FWD] = 0; swing = 0; }
+        if (bd < lo) botHeld[A_BACK] = 1;                 /* trop pres pour son arme : on recule */
+        botHeld[strafeSide] = 1;
+    }
+    if (dodgeT > 0) { dodgeT -= dt; botHeld[A_LEFT] = botHeld[A_RIGHT] = 0; botHeld[dodgeSide] = 1; }
     P.yaw = aimYaw + swing;
     P.pitch = aimPitch;
     if (escapeT > 0) {
@@ -825,7 +870,8 @@ static void bot_think(float dt) {
         botHeld[A_FIRE] = 1;
     }
 
-    if (best >= 0 && bd > (dry ? 4 : 14) && P.dashCharge >= 1 && botT > botNextDash) {    /* dash vers la cible */
+    if (best >= 0 && bd > (dry ? 4 : 14) && (P.hp >= 35 || dry) && P.dashCharge >= 1 && botT > botNextDash &&
+        !(see && P.weapon == WP_RAIL && bd < 40)) {      /* dash vers la cible (pas au rail a bonne distance, ni blesse) */
         memset(botHeld, 0, sizeof botHeld);
         botHeld[A_FWD] = botHeld[A_JUMP] = 1;
         P.yaw = aimYaw;
@@ -942,4 +988,64 @@ static void bot_think(float dt) {
         netlog("bot pos (%.1f %.1f %.1f) vit %.1f sol %d crochet %d cible %.1f m vue %d", P.pos.x, P.pos.y, P.pos.z, hs,
                P.grounded, P.hook, bd, see);
     }
+}
+
+/* ------------------------------------------------------------------------------------------------------------
+ * La "nuque" du bot. bot_think_inner decide OU regarder en ecrivant P.yaw / P.pitch (une vingtaine d'endroits :
+ * cible, parry, grappin, piece...). Ici on repart de la vue d'avant et on tourne vers cette direction comme une
+ * souris tenue par un humain : vitesse maxi, acceleration limitee, approche proportionnelle et suivi d'une cible
+ * qui bouge (anticipation de sa vitesse angulaire). Jamais de saut instantane d'un point A a un point B.
+ * Les actions qui partent dans la direction de la vue (tir, grappin, dash, piece, melee) attendent que la vue soit
+ * arrivee ; un appui en attente garde sa direction BOT_PEND_T au plus. -------------------------------------------- */
+static float botYawVel, botPitchVel, botLastWantY, botLastWantP;
+static int botPendMask;                                   /* appuis en attente (bits 1 << A_*) */
+static float botPendT, botPendY, botPendP;
+static float wrap_pi(float a) { while (a > PI) a -= 2 * PI; while (a < -PI) a += 2 * PI; return a; }
+static float bot_view(float y0, float p0, float wantY, float wantP, float dt) {   /* renvoie l'ecart restant (rad) */
+    int lv = botLevel < 0 ? 0 : botLevel > 2 ? 2 : botLevel;
+    float dy = wrap_pi(wantY - y0), dp = wantP - p0;
+    float ffY = wrap_pi(wantY - botLastWantY) / fmaxf(dt, 1e-3f), ffP = (wantP - botLastWantP) / fmaxf(dt, 1e-3f);
+    if (fabsf(ffY) > 6 || fabsf(ffP) > 6) ffY = ffP = 0;  /* changement de cible : pas un suivi */
+    botLastWantY = wantY; botLastWantP = wantP;
+    float vmax = botTurnMax[lv], acc = botTurnAcc[lv] * dt, k = botTurnK[lv];
+    float wy = clampf(ffY + dy * k, -vmax, vmax), wp = clampf(ffP + dp * k, -vmax * 0.8f, vmax * 0.8f);
+    botYawVel += clampf(wy - botYawVel, -acc, acc);
+    botPitchVel += clampf(wp - botPitchVel, -acc, acc);
+    float sy = botYawVel * dt, sp = botPitchVel * dt;
+    if ((sy > 0) != (dy > 0) && fabsf(dy) > 0.002f && fabsf(ffY) < 0.5f) { sy = 0; botYawVel *= 0.5f; }   /* pas de retour en arriere */
+    if (fabsf(sy) > fabsf(dy) && fabsf(ffY) < 0.5f) { sy = dy; botYawVel *= 0.6f; }   /* pas de depassement */
+    if (fabsf(sp) > fabsf(dp) && fabsf(ffP) < 0.5f) { sp = dp; botPitchVel *= 0.6f; }
+    P.yaw = y0 + sy;
+    P.pitch = clampf(p0 + sp, -1.55f, 1.55f);
+    float ey = wrap_pi(wantY - P.yaw), ep = wantP - P.pitch;
+    return sqrtf(ey * ey + ep * ep);
+}
+static void bot_think(float dt) {
+    float y0 = P.yaw, p0 = P.pitch;
+    bot_think_inner(dt);
+    if (appState != APP_GAME || P.dead) { botPendMask = 0; botYawVel = botPitchVel = 0; botLastWantY = P.yaw; botLastWantP = P.pitch; return; }
+    static const int aimed[4] = { A_HOOK, A_DASH, A_SKILL, A_MELEE };   /* actions qui partent dans la direction de la vue */
+    float wantY = P.yaw, wantP = P.pitch;
+    int newPress = 0;
+    for (int k = 0; k < 4; k++) if (botPress[aimed[k]]) newPress |= 1 << aimed[k];
+    if (botPendMask) {                                    /* un appui attend : sa direction prime, jusqu'a BOT_PEND_T */
+        botPendT -= dt;
+        if (botPendT <= 0) botPendMask = 0;
+        else { wantY = botPendY; wantP = botPendP; }
+    }
+    float tol = BOT_AIM_TOL + 0.5f / fmaxf(botTgtDist, 2);
+    float err = bot_view(y0, p0, wantY, wantP, dt);
+    int ready = err <= tol;
+    for (int k = 0; k < 4; k++) if (newPress & (1 << aimed[k])) botPress[aimed[k]] = 0;
+    if (botPendMask) {                                    /* un appui attend (la vue va vers SA direction) */
+        if (ready) {                                      /* arrivee : il part maintenant */
+            for (int k = 0; k < 4; k++) if (botPendMask & (1 << aimed[k])) { botPress[aimed[k]] = 1; botHeld[aimed[k]] = 1; }
+            botPendMask = 0;
+        }                                                 /* (un nouvel appui pendant l'attente est abandonne) */
+    } else if (newPress) {
+        if (ready) for (int k = 0; k < 4; k++) { if (newPress & (1 << aimed[k])) botPress[aimed[k]] = 1; }
+        else { botPendMask = newPress; botPendT = BOT_PEND_T; botPendY = wantY; botPendP = wantP; }   /* la vue n'y est pas */
+    }
+    if (!ready) botHeld[A_FIRE] = 0;                      /* on ne tire pas tant que le viseur n'y est pas */
+    if (botPendMask & (1 << A_HOOK)) botHeld[A_HOOK] = 1; /* grappin en attente : on ne le lache pas entre-temps */
 }

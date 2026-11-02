@@ -506,8 +506,16 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
   tableau des scores).
 - `set_capture(on)` capture/relâche la souris (curseur caché et confiné). Perdre le focus relâche.
 - La souris de visée vient de `WM_INPUT` (souris brute) dans `mdx`/`mdy`.
-- **Bots** : écrivent `botHeld[A_*]` (tenu) et `botPress[A_*]` (appui d'un tick). Ils modifient aussi
-  directement `P.yaw`, `P.pitch` et parfois `P.weapon`.
+- **Bots** : écrivent `botHeld[A_*]` (tenu) et `botPress[A_*]` (appui d'un tick), et parfois `P.weapon`.
+  `bot_think_inner` écrit la direction **voulue** dans `P.yaw` / `P.pitch` ; l'enveloppe `bot_think` repart de la vue
+  d'avant et tourne vers elle avec `bot_view` (vitesse maxi `botTurnMax`, accélération `botTurnAcc`, raideur
+  `botTurnK`, suivi de la vitesse angulaire de la cible) : **jamais de rotation instantanée**. Tir tenu coupé tant que
+  la vue est à plus de `BOT_AIM_TOL` (+ taille de la cible) ; grappin, dash, pièce et mêlée attendent la vue
+  (`BOT_PEND_T`), avec leur direction. Niveaux (`etat_partage.c`) : `botAimMul`, `botReactT`, `botHitP`,
+  `botParryP`, `botTurn*`, `botLeadK` (anticipation des roquettes, visée aux pieds), `botDodgeP` (pas de côté quand
+  il est touché), `botCrossUp`. Au combat (NORMAL, DIFFICILE) : cible gardée sauf mieux de 8 m (visible = −25 m,
+  blessée = −6 m), distance de confort selon l'arme (rail 14–40 m, roquettes 9–26, Éventail < 9, Tesla 4–16…), pas
+  de côté irréguliers, recul et pas de dash vers la cible sous 35 PV.
 - **Manette** (`src/entrees/manette.c`) : touches `K_PAD_*` après la souris (croix, rond, carré, triangle, L1, R1, L2,
   R2, share, options, L3, R3, PS, pavé tactile, croix directionnelle, stick gauche poussé), une touche par action
   dans `padBinds` (défaut `padBindDefault`, clés `manette_<actId>=` de `velocity.ini`), lue par `input_poll` comme

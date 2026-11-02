@@ -38,6 +38,9 @@
 #define AIMASSIST_CONE  0.07f  /* rayon (rad, ~4 deg) du cone pres du viseur ou l'aimant agit */
 #define AIMASSIST_RATE  1.4f   /* vitesse de correction au centre du cone (s'annule au bord) ; faible expres */
 #define AIMASSIST_RANGE 60.0f  /* portee max */
+#define BOT_AIM_TOL     0.03f  /* bot : il ne tire (ou ne lance grappin, dash, piece, melee) qu'avec la vue a moins de
+                                  0,03 rad (+ la taille de la cible) de la direction voulue */
+#define BOT_PEND_T      0.6f   /* ...sinon l'action attend que la vue arrive, 0,6 s au plus */
 
 #define GRAPPLE_RANGE    55.0f   /* portee max du crochet */
 #define GRAPPLE_SPEED    120.0f  /* vitesse de vol du crochet */

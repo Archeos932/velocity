@@ -191,9 +191,18 @@ static HANDLE botProc[MAXP];                              /* processus des bots 
 static pid_t botProc[MAXP];
 #endif
 static const char *botLevelNames[3] = { "FACILE", "NORMAL", "DIFFICILE" };
-static const float botAimMul[3]  = { 6.5f, 1.3f, 0.45f };   /* imprecision de visee */
-static const float botReactT[3]  = { 1.1f, 0.32f, 0.14f };  /* delai avant de tirer apres avoir vu la cible */
-static const float botHitP[3]    = { 0.18f, 0.38f, 0.60f };  /* chance qu'un tir soit cadre (sinon il frole la cible) */
+/* Difficulte : FACILE = debutant (vise mal, tourne lentement, ne pare presque pas), NORMAL = joueur moyen,
+ * DIFFICILE = bon joueur, jamais surhumain (reaction > 0,2 s, la vue tourne au plus ~540 deg/s). */
+static const float botAimMul[3]  = { 6.5f, 1.3f, 0.5f };    /* imprecision de visee */
+static const float botReactT[3]  = { 0.9f, 0.38f, 0.22f };  /* delai avant de tirer apres avoir vu la cible */
+static const float botHitP[3]    = { 0.16f, 0.36f, 0.55f };  /* chance qu'un tir soit cadre (sinon il frole la cible) */
+/* la vue du bot tourne comme une souris tenue par un humain : vitesse maxi, acceleration, raideur (bot_view) */
+static const float botTurnMax[3] = { 3.5f, 6.5f, 9.5f };    /* rad/s */
+static const float botTurnAcc[3] = { 18.0f, 40.0f, 70.0f }; /* rad/s2 : pas de demarrage sec */
+static const float botTurnK[3]   = { 5.0f, 8.0f, 11.0f };   /* 1/s : vitesse d'approche de la direction voulue */
+static const float botLeadK[3]   = { 0.0f, 0.55f, 0.9f };   /* anticipation des roquettes (part du trajet de la cible) */
+static const float botDodgeP[3]  = { 0.15f, 0.45f, 0.75f }; /* touche : chance d'un pas de cote (dash en DIFFICILE) */
+static const int   botCrossUp[3] = { 0, 1, 1 };             /* cross-up (passer au-dessus et tirer dans le dos) */
 static int botAimTest;                                    /* run_tests : ancienne visee sinusoidale, deterministe */
 /* tirage d'un tir du bot : decalage lateral (m) au niveau de la cible. Cadre : moins de 0,2 m du centre ; rate : il
  * frole la cible (0,55 a 1,2 m sur le cote, un peu plus de loin) au lieu de partir n'importe ou. Renvoie 1 si cadre */
@@ -205,7 +214,7 @@ static int bot_roll_aim(float dist, float *offX, float *offY) {
     *offY = frange(-0.35f, 0.35f);
     return 0;
 }
-static const float botParryP[3]  = { 0.15f, 0.5f, 0.85f };  /* chance de tenter un parry quand l'epee adverse arrive */
+static const float botParryP[3]  = { 0.12f, 0.45f, 0.7f };  /* chance de tenter un parry quand l'epee adverse arrive */
 static void netlog(const char *fmt, ...);
 static void net_hit(int target, float dmg, V3 knock, int weapon);
 static void net_fx_rail(V3 a, V3 b, float k);
