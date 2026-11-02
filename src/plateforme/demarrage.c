@@ -222,7 +222,7 @@ static int velocity_main(const char *cmd) {
     memcpy(binds, bindDefault, sizeof binds);
     memcpy(padBinds, padBindDefault, sizeof padBinds);
     if (cmd && strncmp(cmd, "--test ", 7) == 0) { gfx_preset(GFX_Q_ULTRA); run_tests(cmd + 7); return 0; }
-    int shotQuality = GFX_Q_ULTRA;                        /* --shot et --bot : ULTRA (captures de reference), sauf --qualite N */
+    int shotQuality = GFX_Q_ULTRA, shotView = -1;                        /* --shot et --bot : ULTRA (captures de reference), sauf --qualite N */
     const char *shotPath = NULL;
     static char shotBuf[512];
     float shotYaw = 0, shotPitch = -1000;
@@ -262,7 +262,8 @@ static int velocity_main(const char *cmd) {
             else if (!strcmp(t, "--local")) botLocal = 1;
             else if (!strcmp(t, "--hidden")) botHidden = 1;
             else if (!strcmp(t, "--soft")) glForceSoft = 1;
-            else if (!strcmp(t, "--multipasse")) worldForceMulti = 1;   /* monde en plusieurs passes, comme sans multitexture */
+            else if (!strcmp(t, "--multipasse")) worldForceMulti = 1;
+            else if (!strcmp(t, "--vue") && (t = strtok(NULL, " "))) shotView = atoi(t);   /* menu : plan de camera N */   /* monde en plusieurs passes, comme sans multitexture */
             else if (!strcmp(t, "--qualite") && (t = strtok(NULL, " "))) shotQuality = atoi(t);
             else if (!strcmp(t, "--teams") && (t = strtok(NULL, " "))) wantTeams = atoi(t) < 0 ? 0 : atoi(t) > TEAM_MAX ? TEAM_MAX : atoi(t);
             else if (!strcmp(t, "--regles") && (t = strtok(NULL, " "))) {   /* --regles mode,grappin,munitions,boutique,specs,minutes */
@@ -423,6 +424,11 @@ static int velocity_main(const char *cmd) {
         if (strstr(shotPath, "loadout")) { loadoutOpen = 1; if (strstr(shotPath, "charge")) wantSkill = SK_CHARGE; }
         if (strstr(shotPath, "heberger")) { hostOpen = 1; wantTeams = 2; hostBots = 1; }
         if (strstr(shotPath, "skinmenu")) { skinOpen = 1; wantSkin = SKN_POUSSIN; skinPrevTeam = 1; nowT = 0.4; }
+        if (shotView >= 0) {                              /* --vue N : plan de camera du menu, au milieu du plan */
+            menu_cam_tick(0);
+            mcamShot = shotView % MCAM_COUNT; mcamVar = shotView / MCAM_COUNT; mcamT = MENU_SHOT_T * 0.5f;
+            menu_cam_tick(0);
+        }
         render(1, TICK);
         save_bmp(shotPath);
         return 0;
@@ -538,6 +544,7 @@ static int velocity_main(const char *cmd) {
             CO[1].pos = v3(-3, 0.9f, 19);
             add_beam(v3(0.3f, 1.4f, 23.4f), np_center(1), v3(0.85f, 0.35f, 1), 0.3f);
         }
+        if (strstr(shotPath, "choix")) { rules.shop = 0; pickOn = 1; pickT = 9.4f; }   /* --shot dm_choix.bmp : choix du loadout */
         matchT = 95;
         if (strstr(shotPath, "bench")) { bench_render(shotPath); return 0; }
         render(1, TICK);
@@ -813,7 +820,7 @@ static int velocity_main(const char *cmd) {
                 memset(latch, 0, sizeof latch);
             }
         } else {
-            P.yaw += dt * 0.05f;                  /* l'arene tourne doucement derriere le menu */
+            menu_cam_tick(dt);                    /* menus : plans de camera sur la carte (camera_menu.c) */
             mdx = mdy = 0;
             memset(latch, 0, sizeof latch);
         }

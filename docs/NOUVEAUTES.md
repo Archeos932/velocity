@@ -363,6 +363,18 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
   manette Xbox : c'est aussi géré.
 - Tests : « manette : avance 1 saut 1 tir 1… », « reglages manette et graphismes… ».
 
+## 27. Choix du loadout au début de chaque match, plans de caméra au menu
+
+- **Choix du loadout** : sans boutique (FRAGS, CHRONO, modes d'équipe), chaque match commence par 12 s pour
+  choisir ses 2 armes et sa mêlée (aussi en rejoignant une partie en cours), bouton PRÊT pour partir avant. Avec la
+  boutique : l'arme de départ parmi 4, comme avant. Pendant le choix : immobile, sans attaque, et **intouchable**
+  (l'hôte ignore les dégâts, `NET_VER` 16 : version réseau à jour pour tous les joueurs).
+- **Menu principal** : la carte choisie défile en 4 plans qui s'enchaînent toutes les 9 s avec un fondu (orbite,
+  survol, au sol, travelling au-dessus des toits) ; bouton **VUE** en bas à droite pour passer au suivant. Les plans
+  se calculent seuls pour chaque carte, et un garde-fou empêche la caméra d'entrer dans un bloc.
+- Tests : « choix du loadout : ouvert 1, deplacement 0.00 m, tirs 0, degats … 100 puis 70… », « camera du menu :
+  192 plans essayes sur 8 cartes, 0 dans un bloc ».
+
 ## Vérifications faites
 
 - Compilation macOS sans avertissement ; tous les tests `--test` conformes, y compris ceux d'`origin/dev` (stéréo,

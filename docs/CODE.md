@@ -522,6 +522,12 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
 
 ### 3.9 Réglages et `velocity.ini`
 
+- **Caméra du menu** (`src/interface/camera_menu.c`) : hors partie, `menu_cam_tick` place P selon le plan en cours
+  (`MCAM_ORBIT` comme avant, `MCAM_SURVOL` très haut en tournant, `MCAM_SOL` à hauteur d'homme vers le centre,
+  `MCAM_TRAVELLING` d'un départ au plus lointain au-dessus du décor), `MENU_SHOT_T` s chacun avec un fondu au noir
+  (`menuFade`, dessiné par `render`) ; bouton VUE (bas à droite) = plan suivant. Centre, rayon et hauteur du décor
+  sont calculés pour chaque carte (`mcam_setup`, rayons verticaux) ; garde-fou : jamais dans un bloc. Capture :
+  `--shot menu.bmp --map N --vue K` (K = plan + 4 × variante). Test : « camera du menu : … 0 dans un bloc ».
 - **PARAMÈTRES** a trois pages (`settingsPage`) : RÉGLAGES (curseurs, options, touches), GRAPHISMES
   (`draw_settings_gfx` : QUALITÉ, ombres, bloom, textures, détails, résolution 3D, ciel, plein écran, MAX FPS ; à
   droite la carte graphique et le mode de dessin), MANETTE (`draw_settings_pad`). Échap revient à RÉGLAGES.
@@ -955,6 +961,11 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
 - **Bots** : vont à l'objectif (`mode_bot_goal` : zone pas à eux, drapeau à voler / rendre / ramener, bouclier),
   le tiennent sur place, se battent si un ennemi est vu de près. **Dans HEBERGER, pas de bots en 3 ZONES, DRAPEAU
   et BOUCLIER** (modes entre joueurs pour l'instant) ; FRAGS et CHRONO les gardent.
+- **Choix du loadout au départ** (sans boutique, `pickOn`, `pick_start` appelé par `eco_reset` et à l'arrivée dans
+  une partie `on_welcome`) : `LOADOUT_PICK_T` secondes pour choisir 2 armes et la mêlée (`draw_pick`, bouton PRÊT,
+  `pick_end` → `loadout_apply`). Pendant ce choix, comme pour l'arme de départ de la boutique (`picking()`) : souris
+  libérée, immobile, aucune action, et `NetPState.spare[1]` = 1 → `host_apply_damage` n'applique aucun dégât
+  (sauf vide et suicide). Pas pour les bots ni les spectateurs. `NET_VER` 16. Capture : `--shot dm_choix.bmp`.
 - **Boutique** (`src/jeu/economie.c`, chaque joueur pour lui-même) : `ECO_START` pièces, `ECO_KILL`, `ECO_DEATH`,
   `ECO_OBJ` (objectif personnel), `ECO_TEAM_OBJ`. Début de match : choix d'une arme parmi 4 (`ecoStarters`, 10 s,
   souris libérée, immobile) ; à chaque mort, la boutique remplace le sélecteur de loadout : acheter une arme

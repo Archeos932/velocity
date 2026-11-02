@@ -99,6 +99,7 @@
 
 #include "src/interface/mise_a_jour.c"           /* mise a jour depuis GitHub : verifier, telecharger, installer */
 #include "src/interface/config.c"                /* velocity.ini : reglages et touches du joueur */
+#include "src/interface/camera_menu.c"           /* camera du menu : plans qui s'enchainent sur la carte (bouton VUE) */
 #include "src/interface/menus.c"                 /* boutons, menus, parametres, loadout, ecran SKIN */
 #include "src/interface/scores.c"                /* tableau des scores, killfeed, pseudos */
 

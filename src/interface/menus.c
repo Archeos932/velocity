@@ -560,6 +560,11 @@ static void draw_main_menu(float cx, float cy) {
     if (button(bx, y, bw, 46, "QUITTER")) pendingAction = ACT_QUIT;
     draw_status(bx, y + 72);
     draw_controls(cx - 130, cy - 200);
+    {                                                     /* plans de camera sur la carte : le suivant */
+        char vb[40];
+        snprintf(vb, sizeof vb, "VUE : %s", mcamNames[mcamShot]);
+        if (button((float)winW - 300, (float)winH - 76, 270, 46, vb)) menu_cam_next();
+    }
     if (uiClick) { uiClick = 0; uiFocus = 0; }
 }
 

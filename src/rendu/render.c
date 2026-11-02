@@ -346,6 +346,13 @@ static void render(float alpha, float frameDt) {
         winW = fullW; winH = fullH;
         render_scale_apply(sw, sh);
     }
+    if (appState != APP_GAME && menuFade > 0.001f) {      /* menus : fondu au noir entre deux plans de camera */
+        glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, winW, winH, 0, -1, 1);
+        glMatrixMode(GL_MODELVIEW); glLoadIdentity();
+        glDisable(GL_DEPTH_TEST); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        rect(0, 0, (float)winW, (float)winH, 0, 0, 0, menuFade);
+        glDisable(GL_BLEND); glEnable(GL_DEPTH_TEST);
+    }
     if (stormFlash > 0) {                                 /* eclair : tout l'ecran blanchit un instant */
         glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, winW, winH, 0, -1, 1);
         glMatrixMode(GL_MODELVIEW); glLoadIdentity();

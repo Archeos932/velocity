@@ -101,20 +101,30 @@ static void game_tick(float dt) {
     int lmbp = actP[A_FIRE], swap = actP[A_SWAP], meleePress = actP[A_MELEE], coinPress = actP[A_SKILL];
     hookPressIn = actP[A_HOOK];
     hookHeldIn = act[A_HOOK];
+    if (picking() && !P.dead) {                           /* choix de l'arme : ni deplacement ni attaque */
+        memset(act, 0, sizeof act); memset(actP, 0, sizeof actP);
+        jp = dp = w1 = w2 = lmbp = swap = meleePress = coinPress = 0;
+        hookPressIn = hookHeldIn = 0;
+    }
 
     if (P.dead) {
         P.deathT += dt;
         if (!dmMode && (rp || (lmbp && P.deathT > 1.0f))) { reset_game(); return; }
     } else gameTime += dt;
-    if (eco_on()) {                                       /* boutique : curseur libre a la mort et au choix de l'arme de depart */
+    if (eco_on() || pickOn || ecoShopping) {              /* boutique, choix de l'arme : curseur libre */
         static int shopWas;
-        int shopping = (P.dead || ecoNeedStarter) && !spectating && !botMode;
+        int shopping = ((eco_on() && (P.dead || ecoNeedStarter)) || pickOn) && !spectating && !botMode;
         if (shopping && captured) set_capture(0);
         if (!shopping && shopWas && !captured) set_capture(1);
         shopWas = shopping; ecoShopping = shopping;
         if (ecoNeedStarter && !P.dead) {                  /* arme de depart : 10 s pour choisir, immobile en attendant */
             ecoStarterT -= dt;
             if (ecoStarterT <= 0) { eco_pick_starter(WP_RAIL); loadout_apply(); }
+            P.vel = v3(0, 0, 0);
+        }
+        if (pickOn && !P.dead) {                          /* sans boutique : loadout complet, LOADOUT_PICK_T s */
+            pickT -= dt;
+            if (pickT <= 0) pick_end();
             P.vel = v3(0, 0, 0);
         }
     }

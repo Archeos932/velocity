@@ -323,6 +323,7 @@ static void draw_style_hud(void) {
 static void draw_race_hud(void);                          /* course_hud.c */
 static void draw_modes_hud(void);                         /* modes_hud.c */
 static void draw_shop(void);
+static void draw_pick(void);                              /* modes_hud.c : choix du loadout */
 static void draw_hud(void) {
     glMatrixMode(GL_PROJECTION); glLoadIdentity();
     glOrtho(0, winW, winH, 0, -1, 1);
@@ -874,6 +875,7 @@ static void draw_hud(void) {
     draw_race_hud();                                      /* course : chrono, decompte, arrivee */
     draw_modes_hud();                                     /* modes : objectifs, temps, pieces */
     draw_shop();                                          /* boutique (mort) et arme de depart */
+    draw_pick();                                          /* sans boutique : choix du loadout au debut du match */
     if (msgT > 0) text_c(2, cx, cy - 120, msg, 1, 1, 1, clampf(msgT, 0, 1));
 
     if (dmMode && matchOver) {

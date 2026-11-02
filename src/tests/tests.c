@@ -282,6 +282,55 @@ static void run_tests(const char *path) {
         pad_release(); reset_game();
     }
 
+    {                                                     /* choix du loadout au debut du match (sans boutique) */
+        int sl[2] = { wantLoadout[0], wantLoadout[1] }, sm = wantMelee, capS = captured;
+        reset_game(); appState = APP_GAME; dmMode = 1; rules.shop = 0; spectating = 0; captured = 0;
+        eco_reset();
+        int on = pickOn;
+        wantLoadout[0] = WP_SHOTGUN; wantLoadout[1] = WP_TESLA; wantMelee = MK_SWORD;
+        P.pos = P.prevPos = v3(0, 0.05f, 10); P.vel = v3(0, 0, 0);
+        V3 p0 = P.pos;
+        keys[binds[A_FWD][0]] = 1;
+        for (int i = 0; i < 120; i++) { if (i % 10 == 0) latch[binds[A_FIRE][0]] = 1; game_tick(TICK); }
+        float moved = hlen(vsub(P.pos, p0));
+        int beams = 0; for (int i = 0; i < MAXBM; i++) beams += BM[i].life > 0;
+        keys[binds[A_FWD][0]] = 0;
+        NP[1].active = NP[1].alive = 1; NP[1].hp = 100; NP[1].st.spare[1] = 1;
+        host_apply_damage(0, 1, 50, W_RAIL);
+        float hpPick = NP[1].hp;
+        NP[1].st.spare[1] = 0;
+        host_apply_damage(0, 1, 30, W_RAIL);
+        float hpAfter = NP[1].hp;
+        for (int i = 0; i < (int)(LOADOUT_PICK_T / TICK) + 10 && pickOn; i++) game_tick(TICK);
+        int end = pickOn, l0 = P.loadout[0], l1 = P.loadout[1];
+        fprintf(f, "choix du loadout : ouvert %d, deplacement %.2f m, tirs %d, degats pendant le choix %.0f puis %.0f PV, "
+                   "fini %d, armes %d %d (attendu 1, 0.00, 0, 100 puis 70, 0, %d %d)\n",
+                on, moved, beams, hpPick, hpAfter, end, l0, l1, WP_SHOTGUN, WP_TESLA);
+        pickOn = 0; dmMode = 0; captured = capS; memset(NP, 0, sizeof NP);
+        wantLoadout[0] = sl[0]; wantLoadout[1] = sl[1]; wantMelee = sm;
+        reset_game();
+    }
+
+    {                                                     /* camera du menu : aucun plan dans un bloc, sur toutes les cartes */
+        int bad = 0, poses = 0, as = appState;
+        appState = APP_MENU;
+        for (int m = 0; m < NMAPS; m++) {
+            load_map(m); reset_game();
+            mcamMap = -1;
+            for (int sh = 0; sh < MCAM_COUNT * 2; sh++)
+                for (int k = 0; k < 3; k++) {
+                    menu_cam_tick(0);
+                    mcamShot = sh % MCAM_COUNT; mcamVar = sh / MCAM_COUNT; mcamT = MENU_SHOT_T * k * 0.45f;
+                    menu_cam_tick(0);
+                    V3 e = vadd(P.pos, v3(0, P.eyeH, 0));
+                    poses++;
+                    if (point_in_box(e)) { bad++; fprintf(f, "  camera du menu dans un bloc : %s, plan %s, (%.0f %.0f %.0f)\n", maps[m].name, mcamNames[mcamShot], e.x, e.y, e.z); }
+                }
+        }
+        fprintf(f, "camera du menu : %d plans essayes sur %d cartes, %d dans un bloc (attendu 0)\n", poses, NMAPS, bad);
+        appState = as; load_map(0); reset_game(); mcamMap = -1;
+    }
+
     {                                                     /* secteurs du monde : case d'un point, tri par la pyramide de vision */
         float sx0 = wsX0, sz0 = wsZ0, sc = wsCell; int sgx = wsGX, sgz = wsGZ;
         float pm[16], mm[16];

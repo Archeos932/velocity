@@ -196,6 +196,36 @@ static void draw_modes_hud(void) {
     }
 }
 
+/* --- sans boutique : choix du loadout (2 armes + melee) au debut du match --- */
+static void draw_pick(void) {
+    if (!pickOn || P.dead || spectating || matchOver) return;
+    float cx = winW * 0.5f, cy = winH * 0.5f;
+    char buf[96];
+    rect(0, 0, (float)winW, (float)winH, 0.02f, 0.02f, 0.06f, 0.6f);
+    float bw = winW < 1300 ? 118.0f : 140.0f, step = bw + 8, x0 = cx - step * WP_COUNT * 0.5f, y = cy - 200;
+    text_c(2, cx, y - 40, "CHOISIS TON LOADOUT", 1, 0.85f, 0.3f, 1);
+    snprintf(buf, sizeof buf, "immobile et intouchable en attendant  -  %.0f s", fmaxf(0, pickT));
+    text_c(0, cx, y - 8, buf, 0.8f, 0.82f, 0.9f, 1);
+    for (int s = 0; s < 2; s++) {                         /* deux armes : choisir celle de l'autre place les echange */
+        y += 50;
+        text(1, x0, y - 6, s ? "ARME 2" : "ARME 1", 0.5f, 0.9f, 1.0f, 1);
+        for (int w = 0; w < WP_COUNT; w++) {
+            const AmmoDef *d = &ammoDef[w];
+            if (sel_button(x0 + w * step, y + 4, bw, 44, d->name, wantLoadout[s] == w, wpReady[w], v3(d->r, d->g, d->b)))
+                loadout_pick(s, w);
+        }
+        y += 40;
+    }
+    y += 50;
+    text(1, x0, y - 6, "MELEE", 0.5f, 0.9f, 1.0f, 1);
+    for (int m = 0; m < MK_COUNT; m++)
+        if (sel_button(x0 + m * step, y + 4, bw, 44, meleeNames[m], m == wantMelee, mkReady[m], v3(1, 0.85f, 0.4f)))
+            wantMelee = m;
+    y += 80;
+    if (button(cx - 130, y, 260, 56, "PRET !")) { cfg_save(); pick_end(); }
+    if (uiClick) uiClick = 0;
+}
+
 /* --- boutique : arme de depart (debut de match), achats a l'ecran de mort --- */
 static void draw_shop(void) {
     if (!eco_on() || spectating || matchOver) return;

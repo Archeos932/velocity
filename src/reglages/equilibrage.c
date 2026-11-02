@@ -196,6 +196,7 @@ enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_COUNT };
 #define ECO_TEAM_OBJ     100      /* objectif de l'equipe */
 #define ECO_AMMO_PRICE   250      /* MUNITIONS + : jauges pleines a chaque respawn (pour le match) */
 #define ECO_STARTER_T    10.0f    /* secondes pour choisir l'arme de depart */
+#define LOADOUT_PICK_T   12.0f    /* sans boutique : secondes pour choisir son loadout au debut du match (ou en arrivant) */
 
 /* Mode COURSE (src/jeu/course.c) */
 #define RACE_COUNTDOWN   3.0f     /* decompte avant le depart */
@@ -479,6 +480,8 @@ enum { GFX_Q_TOASTER, GFX_Q_LOW, GFX_Q_MID, GFX_Q_ULTRA, GFX_Q_COUNT };   /* pre
 #define PAD_TRIGGER_PRESS  0.35f   /* L2 / R2 : enfonce au-dela = appuye */
 #define PAD_CURSOR_SPEED   1100.0f /* menus : curseur au stick gauche (pixels/s a fond) */
 #define PAD_SCAN_T         2.0f    /* sans manette : on recherche toutes les 2 s */
+#define MENU_SHOT_T        9.0f    /* menu principal : duree d'un plan de camera (s) */
+#define MENU_FADE_T        0.6f    /* ...fondu au noir a chaque changement de plan (s) */
 #define WORLD_SECTOR_M     24.0f   /* cote d'un secteur du monde (m) : seuls ceux dans le champ de vision sont dessines */
 #define RENDER_SCALE_TOASTER 100   /* resolution de la 3D (% de la fenetre) des prereglages : l'agrandissement coute ~0,2 ms
                                       (carte) a ~5 ms (logiciel), mesure : 67 % ne gagnait rien (Mac M4, rendu logiciel) */

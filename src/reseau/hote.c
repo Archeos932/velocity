@@ -162,6 +162,7 @@ static void host_take_pickup(int i, int who) {
 
 /* degats arbitres : PV, plafond par touche, temps pour tuer, kill (EV_HIT, et les decisions du bouclier) */
 static void host_apply_damage(int from, int v, float dmgIn, int w) {
+    if (w != W_SELF && w != W_VOID && v >= 0 && v < MAXP && (NP[v].st.spare[1] & 1)) return;   /* choisit son arme : intouchable */
     float before = NP[v].hp;
     if (from != v && from >= 0 && from < MAXP) {          /* specialisations : ASSAUT tape plus fort, REMPART encaisse */
         if (np_spec(from) == SPEC_ASSAUT) dmgIn *= SPEC_ASSAUT_MUL;

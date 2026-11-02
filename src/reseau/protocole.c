@@ -11,7 +11,8 @@
 /* HIT. Les evenements sont renvoyes 3 fois et dedoublonnes par id.    */
 /* ------------------------------------------------------------------ */
 #define NET_MAGIC 0x564C4F43u
-#define NET_VER   15      /* 15 : regles (mode, grappin, munitions, boutique, specs) et objectifs dans PkSnap, EV_OBJ, spec dans NetPState */
+#define NET_VER   16      /* 16 : spare[1] de NetPState = en train de choisir son arme (intouchable) ;
+                             15 : regles (mode, grappin, munitions, boutique, specs) et objectifs dans PkSnap, EV_OBJ, spec dans NetPState */
 enum { PK_QUERY = 1, PK_ANNOUNCE, PK_JOIN, PK_WELCOME, PK_STATE, PK_SNAP, PK_ROSTER, PK_EVENT, PK_LEAVE,
        PK_PUNCH, PK_KEEP };   /* PUNCH : ouvre le NAT vers un client ; KEEP : un spectateur dit qu'il est la */
 enum { EV_RAIL = 1, EV_ROCKET, EV_ROCKET_END, EV_PARRY, EV_HIT, EV_MELEE, EV_KILL, EV_RESPAWN, EV_MATCH, EV_INFO, EV_PICKUP,
@@ -171,6 +172,7 @@ static void pack_state(NetPState *s) {
     s->weapon = (unsigned char)P.weapon;
     s->skin = (unsigned char)wantSkin;
     s->spare[0] = (unsigned char)my_spec();               /* specialisation (l'hote l'applique aux degats et aux soins) */
+    s->spare[1] = (unsigned char)(picking() && !P.dead);  /* choisit son arme : l'hote ne lui applique aucun degat */
     float swingT = P.meleeKind == MK_ANVIL ? ANVIL_SWING_T : P.meleeKind == MK_LANCE ? 0.2f :   /* Lance : estoc */
                    P.meleeKind == MK_FLAIL ? FLAIL_ANIM : 0.25f;
     s->melee = (unsigned char)(clampf(P.meleeT / swingT, 0, 1) * 255);

@@ -15,9 +15,29 @@ static int eco_price(int w) {
     }
 }
 static int eco_on(void) { return dmMode && rules.shop; }
+
+/* choix du loadout au debut de chaque match (et en arrivant dans une partie) quand il n'y a pas de boutique : 2 armes
+ * et la melee, LOADOUT_PICK_T secondes. Avec la boutique, c'est l'arme de depart parmi 4 (ecoNeedStarter). Pendant le
+ * choix : immobile, sans attaque, et l'hote n'applique aucun degat (drapeau spare[1] de NetPState). */
+static int pickOn;
+static float pickT;
+static void pick_start(void) {
+    pickOn = dmMode && !rules.shop && !spectating && !botMode;
+    pickT = LOADOUT_PICK_T;
+}
+static void loadout_apply(void);
+static void pick_end(void) {                               /* PRET, ou temps ecoule : on part avec le loadout choisi */
+    if (!pickOn) return;
+    pickOn = 0;
+    loadout_apply();
+    netlog("choix du loadout : %s + %s", ammoDef[P.loadout[0]].name, ammoDef[P.loadout[1]].name);
+}
+static int picking(void) { return pickOn || (eco_on() && ecoNeedStarter); }   /* en train de choisir son arme */
+
 static void eco_reset(void) {
     credits = ECO_START; ecoOwned = 0; ecoSlot[0] = ecoSlot[1] = -1; ecoAmmoBoost = 0; ecoBought = 0;
     ecoNeedStarter = eco_on(); ecoStarterT = ECO_STARTER_T;
+    pick_start();                                         /* sans boutique : choix du loadout */
 }
 static void eco_gain(int n, const char *why) {
     if (!eco_on() || n <= 0) return;

@@ -64,6 +64,7 @@ static void on_welcome(int id) {
     lastSnapT = nowT;
     memset(NP, 0, sizeof NP);
     dm_local_start();
+    pick_start();                                         /* on arrive : le temps de choisir son loadout */
     if (spectating) {                                     /* vue d'ensemble de la carte */
         P.pos = P.prevPos = vadd(maps[curMap].menuCam, v3(0, maps[curMap].specUp, 0)); P.pitch = maps[curMap].menuPitch - 0.08f; P.yaw = 0;
     }
