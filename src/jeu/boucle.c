@@ -101,6 +101,10 @@ static void game_tick(float dt) {
     int lmbp = actP[A_FIRE], swap = actP[A_SWAP], meleePress = actP[A_MELEE], coinPress = actP[A_SKILL];
     hookPressIn = actP[A_HOOK];
     hookHeldIn = act[A_HOOK];
+    if (raceOn) {                                         /* course : TIR (clic gauche, R2) se balance aussi, rien a abattre */
+        hookPressIn |= actP[A_FIRE]; hookHeldIn |= act[A_FIRE];
+        lmbp = 0; act[A_FIRE] = 0;
+    }
     if (picking() && !P.dead) {                           /* choix de l'arme : ni deplacement ni attaque */
         memset(act, 0, sizeof act); memset(actP, 0, sizeof actP);
         jp = dp = w1 = w2 = lmbp = swap = meleePress = coinPress = 0;

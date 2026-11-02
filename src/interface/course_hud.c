@@ -94,7 +94,9 @@ static void draw_race_world(void) {
         }
     }
     {                                                     /* points de balancement : contour dore qui brille, plus fort sur la cible de l'aimant */
-        V3 at; int tgt = P.hook == HOOK_NONE ? swing_target(eye_pos(), view_dir(), &at) : -1;
+        V3 at; int tgt = -1;
+        if (P.hook == HOOK_NONE && race_anchor(eye_pos(), &at) > 0)   /* la ou partira la toile */
+            for (int i = 0; i < nb; i++) if (swing_box(i) && vlen(vsub(vmul(vadd(boxes[i].mn, boxes[i].mx), 0.5f), at)) < 0.5f) tgt = i;
         float pulse = 0.6f + 0.4f * sinf((float)nowT * 4);
         for (int i = 0; i < nb; i++) {
             if (!swing_box(i)) continue;
@@ -158,13 +160,14 @@ static void draw_race_hud(void) {
         snprintf(buf, sizeof buf, "%d", (int)ceilf(raceCount));
         float k = raceCount - floorf(raceCount);
         text_c(2, cx, cy - 60, buf, 1, 0.85f, 0.3f, 0.4f + 0.6f * k);
-        text_c(0, cx, cy + 10, "traverse les portes dans l'ordre  -  grappin, wall-run, dash", 0.8f, 0.85f, 0.95f, 0.9f);
+        text_c(0, cx, cy + 10, "MAINTIENS TIR ou GRAPPIN pour te balancer, REGARDE ou tu veux aller", 0.8f, 0.85f, 0.95f, 0.9f);
+        text_c(0, cx, cy + 34 + 24, "la toile s'accroche toute seule ; lache dans la remontee pour un elan", 0.6f, 0.7f, 0.85f, 0.9f);
         snprintf(buf, sizeof buf, "[R] recommencer   %s", ghostBestN ? "le fantome bleu = ton record" : "");
         text_c(0, cx, cy + 34, buf, 0.6f, 0.65f, 0.75f, 0.9f);
     } else if (raceT < 0.7f) text_c(2, cx, cy - 60, "GO !", 0.4f, 1, 0.5f, 1 - raceT / 0.7f);
     if (!raceDone && raceCount <= 0 && P.hook == HOOK_NONE && !P.dead) {   /* aimant : le point que prendra le grappin */
         V3 at; float sx, sy;
-        if (swing_target(eye_pos(), view_dir(), &at) >= 0 && project(at, &sx, &sy)) {
+        if (race_anchor(eye_pos(), &at) > 0 && project(at, &sx, &sy)) {   /* la toile partira ici (sans viser) */
             float r = 22 + 4 * sinf((float)nowT * 9), a0 = (float)nowT * 2;
             glLineWidth(3);
             glColor4f(1, 0.85f, 0.3f, 0.95f);
@@ -176,7 +179,7 @@ static void draw_race_hud(void) {
             }
             glEnd();
             glLineWidth(1);
-            snprintf(buf, sizeof buf, "[%s]", bind_text(A_HOOK));
+            snprintf(buf, sizeof buf, "[%s] maintenir", bind_text(A_FIRE));
             text_c(0, sx, sy + r + 18, buf, 1, 0.85f, 0.3f, 0.9f);
         }
     }

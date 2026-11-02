@@ -375,6 +375,18 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
 - Tests : « choix du loadout : ouvert 1, deplacement 0.00 m, tirs 0, degats … 100 puis 70… », « camera du menu :
   192 plans essayes sur 8 cartes, 0 dans un bloc ».
 
+## 28. COURSE façon Spider-Man : on maintient, la toile fait le reste
+
+- **Avant** : il fallait viser les cubes dorés (aimant à 45°), lâcher au bon moment et relancer ; un pilote
+  automatique finissait LA TOILE en 41 s avec une chute.
+- **Maintenant** : **maintiens TIR** (clic gauche, R2) ou GRAPPIN et **regarde où tu veux aller**. La toile
+  s'accroche toute seule devant et au-dessus (tours, cubes dorés, ou dans le ciel s'il n'y a rien), les balancements
+  s'enchaînent tant que tu tiens, lâcher dans la remontée donne un élan, la trajectoire suit ton regard, les portes
+  attirent un peu. Altitude gérée comme dans les jeux : trop bas, la toile te hisse ; trop haut, pas de toile.
+  Écran épuré (ni arme ni panneaux de combat), toile blanche.
+- Mesure : un pilote qui se contente de regarder la porte et de garder le bouton enfoncé finit en **20,6 s sans
+  chute** (26 m/s de moyenne, 40 au maximum) ; l'ancien pilote passe de 41,2 s / 1 chute à 15,2 s / 0 chute.
+
 ## Vérifications faites
 
 - Compilation macOS sans avertissement ; tous les tests `--test` conformes, y compris ceux d'`origin/dev` (stéréo,

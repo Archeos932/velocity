@@ -894,12 +894,24 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
   **Balancier** : le grappin rembobine jusqu'à `RACE_ROPE` (18 m, le bas de l'arc tombe à hauteur des portes), puis
   traction × `RACE_SWING_PULL` et la corde ne s'allonge plus ; avancer pousse de `RACE_SWING_PUMP` le long de l'arc.
   Portes de 8 m de rayon, aucun passage obligé sous une passerelle.
+- **Toile façon Spider-Man** (remplace la visée des points dorés) : en course, **TIR** (clic gauche, R2) se balance
+  comme GRAPPIN, et on ne vise pas. `race_web` accroche tout de suite la toile au meilleur point devant et au-dessus,
+  dans la direction du regard (`race_anchor` : cubes dorés, éventail de 21 rayons sur les tours, sinon dans le ciel ;
+  idéal `RACE_WEB_FWD` 16 m devant, à `RACE_WEB_UP` 18 m au-dessus de la porte suivante `raceAltRef`, au moins
+  `RACE_MIN_UP` au-dessus des yeux ; plus de `RACE_HIGH` au-dessus de la porte : pas de toile, on redescend).
+  Corde : bas de l'arc au plus `RACE_DROP` sous la hauteur d'accroche, `RACE_ROPE_MAX` ; trop bas sous la porte,
+  elle se rembobine (`RACE_REEL`, on se hisse). Pur balancier, élan le long de l'arc, trajectoire qui suit le regard
+  (`race_steer`, `RACE_SWING_STEER`, en l'air `RACE_AIR_STEER`), vitesse plafonnée `RACE_MAXSPEED`. **Tenir le
+  bouton enchaîne** : passé devant l'ancre en remontant (`RACE_CHAIN_K`), nouvelle toile plus loin ; lâcher (ou
+  enchaîner) donne un élan (`race_release_boost`). Toile pendue sans élan (`RACE_STALL_T`) : lâchée. Aimant des
+  portes (`RACE_GATE_PULL`, à 35 m). HUD : pas d'arme ni de panneaux de combat, toile blanche, « TOILE ».
 - Affichage : anneaux des 3 prochaines portes (la suivante respire, avec une colonne de lumière ; l'arrivée est
   dorée), flèche au bord de l'écran si la porte est hors champ, chrono, PORTE k / n, écran d'ARRIVEE.
 - Captures : `--shot course.bmp`, `course_depart.bmp`, `course_fin.bmp`. Test : portes libres, lignes droites
   porte à porte dégagées, porte sautée non comptée, chute → retour à la porte, arrivée, record, fantôme ; et une
   **course jouée par un pilote simple** (regarde la porte, grappin dès que l'aimant trouve un point, lâche dans la
-  remontée) : il doit arriver en moins de 120 s (41 s, 1 chute). `RACEDBG=1` trace son trajet dans le fichier de test.
+  remontée) : il doit arriver en moins de 120 s (15,2 s, 0 chute ; 41 s et 1 chute avant la toile). **Pilote Spider-Man** : regarde
+  la porte et garde TIR enfoncé, rien d'autre : 20,6 s, 0 chute, 26 m/s de moyenne. `RACEDBG=1` trace son trajet dans le fichier de test.
 
 ### 3.22 Décor maillé et LA CITADELLE (`src/monde/decor.c`, `src/monde/citadelle.c`)
 

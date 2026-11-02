@@ -3183,6 +3183,37 @@ static void run_tests(const char *path) {
             raceOn = 0; appState = APP_MENU;
             load_map(0); reset_game();
         }
+        {   /* --- Course facon Spider-Man : le pilote regarde la porte et garde TIR enfonce, rien d'autre (ni viser, ni lacher) --- */
+            FILE *logSave = botLog; botLog = NULL;
+            race_start(); appState = APP_GAME; hitstop = 0;
+            memset(act, 0, sizeof act); memset(botHeld, 0, sizeof botHeld); memset(botPress, 0, sizeof botPress);
+            raceBest = 0; ghostBestN = 0;
+            float t = 0, vmax = 0, vsum = 0; int n = 0;
+            for (; t < 150 && !raceDone; t += TICK) {
+                memset(botHeld, 0, sizeof botHeld);
+                const MapDef *md = &maps[curMap];
+                V3 g = race_gate(raceGate < md->ngates ? raceGate : md->ngates - 1), e = eye_pos(), d = vsub(g, e);
+                float hd = fmaxf(hlen(d), 0.1f);
+                P.yaw = atan2f(d.x, -d.z);
+                P.pitch = clampf(atan2f(d.y, hd), -1.2f, 1.2f);
+                botHeld[A_FWD] = 1;
+                if (P.grounded && raceCount <= 0) botPress[A_JUMP] = 1;
+                botHeld[A_FIRE] = raceCount <= 0;
+                for (int i = 0; i < MAXE; i++) E[i].alive = 0;
+                game_tick(TICK);
+                if (raceCount <= 0) { float v = hlen(P.vel); vmax = fmaxf(vmax, v); vsum += v; n++; }
+                if (getenv("RACEDBG") && fmodf(t, 0.5f) < TICK)
+                    fprintf(f, "  [%.1f] porte %d pos %.1f %.1f %.1f v %.1f crochet %d ancre %.0f %.0f %.0f\n", t, raceGate, P.pos.x, P.pos.y,
+                            P.pos.z, vlen(P.vel), P.hook, P.anchor.x, P.anchor.y, P.anchor.z);
+            }
+            botLog = logSave;
+            fprintf(f, "course facon Spider-Man (%s) : arrivee %d, portes %d / %d, temps %.1f s, chutes %d, vitesse moyenne %.1f max %.1f m/s "
+                       "(attendu 1, %d / %d, < 60 s, chutes 0)\n",
+                    maps[curMap].name, raceDone, raceGate, maps[curMap].ngates, t, raceFalls, n ? vsum / n : 0, vmax,
+                    maps[curMap].ngates, maps[curMap].ngates);
+            raceOn = 0; appState = APP_MENU;
+            load_map(0); reset_game();
+        }
         {   /* --- Decor maille : LA CITADELLE construit bien son decor (et reste sous la limite de sommets) --- */
             int cm = -1;
             for (int m = 0; m < NMAPS; m++) if (!strcmp(maps[m].name, "LA CITADELLE")) cm = m;

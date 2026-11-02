@@ -355,7 +355,7 @@ static const float toileSpawns[][3] = {
     { -60, 30, 64 }, { -62, 22, -70 }, { 0, 24, -72 }, { 1, 20, 72 }, { 61, 24, 72 }, { 60, 51, -40 }, { -74, 59.2f, -16 }, { 74, 63.2f, -16 },
 };
 /* portes de la course : centre x, y, z et rayon (la derniere = arrivee) */
-static const float toileGates[][4] = {
+static const float toileGates[][4] = {                    /* rayon 8 m ; l'aimant des portes (course.c) aide a passer */
     { -60, 30, 38, 8 }, { -60, 32, 8, 8 }, { -60, 30, -22, 8 }, { -58, 32, -50, 8 }, { -34, 32, -62, 8 }, { -12, 32, -62, 8 },
     { 0, 32, -36, 8 }, { 0, 30, -6, 8 }, { 0, 36, 24, 8 }, { 24, 34, 60, 8 }, { 58, 36, 40, 8 }, { 60, 42, 6, 8 }, { 60, 56, -40, 8 },
 };

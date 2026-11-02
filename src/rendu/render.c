@@ -217,7 +217,7 @@ static void render(float alpha, float frameDt) {
     if (P.hook != HOOK_NONE) {                            /* cable du grappin, part de la main gauche */
         V3 hand = vadd(eye, vadd(vmul(camR, -0.3f), vadd(vmul(camU, -0.28f), vmul(fwd, 0.6f))));
         glLineWidth(3);
-        glColor3f(0.95f, 0.8f, 0.45f);
+        if (raceOn) glColor3f(0.95f, 0.97f, 1.0f); else glColor3f(0.95f, 0.8f, 0.45f);   /* course : toile blanche */
         glBegin(GL_LINES);
         glVertex3f(hand.x, hand.y, hand.z);
         glVertex3f(P.hookPos.x, P.hookPos.y, P.hookPos.z);
@@ -337,7 +337,7 @@ static void render(float alpha, float frameDt) {
     glDisable(GL_FOG);
 
     BT(6);
-    if (appState == APP_GAME && !spectating) draw_viewmodel(aspect);
+    if (appState == APP_GAME && !spectating && !raceOn) draw_viewmodel(aspect);   /* course : mains libres, pas d'arme */
     BT(7);
     if (appState == APP_GAME) draw_flare(eye);
     bloom_apply();

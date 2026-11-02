@@ -163,10 +163,91 @@ static int swing_target(V3 eye, V3 dir, V3 *at) {
     return best;
 }
 
+/* --- Course facon Spider-Man : on ne vise pas. La toile part vers le meilleur point devant et au-dessus, dans la
+ * direction du regard : decor (eventail de rayons) ou point de balancement, sinon dans le ciel a l'endroit ideal. --- */
+static V3 race_heading(void) { return v3(sinf(P.yaw), 0, -cosf(P.yaw)); }
+static float raceAltRef;                                  /* hauteur de la porte suivante (course.c) : l'altitude de croisiere */
+static float race_anchor_score(V3 eye, V3 p, V3 h) {
+    V3 d = vsub(p, eye), dh = v3(d.x, 0, d.z);
+    float fwd = vdot(dh, h), lat = fabsf(vdot(dh, v3(-h.z, 0, h.x)));
+    if (d.y < RACE_MIN_UP || fwd < 4) return -1e9f;       /* bien au-dessus et devant seulement */
+    return -fabsf(fwd - RACE_WEB_FWD) / RACE_WEB_FWD - fabsf(p.y - (raceAltRef + RACE_WEB_UP)) / RACE_WEB_UP - lat / 20;
+}
+/* 1 : decor ou point de balancement ; 0 : toile dans le ciel ; -1 : rien (deja trop haut : on redescend d'abord) */
+static int race_anchor(V3 eye, V3 *at) {
+    if (eye.y > raceAltRef + RACE_HIGH) return -1;        /* trop haut : on redescend vers la porte d'abord */
+    V3 h = race_heading(), side = v3(-h.z, 0, h.x);
+    float best = -3;                                      /* en dessous : trop mal place, le ciel vaut mieux */
+    int found = 0;
+    for (int i = 0; i < nb; i++) {                        /* points de balancement : un peu preferes */
+        if (!swing_box(i)) continue;
+        V3 c = vmul(vadd(boxes[i].mn, boxes[i].mx), 0.5f), d = vsub(c, eye);
+        float l = vlen(d), sc = race_anchor_score(eye, c, h) + 0.4f;
+        if (l > RACE_WEB_RANGE || sc <= best) continue;
+        float th = ray_world(eye, vmul(d, 1 / l), l, 0);
+        if (th < l - 2 * SWING_HALF - 0.4f) continue;
+        best = sc; *at = vadd(eye, vmul(d, (th - 0.05f) / l)); found = 1;   /* sur la face du cube, pas en son centre */
+    }
+    for (int a = -3; a <= 3; a++)                         /* eventail de rayons : bords et facades des tours */
+        for (int e = 0; e < 3; e++) {
+            float ya = a * 0.26f, el = 0.7f + e * 0.25f;
+            V3 hd = vadd(vmul(h, cosf(ya)), vmul(side, sinf(ya)));
+            V3 d = vnorm(vadd(vmul(hd, cosf(el)), v3(0, sinf(el), 0)));
+            float t = ray_world(eye, d, RACE_WEB_RANGE, 0);
+            if (t >= RACE_WEB_RANGE - 0.1f) continue;
+            V3 p = vadd(eye, vmul(d, t - 0.05f));
+            float sc = race_anchor_score(eye, p, h);
+            if (sc > best) { best = sc; *at = p; found = 1; }
+        }
+    if (found) return 1;
+    float sky = raceAltRef + RACE_WEB_UP;                 /* dans le ciel : a l'altitude de croisiere, jamais plus haut */
+    if (sky < eye.y + RACE_MIN_UP) return -1;
+    *at = vadd(eye, vmul(h, RACE_WEB_FWD)); at->y = sky;
+    return 0;
+}
+static float raceRope, raceStallT;                        /* longueur visee de la toile en cours ; temps sans vitesse */
+static void race_web(void) {                              /* la toile s'accroche tout de suite (pas de crochet en vol) */
+    V3 at;
+    int real = race_anchor(eye_pos(), &at);
+    if (real < 0) return;                                 /* trop haut : pas de toile, on redescend */
+    raceRope = fminf(RACE_ROPE_MAX, at.y - pcenter().y + RACE_DROP);   /* le bas de l'arc ne descend pas trop */
+    raceStallT = 0;
+    P.hook = HOOK_ATTACHED; P.hookEnemy = 0; P.hookPlayer = 0;
+    P.hookPos = P.anchor = at;
+    P.ropeLen = vlen(vsub(at, pcenter()));
+    P.hookBlockT = 0; P.airJumps = 1; P.fovKick += 3;
+    if (real > 0) for (int i = 0; i < 10; i++) add_part(at, vmul(rand_dir(), 4), v3(0.9f, 0.95f, 1), 0.35f, 0.08f, 8);
+    play(S_HOOK, 0.5f, 1.3f);
+}
+static void race_speed_cap(void) {
+    float h = hlen(P.vel);
+    if (h > RACE_MAXSPEED) { P.vel.x *= RACE_MAXSPEED / h; P.vel.z *= RACE_MAXSPEED / h; }
+}
+static void race_release_boost(void) {                    /* lacher dans la remontee : elan vers l'avant et le haut */
+    if (P.vel.y < -4) return;
+    float up = pcenter().y < raceAltRef + 4 ? RACE_REL_UP : 0;   /* deja haut : l'elan va seulement vers l'avant */
+    P.vel = vadd(P.vel, vadd(vmul(race_heading(), RACE_REL_FWD), v3(0, up, 0)));
+    race_speed_cap();
+}
+/* la vitesse horizontale tourne vers le regard (pas si l'on regarde en arriere : on freinerait en tournant) */
+static void race_steer(float dt, float rate) {
+    float sp = hlen(P.vel);
+    if (sp < 2) return;
+    float a = atan2f(P.vel.x, -P.vel.z), d = P.yaw - a;
+    while (d > PI) d -= 2 * PI;
+    while (d < -PI) d += 2 * PI;
+    if (fabsf(d) > 1.9f) return;
+    a += clampf(d, -rate * dt, rate * dt);
+    P.vel.x = sinf(a) * sp; P.vel.z = -cosf(a) * sp;
+}
+
 static void grapple_tick(float dt, int press, int held) {
     P.hookCd -= dt;
+    if (raceOn && P.hook == HOOK_NONE && !P.grounded && !P.dead) race_steer(dt, RACE_AIR_STEER);   /* course : en l'air */
     if (!hook_allowed()) press = 0;                       /* carte sans grappin ou regle de l'hote */
     if (P.dead) { P.hook = HOOK_NONE; return; }
+    if (raceOn && held && P.hook == HOOK_NONE && P.hookCd <= 0 && !P.dead && !P.grounded) { race_web(); return; }   /* tenu : toile */
+    if (raceOn && press && P.hook == HOOK_NONE && P.hookCd <= 0 && !P.dead) { race_web(); return; }
     if (press && P.hook == HOOK_NONE && P.hookCd <= 0) {
         P.hook = HOOK_FLYING;
         P.hookPos = eye_pos();
@@ -180,7 +261,10 @@ static void grapple_tick(float dt, int press, int held) {
         P.hookPlayer = 0;
         play(S_HOOK, 0.6f, 1.0f);
     }
-    if (P.hook != HOOK_NONE && !held) { hook_release(0); return; }
+    if (P.hook != HOOK_NONE && !held) {
+        if (raceOn && P.hook == HOOK_ATTACHED) { race_release_boost(); hook_release(0); P.hookCd = 0.05f; return; }
+        hook_release(0); return;
+    }
 
     if (P.hook == HOOK_FLYING) {
         float len = GRAPPLE_SPEED * dt;
@@ -263,11 +347,22 @@ static void grapple_tick(float dt, int press, int held) {
         if (P.hookBlockT > 0.15f) { hook_release(0); return; }
 
         float pull = onTarget ? GRAPPLE_ENEMY_PULL : GRAPPLE_PULL, maxSp = onTarget ? GRAPPLE_ENEMY_MAXSPEED : GRAPPLE_MAXSPEED;
-        if (raceOn && !onTarget) {                        /* course : on se balance (traction douce, elan en avancant) */
-            if (dist <= RACE_ROPE) { pull *= RACE_SWING_PULL; if (P.ropeLen > RACE_ROPE) P.ropeLen = RACE_ROPE; }   /* sinon : on rembobine */
-            if (act[A_FWD]) {
-                V3 f = v3(sinf(P.yaw), 0, -cosf(P.yaw)), t = vsub(f, vmul(dir, vdot(f, dir)));
-                if (vlen(t) > 0.1f) P.vel = vadd(P.vel, vmul(vnorm(t), RACE_SWING_PUMP * dt));
+        if (raceOn && !onTarget) {                        /* course facon Spider-Man : pur balancier, guide par le regard */
+            pull = 0;
+            if (P.ropeLen > raceRope) P.ropeLen = fmaxf(raceRope, P.ropeLen - 30 * dt);   /* trop longue : ramenee */
+            if (pcenter().y < raceAltRef - 2 && P.ropeLen > 6) P.ropeLen -= RACE_REEL * dt;   /* trop bas : on se hisse */
+            V3 f = race_heading(), t = vsub(f, vmul(dir, vdot(f, dir)));   /* l'elan vient tout seul (plus vite en avancant) */
+            if (vlen(t) > 0.1f) P.vel = vadd(P.vel, vmul(vnorm(t), RACE_SWING_PUMP * (act[A_FWD] ? 1.0f : 0.5f) * dt));
+            race_steer(dt, RACE_SWING_STEER);
+            race_speed_cap();
+            raceStallT = vlen(P.vel) < 2.5f ? raceStallT + dt : 0;
+            if (raceStallT > RACE_STALL_T) { hook_release(0); P.hookCd = 0.4f; return; }   /* pendu sans elan : on lache */
+            V3 rel = vsub(pcenter(), P.anchor);
+            if (vdot(v3(rel.x, 0, rel.z), f) > P.ropeLen * RACE_CHAIN_K && P.vel.y > 0) {   /* passe devant en remontant */
+                race_release_boost();                     /* tenu : on enchaine sur une nouvelle toile plus loin */
+                hook_release(0); P.hookCd = 0;
+                race_web();
+                return;
             }
         }
         if (vdot(P.vel, dir) < maxSp) P.vel = vadd(P.vel, vmul(dir, pull * dt));

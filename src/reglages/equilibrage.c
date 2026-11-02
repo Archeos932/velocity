@@ -205,6 +205,23 @@ enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_COUNT };
 #define RACE_SWING_PULL  0.25f    /* course : une fois la corde a RACE_ROPE, traction x0,25 (on se balance plus qu'on ne file) */
 #define RACE_ROPE        18.0f    /* course : le grappin ramene la corde a 18 m (bas de l'arc ~ hauteur des portes), puis balancier */
 #define RACE_SWING_PUMP  14.0f    /* course : avancer au grappin pousse de 14 m/s2 le long du balancement */
+/* course facon Spider-Man : la toile s'accroche seule (on ne vise pas), tenir le bouton enchaine les balancements */
+#define RACE_WEB_RANGE   48.0f    /* portee de la recherche d'accroche (decor et points de balancement) */
+#define RACE_WEB_FWD     16.0f    /* accroche ideale : 16 m devant ... */
+#define RACE_WEB_UP      18.0f    /* ... et 18 m au-dessus (sans decor : toile dans le ciel a cet endroit) */
+#define RACE_ROPE_MAX    26.0f    /* corde plus longue : ramenee a 26 m (25 m/s) */
+#define RACE_DROP        6.0f     /* ... et assez courte pour que le bas de l'arc reste au plus 6 m sous la hauteur d'accroche */
+#define RACE_REEL        9.0f     /* sous l'altitude de la porte suivante, la toile se rembobine (m/s) : on remonte */
+#define RACE_HIGH        8.0f     /* plus de 8 m au-dessus de la porte suivante : pas de toile, on redescend vers elle */
+#define RACE_STALL_T     1.2f     /* toile qui ne mene nulle part (< 2,5 m/s pendant 1,2 s) : lachee toute seule */
+#define RACE_MIN_UP      10.0f    /* la toile ne se prend que 10 m au moins au-dessus des yeux */
+#define RACE_CHAIN_K     0.45f    /* tenu : nouvelle toile quand on a depasse l'ancre de 0,45 x la corde en remontant */
+#define RACE_REL_FWD     4.0f     /* lacher (ou enchainer) : elan vers l'avant (m/s) ... */
+#define RACE_REL_UP      6.0f     /* ... et vers le haut */
+#define RACE_MAXSPEED    40.0f    /* vitesse horizontale maxi en course (m/s) */
+#define RACE_SWING_STEER 1.6f     /* au bout de la toile, la trajectoire suit le regard (rad/s) */
+#define RACE_AIR_STEER   1.0f     /* en l'air sans toile */
+#define RACE_GATE_PULL   1.8f     /* a moins de 35 m d'une porte vers laquelle on va : aimant (rad/s) */
 #define MELEE_PARRIED_CD  1.0f    /* attaquant dont l'epee est paree : epee bloquee */
 #define MELEE_PARRY_GRACE 0.15f   /* tolerance de latence pour l'hote */
 

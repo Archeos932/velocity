@@ -501,6 +501,7 @@ static void draw_hud(void) {
         int compact = winW < 1300;
         float by = compact ? winH - 90.0f : (float)winH;
         float sp3 = melee_preview(&aimed), mk = clampf(sp3 / 30, 0, 1), mx = compact ? 30 : cx - 330;
+        if (!raceOn) {                                        /* course : ni melee ni chaine de tir a l'ecran */
         {
             char mt[64];
             int blink = dryHintT > 0 && fmodf(dryHintT, 0.4f) < 0.2f;   /* a sec : le panneau de melee clignote */
@@ -603,6 +604,7 @@ static void draw_hud(void) {
             rect(sx + i * 23.0f, by - 36.0f, 19, 6, i < shotStreak ? 1.0f : 0.1f, i < shotStreak ? 0.8f : 0.1f,
                  i < shotStreak ? 0.3f : 0.15f, i < shotStreak ? 0.95f : 0.7f);
         if (streakLostT > 0) text(0, sx, by - 100.0f, "CHAINE PERDUE", 1, 0.3f, 0.3f, clampf(streakLostT, 0, 1));
+        }
 
         if (P.anvilState == ANVIL_DIVE) text_c(0, cx, winH - 110.0f, "PIQUE !", 1, 0.6f, 0.25f, 0.95f);
         else if (P.anvilState == ANVIL_STUN) {                /* Enclume : onde ratee, barre d'immobilisation */
@@ -610,7 +612,7 @@ static void draw_hud(void) {
             rect(cx - 60, winH - 102.0f, 120, 5, 0.1f, 0.1f, 0.15f, 0.7f);
             rect(cx - 60, winH - 102.0f, 120 * clampf(P.anvilStunT / SLAM_STUN, 0, 1), 5, 1, 0.35f, 0.3f, 0.95f);
         } else if (P.hook == HOOK_ATTACHED)
-            text_c(0, cx, winH - 110.0f, (P.hookEnemy || P.hookPlayer) ? "GRAPPIN -> CIBLE" : "GRAPPIN", 1,
+            text_c(0, cx, winH - 110.0f, (P.hookEnemy || P.hookPlayer) ? "GRAPPIN -> CIBLE" : raceOn ? "TOILE" : "GRAPPIN", 1,
                    (P.hookEnemy || P.hookPlayer) ? 0.35f : 0.8f, 0.35f, 0.9f);
         else if (P.wallrun) text_c(0, cx, winH - 110.0f, "WALL-RUN", 1, 0.6f, 0.9f, 0.9f);
         else if (P.sliding) text_c(0, cx, winH - 110.0f, "SLIDE", 1, 0.8f, 0.4f, 0.9f);
@@ -634,6 +636,7 @@ static void draw_hud(void) {
         snprintf(buf, sizeof buf, "%d", (int)ceilf(P.hp));
         text(1, 30, winH - 60.0f, buf, 1, 1, 1, 1);
 
+        if (!raceOn) {                                        /* course : pas de panneau d'arme (on ne tire pas) */
         /* arme */
         char wnBuf[32];
         const AmmoDef *ad = &ammoDef[P.weapon];
@@ -812,6 +815,7 @@ static void draw_hud(void) {
             }
             if (!eco_on() && (wantLoadout[0] != P.loadout[0] || wantLoadout[1] != P.loadout[1] || wantMelee != P.meleeKind || wantSkill != P.skill))
                 text(0, winW - 30.0f - fontW[0] * 32, winH - 120.0f, "nouveau loadout au prochain respawn", 0.6f, 0.6f, 0.65f, 0.8f);
+        }
         }
     }
 

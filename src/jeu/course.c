@@ -42,6 +42,7 @@ static void race_start(void) {
     raceT = 0; raceCount = RACE_COUNTDOWN; raceDeltaT = 0; raceGateFlash = 0; raceGhostAcc = 0; ghostCurN = 0;
     P.pos = P.prevPos = maps[curMap].start;
     P.yaw = maps[curMap].startYaw; P.pitch = 0;
+    raceAltRef = race_gate(0).y;                          /* altitude de croisiere des toiles des le depart */
 }
 /* chute sous killY : retour a la derniere porte passee (ou au depart), immobile, face a la suivante */
 static void race_respawn(void) {
@@ -80,6 +81,16 @@ static void race_tick(float dt) {
         ghostCurN++;
     }
     const MapDef *md = &maps[curMap];
+    raceAltRef = race_gate(raceGate < md->ngates ? raceGate : md->ngates - 1).y;   /* altitude de croisiere des toiles */
+    race_speed_cap();
+    if (raceGate < md->ngates && !P.grounded) {           /* aimant des portes : on va vers la suivante, elle nous attire */
+        V3 to = vsub(race_gate(raceGate), pcenter());
+        float l = vlen(to), sp = vlen(P.vel);
+        if (l < 35 && l > 1 && sp > 4 && vdot(to, P.vel) / (l * sp) > 0.55f) {
+            V3 v = vlerp(vmul(P.vel, 1 / sp), vmul(to, 1 / l), fminf(1, RACE_GATE_PULL * dt));
+            P.vel = vmul(vnorm(v), sp);
+        }
+    }
     V3 a = vadd(P.prevPos, v3(0, 0.9f, 0)), b = vadd(P.pos, v3(0, 0.9f, 0));
     if (raceGate < md->ngates && race_cross(a, b, race_gate(raceGate), md->gates[raceGate][3])) {
         raceSplit[raceGate] = raceT;
