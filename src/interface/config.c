@@ -10,6 +10,46 @@ static int settingsOpen, waitAct = -1, waitSlot, uiDown, uiDrag;
 static int fullscreen;
 static char cfgPath[MAX_PATH];
 
+/* plafond d'images par seconde (bouton MAX FPS, max_fps= de velocity.ini) : 0 = sans limite.
+   La synchro verticale ne bride pas toujours (fenetre masquee, pilote) : sans plafond le jeu
+   peut monter a 1000 images/s et occuper un coeur entier pour rien. */
+static int fpsCap = FPS_CAP_TOASTER;                     /* GRILLE-PAIN par defaut (gfx_preset) */
+static int gfxSeen;                                       /* velocity.ini avait graphismes= (sinon : premier lancement ou ancien fichier) */
+static const int fpsCapList[] = { 0, 30, 60, 90, 120, 144, 165, 240, 360 };
+
+/* prereglage QUALITE : ombres, bloom, resolution de la 3D et plafond d'images vont avec. Le reste (lightmaps, ciel,
+   decor) est plafonne par gfx_quality_apply a la prochaine relecture (gfx_reload). */
+static void gfx_preset(int q) {
+    static const int scale[GFX_Q_COUNT] = { RENDER_SCALE_TOASTER, 100, 100, 100 };
+    gfxQuality = q < 0 ? 0 : q >= GFX_Q_COUNT ? GFX_Q_COUNT - 1 : q;
+    gfxShadows = gfxQuality >= GFX_Q_MID;
+    gfxBloom = gfxQuality == GFX_Q_ULTRA;
+    gfxScale = scale[gfxQuality];
+    fpsCap = gfxQuality == GFX_Q_TOASTER ? FPS_CAP_TOASTER : FPS_CAP_DEFAULT;
+}
+
+/* bouton RESOLUTION : 50, 67, 75, 85, 100 % puis retour a 50 */
+static int render_scale_cycle(int cur) {
+    static const int list[] = { 50, 67, 75, 85, 100 };
+    for (int i = 0; i < (int)(sizeof list / sizeof list[0]); i++)
+        if (list[i] > cur) return list[i];
+    return list[0];
+}
+
+static int fps_cap_cycle(int cur) {                       /* valeur suivante du bouton (apres 360 : sans limite) */
+    for (int i = 1; i < (int)(sizeof fpsCapList / sizeof fpsCapList[0]); i++)
+        if (fpsCapList[i] > cur) return fpsCapList[i];
+    return 0;
+}
+
+/* echeance de l'image suivante (s) : une periode apres la precedente, pour garder une cadence reguliere ;
+   trop en retard (chargement, image lente), on repart de maintenant au lieu de rattraper en rafale */
+static double fps_cap_deadline(double prev, double now, int cap) {
+    if (cap <= 0) return now;
+    double t = prev + 1.0 / cap;
+    return t < now - 0.5 / cap ? now : t;
+}
+
 static void key_name(int code, char *out, int n) {
     static const char *mouseNames[] = { "Souris G", "Souris D", "Clic molette", "Souris 4", "Souris 5", "Molette" };
     char buf[64];
@@ -45,7 +85,7 @@ static void cfg_save(void) {
             myName, sens, fovBase, masterVol, musicVol, invertY, showFps, fullscreen);
     fprintf(f, "impact_frames=%d" "\n" "screen_fx=%d" "\n" "shadows=%d" "\n" "bloom=%d" "\n", impactFrames, screenFx, gfxShadows, gfxBloom);
     fprintf(f, "second_ecran=%d" "\n" "carte_vue=%d" "\n" "camera_mort=%d" "\n", secondScreen, mapView3d, killcamOn);
-    fprintf(f, "quality=%d" "\n" "ambiance=%d" "\n", gfxQuality, gfxAmbiance);
+    fprintf(f, "graphismes=%d" "\n" "resolution=%d" "\n" "ambiance=%d" "\n" "max_fps=%d" "\n", gfxQuality, gfxScale, gfxAmbiance, fpsCap);
     fprintf(f, "online=%d" "\n" "teams=%d" "\n" "update_check=%d" "\n", onlineOn, wantTeams, updCheck);
     fprintf(f, "loadout=%d,%d" "\n" "melee=%d" "\n" "skill=%d" "\n" "skin=%d" "\n", wantLoadout[0], wantLoadout[1], wantMelee, wantSkill, wantSkin);
     fprintf(f, "map=%d" "\n" "map_rotate=%d" "\n", menuMap, mapRotate);
@@ -60,6 +100,7 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
     char line[256];
     int fs = 0;
     FILE *f = cfgPath[0] ? fopen(cfgPath, "r") : NULL;
+    gfxSeen = 0;
     if (!f) return 0;
     while (fgets(line, sizeof line, f)) {
         char *eq = strchr(line, '='), *v;
@@ -73,6 +114,7 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
         else if (!strcmp(line, "music")) musicVol = clampf((float)atof(v), 0, 1);
         else if (!strcmp(line, "invert_y")) invertY = atoi(v) != 0;
         else if (!strcmp(line, "show_fps")) showFps = atoi(v) != 0;
+        else if (!strcmp(line, "max_fps")) fpsCap = atoi(v) <= 0 ? 0 : atoi(v) < 20 ? 20 : atoi(v) > 1000 ? 1000 : atoi(v);
         else if (!strcmp(line, "impact_frames")) impactFrames = atoi(v) != 0;
         else if (!strcmp(line, "screen_fx")) screenFx = atoi(v) != 0;
         else if (!strcmp(line, "second_ecran")) secondScreen = atoi(v) != 0;
@@ -80,7 +122,8 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
         else if (!strcmp(line, "camera_mort")) killcamOn = atoi(v) != 0;
         else if (!strcmp(line, "shadows")) gfxShadows = atoi(v) != 0;
         else if (!strcmp(line, "bloom")) gfxBloom = atoi(v) != 0;
-        else if (!strcmp(line, "quality")) gfxQuality = atoi(v) < 0 ? 0 : atoi(v) > 2 ? 2 : atoi(v);
+        else if (!strcmp(line, "graphismes")) { gfxQuality = atoi(v) < 0 ? 0 : atoi(v) >= GFX_Q_COUNT ? GFX_Q_COUNT - 1 : atoi(v); gfxSeen = 1; }
+        else if (!strcmp(line, "resolution")) gfxScale = atoi(v) < 50 ? 50 : atoi(v) > 100 ? 100 : atoi(v);
         else if (!strcmp(line, "ambiance")) gfxAmbiance = atoi(v) < 0 ? 0 : atoi(v) > 3 ? 3 : atoi(v);
         else if (!strcmp(line, "online")) onlineOn = atoi(v) != 0;
         else if (!strcmp(line, "teams")) wantTeams = atoi(v) < 0 ? 0 : atoi(v) > TEAM_MAX ? TEAM_MAX : atoi(v);
@@ -110,6 +153,9 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
                 }
     }
     fclose(f);
+    /* ancien fichier (quality= de 0 a 2, sans graphismes=) : on repart du prereglage GRILLE-PAIN, ombres et bloom compris ;
+       le joueur remonte dans PARAMETRES > QUALITE */
+    if (!gfxSeen) gfx_preset(GFX_Q_TOASTER);
     if (!loadout_valid(wantLoadout, wantMelee)) { wantLoadout[0] = WP_RAIL; wantLoadout[1] = WP_ROCKET; wantMelee = MK_SWORD; }
     return fs;
 }

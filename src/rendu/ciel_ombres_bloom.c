@@ -25,9 +25,13 @@ static void sky_color(V3 d, float out[3]) {
     if (d.y < 0) for (int c = 0; c < 3; c++) out[c] = hor[c];   /* sous l'horizon : couleur du brouillard */
 }
 
-static void draw_sky_dome(V3 eye) {
-    glDisable(GL_FOG); glDisable(GL_DEPTH_TEST); glDisable(GL_LIGHTING); glDisable(GL_TEXTURE_2D);
-    glDepthMask(GL_FALSE);
+/* degrade du ciel : ne depend que de la carte et de rendu.ini, donc liste d'affichage refaite avec le monde
+   (dome de rayon 300 centre sur l'origine ; draw_sky_dome le place sur l'oeil) */
+static GLuint skyDomeList;
+static void build_sky_list(void) {
+    if (skyDomeList) glDeleteLists(skyDomeList, 1);
+    skyDomeList = glGenLists(1);
+    glNewList(skyDomeList, GL_COMPILE);
     const int NA = 36, NE = 14;
     for (int j = 0; j < NE; j++) {                        /* bandes de -15 deg a +90 deg */
         float e0 = -0.26f + (PI * 0.5f + 0.26f) * j / NE, e1 = -0.26f + (PI * 0.5f + 0.26f) * (j + 1) / NE;
@@ -39,11 +43,28 @@ static void draw_sky_dome(V3 eye) {
                 V3 d = v3(cosf(e) * cosf(a), sinf(e), cosf(e) * sinf(a));
                 sky_color(d, col);
                 glColor3f(col[0], col[1], col[2]);
-                glVertex3f(eye.x + d.x * 300, eye.y + d.y * 300, eye.z + d.z * 300);
+                glVertex3f(d.x * 300, d.y * 300, d.z * 300);
             }
         }
         glEnd();
     }
+    glEndList();
+}
+
+/* le ciel est dessine APRES le monde, avec le test de profondeur : seuls les pixels encore vides sont peints
+   (avant, tout l'ecran etait rempli puis recouvert). Pour rester derriere le decor le plus lointain (montagnes
+   de LA CITADELLE vers 400 m), tout le ciel est agrandi de SKY_SCALE autour de l'oeil (dome a 480 m, plan lointain
+   a 500 m). */
+#define SKY_SCALE 1.6f
+static void draw_sky_dome(V3 eye) {
+    glDisable(GL_FOG); glDisable(GL_LIGHTING); glDisable(GL_TEXTURE_2D);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glPushMatrix();
+    glTranslatef(eye.x, eye.y, eye.z);
+    glScalef(SKY_SCALE, SKY_SCALE, SKY_SCALE);
+    if (skyDomeList) glCallList(skyDomeList);
+    glTranslatef(-eye.x, -eye.y, -eye.z);                 /* le reste (etoiles, nuages, soleil) : autour de l'oeil, agrandi */
     glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     unsigned int seed = 99;                               /* etoiles, plus nombreuses loin du soleil */
     glPointSize(2);
@@ -88,8 +109,9 @@ static void draw_sky_dome(V3 eye) {
     glEnd();
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_BLEND);
+    glPopMatrix();
     glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST); glEnable(GL_FOG);
+    glEnable(GL_FOG);
 }
 
 /* silhouette de ville au loin, hors de l'arene (decor seulement, aucune collision) */
@@ -227,6 +249,31 @@ static void bloom_blur(GLuint src, GLuint dst, int horiz, int sw, int sh) {
     glBindTexture(GL_TEXTURE_2D, dst);
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sw, sh);
 }
+/* resolution de la 3D (PARAMETRES > RESOLUTION 3D) : la scene a ete dessinee dans le coin bas gauche, en sw x sh ;
+   on la copie dans une texture et on l'etire sur toute la fenetre (filtre lineaire). Le HUD est dessine ensuite, net. */
+static GLuint scaleTex;
+static int scaleTW, scaleTH;
+static void render_scale_apply(int sw, int sh) {
+    static int npot = -1;                                 /* textures de taille quelconque (OpenGL 2.0) : pas d'arrondi a 2^n */
+    if (npot < 0) { const char *e = (const char *)glGetString(GL_EXTENSIONS); npot = e && strstr(e, "GL_ARB_texture_non_power_of_two") != NULL; }
+    int tw = npot ? sw : pow2up(sw), th = npot ? sh : pow2up(sh);
+    if (tw != scaleTW || th != scaleTH) {
+        scaleTW = tw; scaleTH = th;
+        bloom_tex(&scaleTex, scaleTW, scaleTH);
+    }
+    glViewport(0, 0, winW, winH);
+    glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, winW, 0, winH, -1, 1);
+    glMatrixMode(GL_MODELVIEW); glLoadIdentity();
+    glDisable(GL_DEPTH_TEST); glDisable(GL_LIGHTING); glDisable(GL_FOG); glDisable(GL_CULL_FACE); glDisable(GL_BLEND);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, scaleTex);
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sw, sh);
+    glColor3f(1, 1, 1);
+    bloom_quad(0, 0, (float)winW, (float)winH, (float)sw / scaleTW, (float)sh / scaleTH);
+    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_DEPTH_TEST);
+}
+
 static void bloom_apply(void) {
     if (!gfxBloom || winW < 64 || winH < 64) return;
     int sw = winW / 4, sh = winH / 4;

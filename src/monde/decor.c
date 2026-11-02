@@ -16,9 +16,16 @@ typedef struct { V3 p, n, c; } DecV;
 static DecV DV[DEC_MAXV];
 static float DVL[DEC_MAXV][3];                             /* couleur eclairee (decor_bake) */
 static int ndv;
+/* niveau de detail de chaque sommet : les petits details (tuiles, lames des volets, balustres, lanternes...) sont
+ * DEC_DETAIL, et certains ont une version simple DEC_SIMPLE (un quad) ; le reste DEC_ALWAYS. Les deux versions sont
+ * gardees : le choix se fait en construisant les listes (decor_details de rendu.ini, 0 en GRILLE-PAIN), sans refaire
+ * la carte. */
+enum { DEC_ALWAYS, DEC_DETAIL, DEC_SIMPLE };
+static unsigned char DVlod[DEC_MAXV];
+static unsigned char decLod;                               /* niveau des sommets ajoutes maintenant */
 static unsigned decSeed = 1;
 
-static void decor_reset(void) { ndv = 0; decSeed = 1; }
+static void decor_reset(void) { ndv = 0; decSeed = 1; decLod = DEC_ALWAYS; }
 static float dc_rand(void) { decSeed = decSeed * 1664525u + 1013904223u; return (decSeed >> 8) * (1.0f / 16777216.0f); }
 static V3 dc_jit(V3 c, float k) {                          /* petite variation de teinte : fait main, pas imprime */
     float j = 1 + (dc_rand() * 2 - 1) * k;
@@ -26,7 +33,7 @@ static V3 dc_jit(V3 c, float k) {                          /* petite variation d
 }
 static void dc_v(V3 p, V3 n, V3 c) {
     if (ndv >= DEC_MAXV) return;
-    DV[ndv].p = p; DV[ndv].n = n; DV[ndv].c = c; ndv++;
+    DV[ndv].p = p; DV[ndv].n = n; DV[ndv].c = c; DVlod[ndv] = decLod; ndv++;
 }
 static void dc_tri(V3 a, V3 b, V3 c, V3 col) {            /* normale plate */
     V3 n = vnorm(vcross(vsub(b, a), vsub(c, a)));
@@ -155,7 +162,8 @@ static void dc_roof(V3 a, V3 b, float h, int ax, float ov, V3 tile, V3 wall) {
         V3 p0 = RP(L0, We, y - 0.15f), p1 = RP(L1, We, y - 0.15f), p2 = RP(L1, Wm, y + h), p3 = RP(L0, Wm, y + h);
         if (side) dc_quad(p0, p3, p2, p1, dc_jit(tile, 0.05f)); else dc_quad(p0, p1, p2, p3, dc_jit(tile, 0.05f));
         dc_quad(p0, p1, vadd(p1, v3(0, -0.18f, 0)), vadd(p0, v3(0, -0.18f, 0)), vmul(tile, 0.6f));   /* tranche du debord */
-        /* rangees de tuiles : demi-cylindres qui descendent la pente */
+        /* rangees de tuiles : demi-cylindres qui descendent la pente (detail : le pan seul suffit en GRILLE-PAIN) */
+        decLod = DEC_DETAIL;
         float span = fabsf(Wm - We), len = sqrtf(span * span + h * h);
         int rows = (int)((L1 - L0) / 0.55f);
         int seg = 4;
@@ -173,6 +181,7 @@ static void dc_roof(V3 a, V3 b, float h, int ax, float ov, V3 tile, V3 wall) {
                 dc_quadn(vadd(top, o0), n0, vadd(bot, o0), n0, vadd(bot, o1), n1, vadd(top, o1), n1, tc);
             }
         }
+        decLod = DEC_ALWAYS;
     }
     for (int e = 0; e < 2; e++) {                         /* pignons (triangles d'enduit) */
         float L = e ? (ax == 0 ? b.x : b.z) : (ax == 0 ? a.x : a.z);
@@ -207,6 +216,7 @@ static void dc_window(V3 c, V3 n, float w, float h, V3 frame, V3 shutter) {
     }
     float t = 0.14f;                                      /* cadre en relief */
     V3 fc = vadd(c, out);
+    decLod = DEC_DETAIL;                                  /* cadre, appui et lames : details */
     for (int s = 0; s < 2; s++) {                         /* montants */
         V3 m = vadd(fc, vmul(u, (s ? 1 : -1) * (w * 0.5f + t * 0.5f)));
         V3 a = vsub(vsub(m, vmul(u, t * 0.5f)), v3(0, h * 0.5f, 0)), b = vadd(vadd(m, vmul(u, t * 0.5f)), v3(0, h * 0.5f, 0));
@@ -230,6 +240,14 @@ static void dc_window(V3 c, V3 n, float w, float h, V3 frame, V3 shutter) {
             dc_quad(vadd(p0, vmul(tilt, 0.2f)), vadd(p1, vmul(tilt, 0.2f)), vadd(p2, tilt), vadd(p3, tilt), dc_jit(shutter, 0.06f));
         }
     }
+    decLod = DEC_SIMPLE;                                  /* version simple : un volet plat de chaque cote */
+    for (int s = 0; s < 2; s++) {
+        V3 hinge = vadd(fc, vmul(u, (s ? 1 : -1) * (w * 0.5f + t)));
+        V3 o = vmul(u, (s ? 1 : -1) * w * 0.5f), lo = v3(0, -h * 0.5f, 0), hi = v3(0, h * 0.5f, 0);
+        V3 p0 = vadd(hinge, lo), p1 = vadd(vadd(hinge, o), lo), p2 = vadd(vadd(hinge, o), hi), p3 = vadd(hinge, hi);
+        dc_quad(vadd(p0, vmul(n, 0.02f)), vadd(p1, vmul(n, 0.02f)), vadd(p2, vmul(n, 0.06f)), vadd(p3, vmul(n, 0.06f)), shutter);   /* comme les lames */
+    }
+    decLod = DEC_ALWAYS;
 }
 /* auvent de toile raye entre a et b (bord haut contre le mur), qui descend de drop sur depth vers n ; leger creux */
 static void dc_awning(V3 a, V3 b, V3 n, float depth, float drop, V3 c1, V3 c2) {
@@ -292,11 +310,19 @@ static void dc_railing(V3 a, V3 b, float h, V3 col) {
     V3 d = vsub(b, a);
     float L = hlen(d);
     int n = (int)(L / 0.45f);
+    decLod = DEC_DETAIL;                                  /* balustres ; version simple : un panneau plein */
     for (int i = 0; i <= n; i++) {
         V3 p = vlerp(a, b, (float)i / (n > 0 ? n : 1));
         dc_cone(p, 0.07f, 0.11f, h * 0.45f, 6, col, 0, 0);
         dc_cone(vadd(p, v3(0, h * 0.45f, 0)), 0.11f, 0.06f, h * 0.45f, 6, col, 0, 0);
     }
+    decLod = DEC_SIMPLE;
+    {
+        V3 b2 = v3(b.x, a.y, b.z), t0 = vadd(a, v3(0, h * 0.9f, 0)), t1 = vadd(b2, v3(0, h * 0.9f, 0));
+        dc_quad(a, b2, t1, t0, vmul(col, 0.85f));
+        dc_quad(a, t0, t1, b2, vmul(col, 0.85f));
+    }
+    decLod = DEC_ALWAYS;
     V3 s = vmul(vnorm(v3(-d.z, 0, d.x)), 0.14f);
     dc_bevel(v3(fminf(a.x, b.x) - fabsf(s.x), a.y + h * 0.9f, fminf(a.z, b.z) - fabsf(s.z)),
              v3(fmaxf(a.x, b.x) + fabsf(s.x), a.y + h, fmaxf(a.z, b.z) + fabsf(s.z)), 0.04f, col);
@@ -304,11 +330,13 @@ static void dc_railing(V3 a, V3 b, float h, V3 col) {
 /* lanterne murale : potence, cage, verre lumineux */
 static void dc_lantern(V3 c, V3 n) {
     V3 iron = v3(0.12f, 0.12f, 0.13f);
+    decLod = DEC_DETAIL;                                  /* lanterne entiere : detail */
     dc_bevel(v3(fminf(c.x, c.x + n.x * 0.6f) - 0.04f, c.y + 0.5f, fminf(c.z, c.z + n.z * 0.6f) - 0.04f),
              v3(fmaxf(c.x, c.x + n.x * 0.6f) + 0.04f, c.y + 0.58f, fmaxf(c.z, c.z + n.z * 0.6f) + 0.04f), 0.01f, iron);
     V3 l = vadd(c, vmul(n, 0.6f));
     dc_cone(vadd(l, v3(0, -0.2f, 0)), 0.18f, 0.24f, 0.45f, 6, v3(1.0f, 0.85f, 0.5f), 1, 0);
     dc_cone(vadd(l, v3(0, 0.25f, 0)), 0.3f, 0.05f, 0.25f, 6, iron, 1, 0);
+    decLod = DEC_ALWAYS;
 }
 /* colonne classique : base, fut cannele leger, chapiteau */
 static void dc_column(V3 b, float h, float r, V3 col) {

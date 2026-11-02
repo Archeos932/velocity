@@ -102,6 +102,9 @@ static void build_menu(void) {
     [NSApp setMainMenu:bar];
 }
 
+static int gSoftGL;                                       /* --soft : rendu logiciel (simule une machine sans pilote) */
+void mac_gl_software(int on) { gSoftGL = on; }
+
 int mac_window_create(int w, int h, const char *title, int visible) {
     @autoreleasepool {
         [NSApplication sharedApplication];
@@ -134,7 +137,10 @@ int mac_window_create(int w, int h, const char *title, int visible) {
                                               NSOpenGLPFASamples, 4, 0 };
         NSOpenGLPixelFormatAttribute at[] = { NSOpenGLPFADoubleBuffer, NSOpenGLPFAColorSize, 32, NSOpenGLPFADepthSize, 24,
                                               NSOpenGLPFAStencilSize, 8, 0 };
-        NSOpenGLPixelFormat *pf = visible ? [[NSOpenGLPixelFormat alloc] initWithAttributes:ms] : nil;
+        NSOpenGLPixelFormatAttribute sw[] = { NSOpenGLPFADoubleBuffer, NSOpenGLPFAColorSize, 32, NSOpenGLPFADepthSize, 24,
+                                              NSOpenGLPFAStencilSize, 8, NSOpenGLPFARendererID, kCGLRendererGenericFloatID, 0 };
+        NSOpenGLPixelFormat *pf = gSoftGL ? [[NSOpenGLPixelFormat alloc] initWithAttributes:sw] : nil;
+        if (!pf && visible) pf = [[NSOpenGLPixelFormat alloc] initWithAttributes:ms];
         if (!pf) pf = [[NSOpenGLPixelFormat alloc] initWithAttributes:at];
         if (!pf) return 0;
         gPf = pf;

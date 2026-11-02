@@ -264,6 +264,90 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
 
 ---
 
+## 22. Plafond d'images par seconde (MAX FPS)
+
+- **Avant** : la synchro verticale ne bride pas toujours (fenêtre masquée, certains pilotes) ; le jeu montait alors à
+  400–1000 images/s et occupait un cœur entier (mesuré sur Mac M4, toutes cartes).
+- **Maintenant** : bouton **MAX FPS** dans PARAMÈTRES (à côté de PLEIN ÉCR.) : SANS, 30, 60, 90, 120, 144, 165, 240,
+  360 ; 240 par défaut (`FPS_CAP_DEFAULT`), clé `max_fps=` de `velocity.ini` (0 = sans limite, borné 20–1000).
+- Attente en fin d'image (`fps_cap_wait`, sommeil puis courte attente active ; `timeBeginPeriod(1)` sous Windows),
+  échéances régulières sans rattrapage en rafale (`fps_cap_deadline`). La simulation (120 ticks/s) n'est pas touchée.
+- Mesure (LA CITADELLE, Mac M4) : sans plafond 540 img/s et ~100 % d'un cœur ; à 60 : 59 img/s, ~45 %.
+- Test : « plafond d'images : echeances 1.010 1.500 1.010… ».
+
+## 23. GRILLE-PAIN : le jeu tourne par défaut sur les petites machines
+
+- **Avant** : premier lancement en ULTRA (ombres, bloom, lightmaps fines, ciel complet) ; trois qualités BASSE,
+  MOYENNE, ULTRA ; aucune détection d'un PC sans pilote graphique.
+- **Maintenant** : quatre préréglages **GRILLE-PAIN** (par défaut), BASSE, MOYENNE, ULTRA (PARAMÈTRES > QUALITÉ,
+  bouton pleine largeur). GRILLE-PAIN : ni ombres dynamiques ni bloom, 60 img/s, lightmaps grossières, ni décor
+  purement décoratif (étoiles, nuages, poussière, ville au loin, reflets, lumières dynamiques, liserés, passe de grain).
+  Contours et traînées des joueurs gardés. Les anciens `velocity.ini` (clé `quality=`) repartent en GRILLE-PAIN :
+  le choix est maintenant dans `graphismes=`.
+- **RES. 3D** (50 à 100 %) : la 3D est dessinée plus petite puis agrandie, le HUD reste net.
+- **Sans pilote** (rendu logiciel de Windows) : message au démarrage, et 3D à 50 % au premier lancement.
+  `--soft` simule ce cas ; `--qualite N` choisit le préréglage d'une capture.
+- Mesures (`--shot bench_dm.bmp`, 1366×891) :
+
+  | | ULTRA | GRILLE-PAIN |
+  |---|---|---|
+  | Arène, rendu logiciel (`--soft`) | 85,7 ms/image | 30,5 ms/image |
+  | Citadelle, rendu logiciel | 98,2 ms | 40,1 ms |
+  | Arène, Mac M4 | 1,98 ms | 1,16 ms |
+  | Éclairage du décor au chargement, Arène | 224 ms | 23 ms |
+  | Éclairage du décor au chargement, Citadelle | 865 ms | 282 ms |
+
+  RES. 3D à 67 % ne gagnait rien sur ces deux rendus (l'agrandissement coûte autant qu'il rapporte) : 100 % par
+  défaut, 50 % sans pilote (30 → 24 ms). À mesurer sur un vrai PC Windows à puce Intel avant d'aller plus loin.
+- Test : « grille-pain : prereglage ombres 0 bloom 0 3D 100 % fps 60… ».
+
+## 24. Monde en secteurs et en une seule passe, lightmaps en atlas
+
+- **Avant** : le monde était une seule liste d'affichage dessinée en entier à chaque image, en 4 passes (sol, murs,
+  lightmap mélangée ×2, grain), avec une texture de lightmap par face (des centaines de changements de texture).
+- **Maintenant** (`src/rendu/monde_secteurs.c`) :
+  - **Atlas** : toutes les lightmaps dans des pages de 1024² (1 page sur l'Arène comme sur LA CITADELLE).
+  - **Passe unique** en multitexture (texture × lightmap × 2 × grain) dès que la carte le permet ; repli automatique
+    sur les passes d'avant (rendu logiciel de Windows) ou forcé par `--multipasse`. Même image (écart < 1/255).
+  - **Secteurs** de 24 m : seuls ceux dans le champ de vision sont dessinés (Arène 14 sur 39, Citadelle 73 sur 242
+    dans la vue du banc).
+- Mesures (`--shot bench_dm.bmp`, ms par image) :
+
+  | | avant | après |
+  |---|---|---|
+  | Arène, Mac M4, GRILLE-PAIN | 1,12 | 0,77 |
+  | Arène, Mac M4, ULTRA (dont monde) | 1,90 (0,85) | 1,60 (0,55) |
+  | Citadelle, Mac M4, GRILLE-PAIN | 1,95 | 1,43 |
+  | Citadelle, Mac M4, ULTRA (dont monde) | 2,58 (1,76) | 2,11 (1,10) |
+  | Arène, rendu logiciel, monde seul | 20,8 | 17,6 |
+  | Citadelle, rendu logiciel, monde seul | 36,2 | 32,0 |
+
+  En rendu logiciel le coût est surtout le remplissage des pixels (sol plein écran), que les secteurs ne réduisent
+  pas : l'image complète y reste à ~31 ms (Arène) et ~39 ms (Citadelle) en GRILLE-PAIN.
+- Test : « secteurs : cases 0 10 3, boite dedans 1, a cheval 1, dehors 0 ».
+
+## 25. GRILLE-PAIN : moins de pixels à calculer (textures, ciel, détails du décor)
+
+- **Mesure d'abord** (rendu logiciel, monde de l'Arène : 21 ms) : la texture du sol et des murs filtrée coûtait ~14 ms,
+  la lightmap ~4 ms, le brouillard ~1 ms. Le banc donne maintenant le détail par étape en ULTRA **et** en GRILLE-PAIN.
+- **Sans textures en GRILLE-PAIN** (`textures_monde = 0`) : couleur unie × lumière, avec la clarté moyenne de la texture
+  (mêmes tons qu'avant). BASSE et au-dessus gardent les textures.
+- **Ciel dessiné après le monde** (toutes qualités) : il ne peint plus que les pixels vides, et son dégradé est une
+  liste d'affichage au lieu de ~1 000 couleurs recalculées à chaque image.
+- **Détails de LA CITADELLE** (`decor_details = 0` en GRILLE-PAIN) : tuiles, cadres et lames des volets, balustres,
+  lanternes retirés (103 000 triangles sur 180 000), avec des versions plates pour les volets et rambardes.
+- Mesures (`--shot bench_dm.bmp`, ms par image, GRILLE-PAIN) :
+
+  | | avant | après |
+  |---|---|---|
+  | Arène, rendu logiciel | 31,7 | 17,1 |
+  | Citadelle, rendu logiciel | 38,4 | 20,5 |
+  | Arène, Mac M4 | 0,77 | 0,69 |
+  | Citadelle, Mac M4 | 1,43 | 1,06 |
+  | Chargement de l'éclairage, Citadelle | 280 ms | 177 ms |
+
+- Tests : « decor (LA CITADELLE) GRILLE-PAIN : … triangles de details retires… ».
+
 ## Vérifications faites
 
 - Compilation macOS sans avertissement ; tous les tests `--test` conformes, y compris ceux d'`origin/dev` (stéréo,

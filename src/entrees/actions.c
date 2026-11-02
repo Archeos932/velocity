@@ -39,7 +39,11 @@ static int secondScreen = 1;                              /* carte de la partie 
 static int mapView3d;                                     /* carte du 2e ecran : 0 vue de dessus, 1 en 3D inclinee */
 static int invertY, showFps = 1;
 static int impactFrames = 1, screenFx = 1;               /* options : impact frames (flashs) et effets d'ecran */
-static int gfxShadows = 1, gfxBloom = 1;                  /* graphismes : ombres des objets mobiles, halo lumineux (bloom) */
-static int gfxQuality = 2, gfxAmbiance;                   /* qualite (0 basse, 1 moyenne, 2 ultra) ; ambiance (graphismes/ambiance_*.ini) */
-static const char *qualityNames[3] = { "BASSE", "MOYENNE", "ULTRA" };
+/* graphismes : par defaut le prereglage GRILLE-PAIN (gfx_preset(GFX_Q_TOASTER)) ; le joueur monte ensuite dans PARAMETRES */
+static int gfxShadows = 0, gfxBloom = 0;                  /* ombres des objets mobiles, halo lumineux (bloom) */
+static int gfxQuality = GFX_Q_TOASTER, gfxAmbiance;       /* qualite (0 grille-pain, 1 basse, 2 moyenne, 3 ultra) ; ambiance */
+static int gfxScale = RENDER_SCALE_TOASTER;               /* resolution de la 3D, en % de la fenetre (le HUD reste net) */
+static int glSoftware;                                    /* pilote absent : rendu logiciel de Windows (GDI Generic) ou equivalent */
+static int glForceSoft;                                   /* --soft : force le rendu logiciel (simule un PC sans pilote) */
+static const char *qualityNames[GFX_Q_COUNT] = { "GRILLE-PAIN", "BASSE", "MOYENNE", "ULTRA" };
 static const char *ambianceNames[4] = { "COUCHANT", "NUIT", "JOUR", "ORAGE" };

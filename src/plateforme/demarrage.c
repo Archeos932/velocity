@@ -130,27 +130,85 @@ static void do_action(void) {
     }
 }
 
+/* plafond d'images : attend l'echeance (s depuis start) ; on dort tant qu'il reste plus d'une milliseconde,
+   puis on attend activement la fin (le sommeil du systeme deborde un peu) */
+static void fps_cap_wait(double until, LARGE_INTEGER start, LARGE_INTEGER freq) {
+    for (;;) {
+        LARGE_INTEGER q;
+        QueryPerformanceCounter(&q);
+        double r = until - (double)(q.QuadPart - start.QuadPart) / (double)freq.QuadPart;
+        if (r <= 0) return;
+#ifdef _WIN32
+        if (r > 0.0015) Sleep(1);                         /* timeBeginPeriod(1) : Sleep(1) dure ~1 ms */
+#else
+        if (r > 0.0012) usleep((useconds_t)((r - 0.001) * 1e6));
+#endif
+    }
+}
+
 /* --shot bench_dm.bmp : temps de rendu moyen (ms) par reglage graphique, ecrit dans bench_dm.bmp.txt */
 static void bench_render(const char *path) {
     char out[300];
     snprintf(out, sizeof out, "%s.txt", path);
     FILE *f = fopen(out, "w");
     if (!f) return;
+    const char *rn = (const char *)glGetString(GL_RENDERER);
+    fprintf(f, "carte graphique : %s%s ; monde : %s, %d unites de texture, %d pages de lightmaps\n", rn ? rn : "?",
+            glSoftware ? " (rendu logiciel)" : "", worldFused ? "passe unique" : "plusieurs passes", mtUnits, nLmPages);
+    LARGE_INTEGER bq0, bq1, bfq;
+    QueryPerformanceFrequency(&bfq);
+    float yaw0 = P.yaw;                                   /* chaque mesure part de la meme vue (la camera tourne pendant la mesure) */
+    for (int q = 0; q < GFX_Q_COUNT; q++) {               /* prereglages QUALITE : temps d'une image et du rechargement */
+        gfx_preset(q);
+        QueryPerformanceCounter(&bq0);
+        gfx_reload(); popT = 0;
+        QueryPerformanceCounter(&bq1);
+        double ld = (double)(bq1.QuadPart - bq0.QuadPart) * 1000.0 / bfq.QuadPart;
+        P.yaw = yaw0;
+        for (int i = 0; i < 20; i++) { render(1, TICK); glFinish(); }
+        QueryPerformanceCounter(&bq0);
+        for (int i = 0; i < 200; i++) { P.yaw += 0.01f; render(1, TICK); glFinish(); }
+        QueryPerformanceCounter(&bq1);
+        fprintf(f, "QUALITE %-12s %.2f ms/image (3D a %d %%), eclairage du decor %.0f ms\n", qualityNames[q],
+                (double)(bq1.QuadPart - bq0.QuadPart) * 1000.0 / bfq.QuadPart / 200, gfxScale, ld);
+    }
+    fprintf(f, "secteurs du monde : %d dessines sur %d (derniere image), decor maille : %d triangles (ULTRA)\n",
+            worldSecDrawn, worldSecTotal, worldTris);
+    gfx_preset(GFX_Q_TOASTER); gfx_reload(); popT = 0;    /* GRILLE-PAIN a chaque resolution de la 3D */
+    for (int sc = 50; sc <= 100; sc = render_scale_cycle(sc)) {
+        gfxScale = sc;
+        P.yaw = yaw0;
+        for (int i = 0; i < 20; i++) { render(1, TICK); glFinish(); }
+        QueryPerformanceCounter(&bq0);
+        for (int i = 0; i < 200; i++) { P.yaw += 0.01f; render(1, TICK); glFinish(); }
+        QueryPerformanceCounter(&bq1);
+        fprintf(f, "  GRILLE-PAIN, 3D a %3d %% : %.2f ms/image\n", sc, (double)(bq1.QuadPart - bq0.QuadPart) * 1000.0 / bfq.QuadPart / 200);
+        if (sc == 100) break;
+    }
+    gfx_preset(GFX_Q_ULTRA); gfx_reload(); popT = 0;      /* le detail ci-dessous : ULTRA, comme avant */
     static const char *names[4] = { "tout", "sans bloom", "sans ombres", "sans les deux" };
     for (int cfg = 0; cfg < 4; cfg++) {
         gfxBloom = !(cfg & 1); gfxShadows = !(cfg & 2);
         LARGE_INTEGER fq, t0, t1;
         QueryPerformanceFrequency(&fq);
+        P.yaw = yaw0;
         for (int i = 0; i < 20; i++) { render(1, TICK); glFinish(); }
         QueryPerformanceCounter(&t0);
         for (int i = 0; i < 200; i++) { P.yaw += 0.01f; render(1, TICK); glFinish(); }
         QueryPerformanceCounter(&t1);
         fprintf(f, "%-14s %.2f ms/image (%dx%d)\n", names[cfg], (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / fq.QuadPart / 200, winW, winH);
     }
-    benchOn = 1; gfxBloom = gfxShadows = 1;
-    for (int i = 0; i < 100; i++) render(1, TICK);
     static const char *sec[11] = { "", "debut/camera", "ciel", "ville", "monde", "ombres", "entites+additif", "arme", "bloom", "impact", "hud" };
-    for (int k = 1; k <= 10; k++) fprintf(f, "  %-16s %.2f ms\n", sec[k], benchT[k] / 100);
+    for (int q = GFX_Q_ULTRA; q >= GFX_Q_TOASTER; q -= GFX_Q_ULTRA) {   /* detail par etape : ULTRA, puis GRILLE-PAIN */
+        gfx_preset(q); gfx_reload(); popT = 0;
+        memset(benchT, 0, sizeof benchT);
+        P.yaw = yaw0;
+        benchOn = 1;
+        for (int i = 0; i < 100; i++) { P.yaw += 0.02f; render(1, TICK); }
+        benchOn = 0;
+        fprintf(f, "detail %s :\n", qualityNames[q]);
+        for (int k = 1; k <= 10; k++) fprintf(f, "  %-16s %.2f ms\n", sec[k], benchT[k] / 100);
+    }
     fprintf(f, "precalcul des lightmaps : %.0f ms\n", lmBakeMs);
     fclose(f);
 }
@@ -162,7 +220,8 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show) {
 static int velocity_main(const char *cmd) {
 #endif
     memcpy(binds, bindDefault, sizeof binds);
-    if (cmd && strncmp(cmd, "--test ", 7) == 0) { run_tests(cmd + 7); return 0; }
+    if (cmd && strncmp(cmd, "--test ", 7) == 0) { gfx_preset(GFX_Q_ULTRA); run_tests(cmd + 7); return 0; }
+    int shotQuality = GFX_Q_ULTRA;                        /* --shot et --bot : ULTRA (captures de reference), sauf --qualite N */
     const char *shotPath = NULL;
     static char shotBuf[512];
     float shotYaw = 0, shotPitch = -1000;
@@ -201,6 +260,9 @@ static int velocity_main(const char *cmd) {
             else if (!strcmp(t, "--spec")) botSpec = 1;
             else if (!strcmp(t, "--local")) botLocal = 1;
             else if (!strcmp(t, "--hidden")) botHidden = 1;
+            else if (!strcmp(t, "--soft")) glForceSoft = 1;
+            else if (!strcmp(t, "--multipasse")) worldForceMulti = 1;   /* monde en plusieurs passes, comme sans multitexture */
+            else if (!strcmp(t, "--qualite") && (t = strtok(NULL, " "))) shotQuality = atoi(t);
             else if (!strcmp(t, "--teams") && (t = strtok(NULL, " "))) wantTeams = atoi(t) < 0 ? 0 : atoi(t) > TEAM_MAX ? TEAM_MAX : atoi(t);
             else if (!strcmp(t, "--regles") && (t = strtok(NULL, " "))) {   /* --regles mode,grappin,munitions,boutique,specs,minutes */
                 MatchRules r = wantRules;
@@ -222,7 +284,9 @@ static int velocity_main(const char *cmd) {
     }
 
     if (shotMode && strstr(shotPath, "small")) { winW = 1024; winH = 640; }   /* capture en fenetre reduite (mise en page) */
+    if (shotMode || botMode) gfx_preset(shotQuality);    /* le joueur, lui, part de GRILLE-PAIN puis de son velocity.ini */
 #ifndef _WIN32
+    mac_gl_software(glForceSoft);
     if (!mac_window_create(winW, winH, "VELOCITY", !botHidden)) return 1;
     if (botMode) mac_window_place(botMode == 1 ? 0 : 820, 40, 800, 450);   /* deux bots cote a cote, fenetres reduites */
     mac_window_size(&winW, &winH);
@@ -245,7 +309,21 @@ static int velocity_main(const char *cmd) {
     PIXELFORMATDESCRIPTOR pfd = { sizeof pfd, 1, PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
                                   PFD_TYPE_RGBA, 32, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 24, 8, 0,
                                   PFD_MAIN_PLANE, 0, 0, 0, 0 };
-    SetPixelFormat(hdc, ChoosePixelFormat(hdc, &pfd), &pfd);
+    int pfi = ChoosePixelFormat(hdc, &pfd);
+    if (glForceSoft) {                                    /* --soft : format logiciel de Windows (GDI Generic), comme sans pilote */
+        PIXELFORMATDESCRIPTOR d;
+        int n = DescribePixelFormat(hdc, 1, sizeof d, &d), best = 0;
+        for (int i = 1; i <= n; i++) {
+            DescribePixelFormat(hdc, i, sizeof d, &d);
+            if (!(d.dwFlags & PFD_GENERIC_FORMAT) || (d.dwFlags & PFD_GENERIC_ACCELERATED)) continue;
+            if (!(d.dwFlags & PFD_SUPPORT_OPENGL) || !(d.dwFlags & PFD_DOUBLEBUFFER) || !(d.dwFlags & PFD_DRAW_TO_WINDOW)) continue;
+            if (d.iPixelType != PFD_TYPE_RGBA || d.cColorBits < 24 || d.cDepthBits < 16) continue;
+            if (!best || d.cStencilBits >= 8) best = i;   /* avec stencil (ombres) de preference */
+            if (d.cStencilBits >= 8) break;
+        }
+        if (best) pfi = best;
+    }
+    SetPixelFormat(hdc, pfi, &pfd);
     HGLRC rc = wglCreateContext(hdc);
     wglMakeCurrent(hdc, rc);
     typedef BOOL(WINAPI * SwapFn)(int);
@@ -264,6 +342,10 @@ static int velocity_main(const char *cmd) {
     RegisterRawInputDevices(&rid, 1, sizeof rid);
 #endif
 
+    {                                                     /* pilote absent : Windows dessine tout au processeur (tres lent) */
+        const char *rn = (const char *)glGetString(GL_RENDERER);
+        glSoftware = rn && (strstr(rn, "GDI Generic") || strstr(rn, "llvmpipe") || strstr(rn, "softpipe") || strstr(rn, "Software"));
+    }
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_LIGHT0);
     glEnable(GL_LIGHT1);                                      /* lumiere d'appoint froide, cf. render/draw_viewmodel */
@@ -301,8 +383,11 @@ static int velocity_main(const char *cmd) {
             snprintf(cfgPath, sizeof cfgPath, "%s/Library/Application Support/Velocity/velocity.ini", home);
         } else cfgPath[0] = 0;
 #endif
+        int qBuilt = gfxQuality;                          /* qualite des lightmaps deja calculees (GRILLE-PAIN par defaut) */
         if (!botMode && !shotMode && cfg_load()) toggle_fullscreen();
-        if (!botMode && !shotMode && (gfxAmbiance || gfxQuality != 2)) { gfx_reload(); popT = 0; }   /* ambiance / qualite du joueur */
+        if (!botMode && !shotMode && glSoftware && !gfxSeen) { gfx_preset(GFX_Q_TOASTER); gfxScale = RENDER_SCALE_SOFT; }
+        if (!botMode && !shotMode && (gfxAmbiance || gfxQuality != qBuilt)) { gfx_reload(); popT = 0; }   /* ambiance / qualite du joueur */
+        if (!botMode && !shotMode && glSoftware) set_status("pilote graphique absent : installe celui de ta carte graphique (jeu tres lent)");
     }
     if (!botMode && !shotMode) {                          /* mise a jour : restes de la precedente, puis verification discrete */
         upd_cleanup();
@@ -673,6 +758,10 @@ static int velocity_main(const char *cmd) {
     QueryPerformanceCounter(&start);
     last = start;
     float acc = 0, fpsAcc = 0; int fpsFrames = 0;
+    double capNext = 0;                                   /* plafond d'images : echeance de l'image suivante */
+#ifdef _WIN32
+    timeBeginPeriod(1);                                   /* Sleep(1) precis pour le plafond d'images */
+#endif
 #ifdef _WIN32
     MSG msgw;
 #endif
@@ -739,6 +828,11 @@ static int velocity_main(const char *cmd) {
             mac_swap();
 #endif
             second_screen_frame(dt);                      /* carte sur le deuxieme ecran, s'il y en a un */
+            if (fpsCap > 0) {                             /* plafond d'images (PARAMETRES : MAX FPS) */
+                QueryPerformanceCounter(&now);
+                capNext = fps_cap_deadline(capNext, (double)(now.QuadPart - start.QuadPart) / (double)freq.QuadPart, fpsCap);
+                fps_cap_wait(capNext, start, freq);
+            }
         }
         tesla_audio();                                    /* Tesla : boucles sonores des arcs */
         music_follow_game();
@@ -747,6 +841,9 @@ static int velocity_main(const char *cmd) {
         if (pendingAction) do_action();
     }
 done:
+#ifdef _WIN32
+    timeEndPeriod(1);
+#endif
     if (botMode) {
         if (botShot[0]) { render(1, 0.016f); save_bmp(botShot); }
         netlog("=== resume (%s, id %d) ===", netMode == NET_HOST ? "hote" : "client", myId);

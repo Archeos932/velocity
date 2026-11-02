@@ -31,6 +31,8 @@ static float gxLights = 1.0f;                             /* lumieres dynamiques
 static float gxStoneTex[3] = { 32, 0.80f, 0.35f };        /* pierre (LA CITADELLE) : taille des pavés (px), clarte, echelle */
 static float gxPlasterTex[3] = { 0.86f, 0.07f, 0.35f };   /* enduit : clarte, grain, echelle */
 static float gxDecorAo = 8;                               /* decor maille : rayons d'occlusion par sommet */
+static float gxDecorDetail = 1;                           /* decor maille : petits details (tuiles, volets, balustres...) */
+static float gxWorldTex = 1;                              /* textures du sol et des murs (0 : couleur unie x lumiere, GRILLE-PAIN) */
 static float gxClouds[2] = { 18, 0.35f }, gxCloudCol[3] = { 0.62f, 0.5f, 0.66f }, gxDust = 120, gxFlare = 0.5f;
 static float gxRain = 0, gxStorm = 0;                     /* pluie (gouttes), orage (eclairs par minute) */   /* trainees : vitesse min, opacite, largeur ; contours */
 typedef struct { const char *key; float *v; int n; } GfxKey;
@@ -56,6 +58,7 @@ static const GfxKey gfxKeys[] = {
     { "nuages", gxClouds, 2 }, { "nuages_couleur", gxCloudCol, 3 }, { "poussiere", &gxDust, 1 }, { "reflets_soleil", &gxFlare, 1 },
     { "pluie", &gxRain, 1 }, { "orage", &gxStorm, 1 },
     { "pierre", gxStoneTex, 3 }, { "enduit", gxPlasterTex, 3 }, { "decor_occlusion", &gxDecorAo, 1 },
+    { "textures_monde", &gxWorldTex, 1 }, { "decor_details", &gxDecorDetail, 1 },
 };
 #define GFX_NKEYS ((int)(sizeof gfxKeys / sizeof gfxKeys[0]))
 static char gfxDir[512];                                  /* dossier graphismes trouve ("" : aucun, valeurs par defaut) */
@@ -154,16 +157,20 @@ static void gfx_defaults(int restore) {
     gfxDefaultsSaved = 1;
 }
 
-/* qualite : plafonne ce qui coute (precalcul, particules, decor lointain) ; ULTRA garde les valeurs du fichier */
+/* qualite : plafonne ce qui coute (precalcul, particules, decor lointain) ; ULTRA garde les valeurs du fichier.
+ * GRILLE-PAIN (par defaut) coupe en plus tout le purement decoratif : etoiles, nuages, poussiere, ville au loin,
+ * reflets, lumieres dynamiques, liseres et passe de grain. Les contours et trainees des joueurs restent (lisibilite). */
 static void gfx_quality_apply(void) {
-    if (gfxQuality >= 2) return;
-    int low = gfxQuality == 0;
-    gxLmDens = fminf(gxLmDens, low ? 1.5f : 2.2f); gxAoRays = fminf(gxAoRays, low ? 4.0f : 8.0f);
-    gxLmBlur = fminf(gxLmBlur, 1); gxStars = fminf(gxStars, low ? 100.0f : 200.0f);
-    gxClouds[0] = fminf(gxClouds[0], low ? 6.0f : 10.0f); gxDust = fminf(gxDust, low ? 0.0f : 60.0f);
-    gxRain = fminf(gxRain, low ? 80.0f : 200.0f); gxCity[0] = fminf(gxCity[0], low ? 25.0f : 45.0f);
+    if (gfxQuality >= GFX_Q_ULTRA) return;
+    int low = gfxQuality <= GFX_Q_LOW, toast = gfxQuality == GFX_Q_TOASTER;
+    gxLmDens = fminf(gxLmDens, toast ? 1.0f : low ? 1.5f : 2.2f); gxAoRays = fminf(gxAoRays, toast ? 2.0f : low ? 4.0f : 8.0f);
+    gxLmBlur = fminf(gxLmBlur, 1); gxStars = fminf(gxStars, toast ? 0.0f : low ? 100.0f : 200.0f);
+    gxClouds[0] = fminf(gxClouds[0], toast ? 0.0f : low ? 6.0f : 10.0f); gxDust = fminf(gxDust, low ? 0.0f : 60.0f);
+    gxRain = fminf(gxRain, toast ? 40.0f : low ? 80.0f : 200.0f); gxCity[0] = fminf(gxCity[0], toast ? 0.0f : low ? 25.0f : 45.0f);
     gxBloom[2] = fminf(gxBloom[2], 1);
+    gxDecorAo = fminf(gxDecorAo, toast ? 2.0f : low ? 4.0f : 6.0f);   /* decor maille : precalcul plus court au chargement */
     if (low) gxFlare = 0;
+    if (toast) { gxLights = 0; gxEdges = 0; gxGrain = 0; gxWorldTex = 0; gxDecorDetail = 0; }   /* sans texture : ~2x moins de calcul par pixel */
 }
 
 /* eclairage propre a la carte chargee (MapDef.light) : remplace soleil, ciel, rebond et ambiance des objets ;

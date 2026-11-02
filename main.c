@@ -88,7 +88,8 @@
 
 #include "src/perso/skins.c"                     /* skins des joueurs : modeles et animation */
 
-#include "src/rendu/eclairage.c"                 /* lightmaps, occlusion, neons, liste du decor */
+#include "src/rendu/eclairage.c"                 /* lightmaps (atlas), occlusion, neons */
+#include "src/rendu/monde_secteurs.c"            /* dessin du monde : secteurs dans le champ, passe unique multitexture */
 
 #include "src/interface/texte.c"                 /* police, texte et rectangles 2D */
 

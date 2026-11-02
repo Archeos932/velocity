@@ -110,7 +110,7 @@ velocity/
 │   │                 boucle.c (pickup_tick, game_tick)
 │   ├── graphismes/   rendu_ini.c (lecture de graphismes/rendu.ini, ambiances, qualite)
 │   ├── perso/        skins.c (modeles et animation des personnages)
-│   ├── rendu/        base, textures, eclairage (lightmaps), modeles, armes_rendu, viewmodel, joueurs,
+│   ├── rendu/        base, textures, eclairage (lightmaps), monde_secteurs (dessin du monde), modeles, armes_rendu, viewmodel, joueurs,
 │   │                 ciel_ombres_bloom, render.c (l'image complete)
 │   ├── interface/    texte.c, mise_a_jour.c, config.c (velocity.ini), menus.c, scores.c, hud.c, carte_ecran.c
 │   ├── plateforme/   fenetre.c (Win32 + entrees communes), second_ecran.c, demarrage.c (WinMain, boucle)
@@ -155,7 +155,8 @@ velocity/
 | `graphismes/rendu_ini.c` | `graphismes/rendu.ini` (voir §3.13) | `gx*`, `gfxKeys`, `gfx_load_all`, `gfx_quality_apply` |
 | `rendu/textures.c` | textures, primitives | `make_textures`, `tex_override`, `quadf`, `box_faces`, `box_edges` |
 | `perso/skins.c` | personnages (voir §3.14) | `SkinAnim`, `skin_robot`…, `draw_skin` |
-| `rendu/eclairage.c` | lightmaps, néons, décor | `bake_lightmaps`, `build_neon`, `build_world_list` |
+| `rendu/eclairage.c` | lightmaps (atlas), néons, éclairage du décor | `bake_lightmaps`, `lm_free`, `build_neon`, `decor_bake` |
+| `rendu/monde_secteurs.c` | dessin du monde : secteurs, passe unique multitexture | `build_world_list`, `world_draw`, `world_free` |
 | `interface/texte.c` | police et 2D | `make_font`, `text`, `text_c`, `rect` |
 | `rendu/modeles.c`, `rendu/armes_rendu.c`, `rendu/viewmodel.c` | modèles 3D, rendu des armes, arme en main | `draw_enemy`, `draw_tesla_arcs`, `draw_flails`, `draw_viewmodel` |
 | `interface/mise_a_jour.c` | bouton MISE A JOUR (§3.17) | `upd_click`, `upd_poll`, `upd_label`, `upd_install`, `sha256_file` |
@@ -515,7 +516,8 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
   `impactFrames`, `screenFx`, et les `binds`.
 - Fichier : `velocity.ini` **à côté de l'exécutable** (chemin `cfgPath`, calculé avec
   `GetModuleFileNameA` dans `WinMain`). Format `cle=valeur`, une par ligne, `#` pour un commentaire :
-  `name`, `sens`, `fov`, `volume`, `invert_y`, `show_fps`, `fullscreen`, `impact_frames`, `screen_fx`,
+  `name`, `sens`, `fov`, `volume`, `invert_y`, `show_fps`, `max_fps` (plafond d'images, 0 = sans limite), `graphismes`
+  (préréglage QUALITÉ 0 à 3, §3.12), `resolution` (3D en %, 50 à 100), `fullscreen`, `impact_frames`, `screen_fx`,
   `online`, `update_check` (vérifier les mises à jour au démarrage), `map` (carte choisie, §3.18), `map_rotate`,
   puis `bind_<actId>=code1,code2`.
 - `cfg_load` lit au démarrage (pas en mode bot ni `--shot`), borne les valeurs (`clampf`) et ignore
@@ -624,7 +626,7 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
   - **Annonce LAN** : `PkAnnounce` porte `teams` **et** `map` (REJOINDRE : « [LAN 2V2] Hote - LE PUITS »).
   - **Menu** : la ligne CARTE est dans le menu principal **et** dans HEBERGER UNE PARTIE (`draw_map_row`).
   - **Rendu** : les nouvelles cartes passent par les lightmaps, ombres et bloom de `dev` (`load_map` reconstruit la
-    liste d'affichage dans `rendu/eclairage.c`). Ciel et brouillard : l'Arène suit `graphismes/rendu.ini` et ses
+    listes d'affichage, `build_world_list`). Ciel et brouillard : l'Arène suit `graphismes/rendu.ini` et ses
     ambiances ; les autres cartes prennent `MapDef.sky` / `fog` (`map_fog_col`, `sky_color`). La ville
     (`skylineList`) n'entoure que l'Arène.
   - **Chute** : sur une carte fermée (`killY` −1000), la chute hors de la carte de `dev` (`FALL_DEATH_Y`) reste ;
@@ -679,12 +681,27 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
 
 ### 3.12 Éclairage, ombres, ciel, bloom
 
-- **Lightmaps précalculées** (`bake_lightmaps`, appelé par `build_world_list`, ~0,25 s) : une texture par
+- **Lightmaps précalculées** (`bake_lightmaps`, appelé par `build_world_list`, ~0,25 s) : un rectangle par
   face visible de boîte (`lmaps[boite][face]`, `LM_DENS` = 3 texels/m, `face_hidden` saute les faces enfouies
-  ou hors de l'arène). `lm_light` : soleil (`sun_dir`, ombre portée par `ray_world`) + ciel × occlusion
-  ambiante (`AO_RAYS` rayons courts via la grille `lm_grid_build`/`ray_near`) + rebond du sol + lueur cyan des
-  jump pads. Flou 1-2-1. Le monde est dessiné **sans** éclairage OpenGL, puis la lightmap est multipliée ×2
-  (`GL_DST_COLOR, GL_SRC_COLOR`, 0,5 = neutre ; brouillard gris pour cette passe, blanc pour le grain).
+  ou hors de l'arène), rangé en étagères dans un **atlas** de pages `LM_PAGE` 1024² (`lmPage`, au plus `LM_PAGES`),
+  avec un texel recopié tout autour (pas de fuite au filtrage) ; `LMap` donne la page et le rectangle. `lm_light` :
+  soleil (`sun_dir`, ombre portée par `ray_world`) + ciel × occlusion ambiante (`AO_RAYS` rayons courts via la grille
+  `lm_grid_build`/`ray_near`) + rebond du sol + lueur cyan des jump pads. Flou 1-2-1. `lm_free` libère les pages.
+- **Dessin du monde** (`rendu/monde_secteurs.c`) : le monde est dessiné **sans** éclairage OpenGL ; couleur × texture
+  × lightmap × 2 (0,5 = neutre) × grain.
+  - **Passe unique** si la carte sait faire du multitexture (OpenGL 1.3 ou `ARB_multitexture` +
+    `ARB_texture_env_combine`, `world_gl_caps`) : unité 0 = texture du sol/mur, unité 1 = lightmap (`GL_COMBINE`
+    MODULATE, `GL_RGB_SCALE` 2), unité 2 = grain s'il y a 3 unités (sinon passe de grain à part).
+  - **Repli en plusieurs passes** (rendu logiciel de Windows, ou **`--multipasse`**) : base, puis lightmap en mélange
+    `GL_DST_COLOR, GL_SRC_COLOR` (brouillard gris), puis grain (brouillard blanc). Image identique à la passe unique
+    (écart moyen < 1/255 mesuré).
+  - **Sans textures** (`textures_monde = 0` de `rendu.ini`, imposé en GRILLE-PAIN) : unité 0 coupée, la couleur des
+    faces est multipliée par la couleur moyenne de la texture (`tex_mean`, dernier mipmap) pour garder la même clarté.
+    Mesuré en rendu logiciel : la texture de base filtrée coûtait ~14 ms sur les 21 ms du monde.
+  - **Secteurs** : cases de `WORLD_SECTOR_M` (24 m, au plus 16 × 16) ; chaque face, liseré et triangle du décor maillé
+    va dans la case de son centre. Une case = `WL_N` listes d'affichage (base, lightmap, grain, liserés, décor) et
+    leur boîte englobante ; `world_draw` (appelé par `render`) n'appelle que les cases dans la pyramide de vision
+    (`world_frustum` depuis `mvMat`/`prMat`). Faces triées par case, sol/murs puis page : peu de changements de texture.
 - **Objets mobiles** : `set_dyn_light(vis)` règle `GL_LIGHT0` sur le soleil, atténué si `sun_vis(p)` = 0
   (joueurs distants, ennemis) ; l'arme en main suit `viewSun` (lissé). `GL_NORMALIZE` est activé (l'arme
   est mise à l'échelle, sinon le reflet spéculaire explose).
@@ -692,7 +709,10 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
   cellules) aplaties sur le dessus de la boîte qui les reçoit le long du soleil (`shadow_caster_boxes`),
   découpées par `glClipPlane`, assombries une seule fois grâce au **stencil**.
 - **Ciel** : `draw_sky_dome` (dôme dégradé `sky_color`, lueur autour du soleil, étoiles, disque solaire) et
-  ville lointaine `skylineList` (`build_skyline_list`, décor sans collision).
+  ville lointaine `skylineList` (`build_skyline_list`, décor sans collision). Le dégradé est une liste d'affichage
+  (`build_sky_list`, refaite avec le monde) ; le ciel est dessiné **après** le monde, avec le test de profondeur,
+  pour ne peindre que les pixels encore vides : il est agrandi de `SKY_SCALE` (1,6, dôme à 480 m, plan lointain à
+  500 m) pour rester derrière le décor le plus lointain (montagnes de LA CITADELLE vers 400 m).
 - **Bloom** (`bloom_apply`, réglage `bloom=`) : copie de l'image, réduction au quart, seuil doux (x^8 par
   multiplications), flou séparable, ajout. Fait avant l'impact frame et le HUD.
 - **Texte** : `glBitmap` (polices de `make_font`) est très lent sur certains pilotes (12 ms/image sur macOS). Au
@@ -701,6 +721,24 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
 - **Mesurer** : `--shot bench_dm.bmp` (ou `bench_dm_equipes.bmp`…) écrit `bench_dm.bmp.txt` : ms/image avec et sans
   bloom/ombres, puis le détail par étape (`BT(k)` dans `render`). Référence (MacBook Air, 1372×891) : ~1,9 ms/image.
 - **Bots cachés** (`--hidden`, ceux de « contre des bots ») : aucun rendu ni lightmap, boucle limitée à ~250 Hz.
+- **Préréglages QUALITÉ, GRILLE-PAIN par défaut** (`GFX_Q_TOASTER`, `GFX_Q_LOW`, `GFX_Q_MID`, `GFX_Q_ULTRA`) : le jeu démarre
+  en GRILLE-PAIN (premier lancement, ou ancien `velocity.ini` sans `graphismes=`), le joueur monte dans PARAMÈTRES.
+  `gfx_preset(q)` règle ombres, bloom, résolution de la 3D et plafond d'images (GRILLE-PAIN : 60 img/s,
+  `FPS_CAP_TOASTER`) ; `gfx_quality_apply` plafonne `rendu.ini` à la relecture (GRILLE-PAIN : lightmaps 1 texel/m,
+  2 rayons d'occlusion, ni étoiles, nuages, poussière, ville, reflets, lumières dynamiques, liserés ni passe de grain ;
+  contours et traînées des joueurs gardés pour la lisibilité). `--test`, `--shot` et `--bot` sont en ULTRA
+  (`--qualite N` pour une capture dans un autre préréglage).
+- **Résolution de la 3D** (`gfxScale`, PARAMÈTRES > RES. 3D, 50 à 100 %) : `render` réduit `winW`/`winH` jusqu'au bloom,
+  puis `render_scale_apply` copie la scène dans une texture (taille exacte si `GL_ARB_texture_non_power_of_two`) et
+  l'étire ; le HUD est dessiné à pleine résolution. Mesuré : l'agrandissement coûte ~0,2 ms (Mac M4) à ~5 ms (rendu
+  logiciel) ; 100 % par défaut, 50 % seulement sans pilote.
+- **Sans pilote** (`glSoftware` : `GL_RENDERER` contient « GDI Generic », « llvmpipe », « Software »…) : statut
+  « pilote graphique absent », QUALITÉ affiche « (PILOTE?) » et, au premier lancement, GRILLE-PAIN à 50 %.
+  **`--soft`** force ce rendu logiciel (Windows : format `PFD_GENERIC_FORMAT` ; macOS : Apple Software Renderer)
+  pour simuler un grille-pain sur n'importe quelle machine.
+- **Banc** : `--shot bench_dm.bmp [--map N] [--soft] [--multipasse]` écrit aussi la carte graphique, le mode de dessin
+  du monde (passe unique ou non, unités de texture, pages de lightmaps), les secteurs dessinés, le temps par image et de
+  rechargement de chaque préréglage, et GRILLE-PAIN à chaque résolution (même vue de départ pour chaque mesure).
 
 ### 3.13 Réglages graphiques modifiables (`graphismes/`)
 
@@ -740,8 +778,8 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
 - **Ciel et météo** : nuages (`nuages`), poussière (`poussiere`), pluie (`pluie`), orage (`orage`, `storm_tick` :
   flash et tonnerre), reflets du soleil (`draw_flare`, `reflets_soleil`).
 - **Ambiances** : `gfxAmbiance` (PARAMETRES > CIEL, `ambiance=`) charge `graphismes/ambiance_nuit|jour|orage.ini`
-  par-dessus `rendu.ini`. **Qualité** : `gfxQuality` (PARAMETRES > QUALITE, `quality=`) plafonne les coûts
-  (`gfx_quality_apply`) et règle ombres/bloom. Captures : `--shot arene_nuit.bmp`, `skins.bmp`, `skins_course.bmp`,
+  par-dessus `rendu.ini`. **Qualité** : `gfxQuality` (PARAMETRES > QUALITE, `graphismes=`) plafonne les coûts
+  (`gfx_quality_apply`) et règle ombres/bloom (`gfx_preset`, voir « GRILLE-PAIN » au §3.12). Captures : `--shot arene_nuit.bmp`, `skins.bmp`, `skins_course.bmp`,
   `skinmenu.bmp`.
 - **Radar des alliés** (`draw_radar`) : mode équipes, en haut à gauche.
 - **Anticrénelage** : macOS demande un format 4x MSAA (`src/plateforme/mac/mac_platform.m`), sinon le format simple. Pas encore sous
@@ -853,6 +891,11 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
   écoinçons remplis), toit à deux pans en rangées de tuiles avec faîtière et pignons, fenêtre (verre en retrait,
   demi-lune, cadre, appui, volets à lames), auvent rayé qui fait le creux, cyprès, palmier, rambarde à balustres,
   lanterne, colonne à base et chapiteau.
+- **Niveaux de détail** (`DVlod`, `decLod`) : chaque sommet est `DEC_ALWAYS`, `DEC_DETAIL` (rangées de tuiles, cadres,
+  appuis et lames des volets, balustres, lanternes) ou `DEC_SIMPLE` (version plate : volet d'un seul quad, panneau
+  plein sous la rambarde). Les deux versions sont gardées ; `build_world_list` et `decor_bake` sautent l'une ou
+  l'autre selon `decor_details` de `rendu.ini` (0 en GRILLE-PAIN), sans refaire la carte. LA CITADELLE : 103 000
+  triangles de détails sur 180 000, il en reste ~77 500 en GRILLE-PAIN.
 - **`B_HIDDEN`** : boîte de collision invisible (jamais dessinée, pas de lightmap, pas de liseré) qui porte la
   collision et l'ombre d'un élément de décor (colonne, caisse, fontaine, gradins sous les pans de toit pour pouvoir
   y marcher). Le reste du code la traite comme un obstacle ordinaire (`ray_world`, `pos_free`, navigation).

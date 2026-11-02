@@ -17,8 +17,14 @@
 #define LMG_N       44
 #define LMG_MAXB    96
 static V3 sun_dir(void) { return vnorm(v3(gxSunDir[0], gxSunDir[1], gxSunDir[2])); }   /* vers le soleil (ombres, lumiere, ciel) */
-typedef struct { GLuint tex; float su, sv; int on; } LMap;   /* su, sv : coordonnee de texture du bord oppose */
+/* lightmaps rangees dans quelques grandes textures (atlas, LM_PAGE de cote) : moins de changements de texture.
+ * Une face occupe nu x nv texels a (u0, v0), entoures d'un texel recopie (pas de fuite de la voisine au filtrage) */
+#define LM_PAGE     1024      /* cote d'une page d'atlas */
+#define LM_PAGES    48        /* pages au plus */
+typedef struct { int page; float u0, v0, su, sv; int on; } LMap;   /* (u0, v0) : coin de la face ; su, sv : sa taille */
 static LMap lmaps[MAXB][6];
+static GLuint lmPage[LM_PAGES];
+static int nLmPages;
 static unsigned char lmgN[LMG_N][LMG_N];
 static unsigned short lmgB[LMG_N][LMG_N][LMG_MAXB];     /* indices de boites (MAXB > 256) */
 static double lmBakeMs;                                   /* duree du precalcul (journal, tests) */
@@ -199,59 +205,95 @@ static void lm_light(V3 p, V3 n, unsigned int seed, float out[3]) {
     }
 }
 
+/* rangement des faces dans l'atlas : par hauteur decroissante, en etageres */
+static short lmSortH[MAXB * 6];
+static int lm_cmp_h(const void *a, const void *b) { return lmSortH[*(const int *)b] - lmSortH[*(const int *)a]; }
+static void lm_free(void) {                               /* textures de la carte precedente (sinon fuite) */
+    if (nLmPages) glDeleteTextures(nLmPages, lmPage);
+    nLmPages = 0;
+    for (int i = 0; i < MAXB; i++)
+        for (int f = 0; f < 6; f++) lmaps[i][f].on = 0;
+}
+
 static void bake_lightmaps(void) {
     LARGE_INTEGER f0, t0, t1;
     QueryPerformanceFrequency(&f0); QueryPerformanceCounter(&t0);
     lm_grid_build();
     build_neon();
-    float *buf = (float *)malloc(LM_MAXT * LM_MAXT * 3 * sizeof(float)), *tmp = (float *)malloc(LM_MAXT * LM_MAXT * 3 * sizeof(float));
-    unsigned char *img = NULL;
-    int imgCap = 0;
-    for (int bi = 0; bi < nb; bi++)
+    lm_free();
+    static int fid[MAXB * 6], fnu[MAXB * 6], fx[MAXB * 6], fy[MAXB * 6], fpg[MAXB * 6];
+    int nf = 0;
+    for (int bi = 0; bi < nb; bi++)                       /* 1. taille de chaque face visible */
         for (int f = 0; f < 6; f++) {
-            LMap *m = &lmaps[bi][f];
-            m->on = 0;
             if (face_hidden(bi, f)) continue;
             Box *b = &boxes[bi];
             int ua = face_u(f), va = face_v(f);
-            float u0 = *vc(&b->mn, ua), u1 = *vc(&b->mx, ua), v0 = *vc(&b->mn, va), v1 = *vc(&b->mx, va);
-            int nu = (int)ceilf((u1 - u0) * LM_DENS), nv = (int)ceilf((v1 - v0) * LM_DENS);
+            int nu = (int)ceilf((*vc(&b->mx, ua) - *vc(&b->mn, ua)) * LM_DENS), nv = (int)ceilf((*vc(&b->mx, va) - *vc(&b->mn, va)) * LM_DENS);
             nu = nu < 2 ? 2 : nu > LM_MAXT ? LM_MAXT : nu; nv = nv < 2 ? 2 : nv > LM_MAXT ? LM_MAXT : nv;
-            V3 n = face_normal(f), p = (f & 1) ? b->mn : b->mx;
-            for (int j = 0; j < nv; j++)
-                for (int i = 0; i < nu; i++) {
-                    *vc(&p, ua) = u0 + (i + 0.5f) / nu * (u1 - u0);
-                    *vc(&p, va) = v0 + (j + 0.5f) / nv * (v1 - v0);
-                    lm_light(p, n, (unsigned)(bi * 7919 + f * 104729 + j * 1031 + i), &buf[(j * nu + i) * 3]);
-                }
-            for (int pass = 0; pass < 2 * (int)gxLmBlur; pass++)   /* flou 1-2-1 (s puis t) : adoucit les bords d'ombre et le bruit */
-                for (int j = 0; j < nv; j++)
-                    for (int i = 0; i < nu; i++)
-                        for (int c = 0; c < 3; c++) {
-                            int vert = pass & 1;
-                            int a0 = vert ? (j > 0 ? j - 1 : j) * nu + i : j * nu + (i > 0 ? i - 1 : i);
-                            int a2 = vert ? (j < nv - 1 ? j + 1 : j) * nu + i : j * nu + (i < nu - 1 ? i + 1 : i);
-                            float *src = vert ? tmp : buf, *dst = vert ? buf : tmp;
-                            dst[(j * nu + i) * 3 + c] = 0.25f * src[a0 * 3 + c] + 0.5f * src[(j * nu + i) * 3 + c] + 0.25f * src[a2 * 3 + c];
-                        }
-            int tw = pow2up(nu), th = pow2up(nv);
-            if (tw * th * 3 > imgCap) { imgCap = tw * th * 3; img = (unsigned char *)realloc(img, imgCap); }
-            memset(img, 0, tw * th * 3);
+            fid[nf] = bi * 6 + f; fnu[nf] = nu; lmSortH[nf] = (short)nv; nf++;
+        }
+    static int ord[MAXB * 6];
+    for (int k = 0; k < nf; k++) ord[k] = k;
+    qsort(ord, nf, sizeof ord[0], lm_cmp_h);
+    int px = 0, py = 0, shelf = 0, pg = 0;                /* 2. etageres : de gauche a droite, puis on monte */
+    for (int k = 0; k < nf; k++) {
+        int q = ord[k], w = fnu[q] + 2, h = lmSortH[q] + 2;
+        if (px + w > LM_PAGE) { px = 0; py += shelf; shelf = 0; }
+        if (py + h > LM_PAGE) { px = 0; py = 0; shelf = 0; pg++; }
+        if (pg >= LM_PAGES) { fpg[q] = -1; continue; }   /* atlas plein : face sans lightmap (jamais vu, par securite) */
+        fx[q] = px; fy[q] = py; fpg[q] = pg;
+        px += w; if (h > shelf) shelf = h;
+    }
+    int npg = pg + 1 < LM_PAGES ? pg + 1 : LM_PAGES;
+    unsigned char *pages = (unsigned char *)calloc((size_t)npg * LM_PAGE * LM_PAGE * 3, 1);
+    float *buf = (float *)malloc(LM_MAXT * LM_MAXT * 3 * sizeof(float)), *tmp = (float *)malloc(LM_MAXT * LM_MAXT * 3 * sizeof(float));
+    for (int q = 0; q < nf; q++) {                        /* 3. eclairage de chaque face, recopie dans sa page */
+        if (fpg[q] < 0) continue;
+        int bi = fid[q] / 6, f = fid[q] % 6, nu = fnu[q], nv = lmSortH[q];
+        Box *b = &boxes[bi];
+        int ua = face_u(f), va = face_v(f);
+        float u0 = *vc(&b->mn, ua), u1 = *vc(&b->mx, ua), v0 = *vc(&b->mn, va), v1 = *vc(&b->mx, va);
+        V3 n = face_normal(f), p = (f & 1) ? b->mn : b->mx;
+        for (int j = 0; j < nv; j++)
+            for (int i = 0; i < nu; i++) {
+                *vc(&p, ua) = u0 + (i + 0.5f) / nu * (u1 - u0);
+                *vc(&p, va) = v0 + (j + 0.5f) / nv * (v1 - v0);
+                lm_light(p, n, (unsigned)(bi * 7919 + f * 104729 + j * 1031 + i), &buf[(j * nu + i) * 3]);
+            }
+        for (int pass = 0; pass < 2 * (int)gxLmBlur; pass++)   /* flou 1-2-1 (s puis t) : adoucit les bords d'ombre et le bruit */
             for (int j = 0; j < nv; j++)
                 for (int i = 0; i < nu; i++)
-                    for (int c = 0; c < 3; c++)
-                        img[(j * tw + i) * 3 + c] = (unsigned char)(clampf(buf[(j * nu + i) * 3 + c] * 0.5f, 0, 1) * 255 + 0.5f);
-            glGenTextures(1, &m->tex);
-            glBindTexture(GL_TEXTURE_2D, m->tex);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tw, th, 0, GL_RGB, GL_UNSIGNED_BYTE, img);
-            m->su = (float)nu / tw; m->sv = (float)nv / th; m->on = 1;
-        }
-    free(buf); free(tmp); free(img);
+                    for (int c = 0; c < 3; c++) {
+                        int vert = pass & 1;
+                        int a0 = vert ? (j > 0 ? j - 1 : j) * nu + i : j * nu + (i > 0 ? i - 1 : i);
+                        int a2 = vert ? (j < nv - 1 ? j + 1 : j) * nu + i : j * nu + (i < nu - 1 ? i + 1 : i);
+                        float *src = vert ? tmp : buf, *dst = vert ? buf : tmp;
+                        dst[(j * nu + i) * 3 + c] = 0.25f * src[a0 * 3 + c] + 0.5f * src[(j * nu + i) * 3 + c] + 0.25f * src[a2 * 3 + c];
+                    }
+        unsigned char *pgp = pages + (size_t)fpg[q] * LM_PAGE * LM_PAGE * 3;
+        for (int j = -1; j <= nv; j++)                    /* bord d'un texel recopie tout autour */
+            for (int i = -1; i <= nu; i++) {
+                int si = i < 0 ? 0 : i >= nu ? nu - 1 : i, sj = j < 0 ? 0 : j >= nv ? nv - 1 : j;
+                unsigned char *d = pgp + ((size_t)(fy[q] + 1 + j) * LM_PAGE + (fx[q] + 1 + i)) * 3;
+                for (int c = 0; c < 3; c++) d[c] = (unsigned char)(clampf(buf[(sj * nu + si) * 3 + c] * 0.5f, 0, 1) * 255 + 0.5f);
+            }
+        LMap *m = &lmaps[bi][f];
+        m->page = fpg[q];
+        m->u0 = (fx[q] + 1) / (float)LM_PAGE; m->v0 = (fy[q] + 1) / (float)LM_PAGE;
+        m->su = nu / (float)LM_PAGE; m->sv = nv / (float)LM_PAGE; m->on = 1;
+    }
+    glGenTextures(npg, lmPage);                           /* 4. envoi des pages a la carte graphique */
+    nLmPages = npg;
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    for (int k = 0; k < npg; k++) {
+        glBindTexture(GL_TEXTURE_2D, lmPage[k]);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, LM_PAGE, LM_PAGE, 0, GL_RGB, GL_UNSIGNED_BYTE, pages + (size_t)k * LM_PAGE * LM_PAGE * 3);
+    }
+    free(buf); free(tmp); free(pages);
     QueryPerformanceCounter(&t1);
     lmBakeMs = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)f0.QuadPart;
 }
@@ -266,7 +308,7 @@ static void lm_face(int bi, int f) {
     face_corners(b->mn, b->mx, f, c);
     glNormal3f(n.x, n.y, n.z);
     for (int k = 0; k < 4; k++) {
-        glTexCoord2f((*vc(&c[k], ua) - u0) / du * m->su, (*vc(&c[k], va) - v0) / dv * m->sv);
+        glTexCoord2f(m->u0 + (*vc(&c[k], ua) - u0) / du * m->su, m->v0 + (*vc(&c[k], va) - v0) / dv * m->sv);
         glVertex3f(c[k].x, c[k].y, c[k].z);
     }
 }
@@ -285,21 +327,6 @@ static void set_dyn_light(float vis) {
 }
 
 
-/* dessine les faces visibles du monde, passe par passe (sol/plafond ou murs, ou toutes) */
-static void world_faces(int mask, float scale) {
-    glBegin(GL_QUADS);
-    for (int i = 0; i < nb; i++) {
-        glColor3f(boxes[i].col.x, boxes[i].col.y, boxes[i].col.z);
-        for (int f = 0; f < 6; f++) {
-            if (!(mask & (1 << f)) || !lmaps[i][f].on) continue;
-            V3 c[4], n = face_normal(f);
-            face_corners(boxes[i].mn, boxes[i].mx, f, c);
-            quad_tex(n, c[0], c[1], c[2], c[3], scale);
-        }
-    }
-    glEnd();
-}
-
 /* decor maille : chaque sommet recoit la meme lumiere qu'un texel de lightmap (soleil et ombres, ciel et occlusion,
  * rebond, neons), un peu au-dessus de sa surface ; les sommets identiques ne sont calcules qu'une fois */
 static double decBakeMs;
@@ -308,8 +335,10 @@ static void decor_bake(void) {
     QueryPerformanceFrequency(&f0); QueryPerformanceCounter(&t0);
     float rays = gxAoRays;
     gxAoRays = fminf(gxAoRays, gxDecorAo);                /* moins de rayons : un sommet couvre peu de surface */
+    int skip = gxDecorDetail >= 0.5f ? DEC_SIMPLE : DEC_DETAIL;   /* version non dessinee : pas eclairee non plus */
     for (int i = 0; i < ndv; i++) {
-        if (i > 0 && vlen(vsub(DV[i].p, DV[i - 1].p)) < 1e-4f && vdot(DV[i].n, DV[i - 1].n) > 0.999f) {
+        if (DVlod[i] == skip) { DVL[i][0] = DVL[i][1] = DVL[i][2] = 0; continue; }
+        if (i > 0 && DVlod[i - 1] == DVlod[i] && vlen(vsub(DV[i].p, DV[i - 1].p)) < 1e-4f && vdot(DV[i].n, DV[i - 1].n) > 0.999f) {
             DVL[i][0] = DVL[i - 1][0]; DVL[i][1] = DVL[i - 1][1]; DVL[i][2] = DVL[i - 1][2];
             continue;
         }
@@ -323,81 +352,8 @@ static void decor_bake(void) {
 static GLuint skylineList;
 static void build_skyline_list(void);
 static void gfx_reload(void);
-static void build_world_list(void) {
-    bake_lightmaps();
-    const float *fgc = map_fog_col();
-    GLfloat fogScene[4] = { fgc[0], fgc[1], fgc[2], 1 }, fogGray[4] = { 0.5f, 0.5f, 0.5f, 1 }, fogWhite[4] = { 1, 1, 1, 1 };
-    worldList = glGenLists(1);
-    glNewList(worldList, GL_COMPILE);
-    glEnable(GL_CULL_FACE);                                   /* normales sortantes verifiees : la face interieure de
-                                                                * chaque boite (jamais vue) n'est pas dessinee */
-    glCullFace(GL_BACK);
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(1, 1);
-    glDisable(GL_LIGHTING);                                   /* l'eclairage vient des lightmaps (passe 3) */
-    glEnable(GL_TEXTURE_2D);
-    int stone = maps[curMap].style == 1;                      /* pierre et enduit (LA CITADELLE) ou metal */
-    glBindTexture(GL_TEXTURE_2D, stone ? texStone : texGrid);   /* passe 1 : sol/plafond (faces horizontales) */
-    world_faces(FACE_UD, stone ? gxStoneTex[2] : gxTexScale[0]);
-    glBindTexture(GL_TEXTURE_2D, stone ? texPlaster : texWall); /* passe 2 : murs (faces verticales) */
-    world_faces(FACE_SIDES, stone ? gxPlasterTex[2] : gxTexScale[1]);
-    glDepthFunc(GL_LEQUAL);                                   /* passes suivantes : meme profondeur que 1/2 */
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_DST_COLOR, GL_SRC_COLOR);                  /* passe 3 : lightmaps, x2 (0,5 = inchange) */
-    glFogfv(GL_FOG_COLOR, fogGray);                           /* au loin, la lightmap s'efface dans le brouillard */
-    glColor3f(1, 1, 1);
-    for (int i = 0; i < nb; i++)
-        for (int f = 0; f < 6; f++) {
-            if (!lmaps[i][f].on) continue;
-            glBindTexture(GL_TEXTURE_2D, lmaps[i][f].tex);
-            glBegin(GL_QUADS);
-            lm_face(i, f);
-            glEnd();
-        }
-    glBlendFunc(GL_DST_COLOR, GL_ZERO);                       /* passe 4 : grain fin, multiplicatif */
-    glFogfv(GL_FOG_COLOR, fogWhite);
-    glBindTexture(GL_TEXTURE_2D, texGrime);
-    glColor3f(1, 1, 1);
-    glBegin(GL_QUADS);
-    for (int i = 0; i < nb; i++)
-        for (int f = 0; f < 6; f++) {
-            if (!lmaps[i][f].on) continue;
-            V3 c[4];
-            face_corners(boxes[i].mn, boxes[i].mx, f, c);
-            quad_tex(face_normal(f), c[0], c[1], c[2], c[3], gxTexScale[2]);
-        }
-    glEnd();
-    glFogfv(GL_FOG_COLOR, fogScene);
-    glDisable(GL_BLEND);
-    glDepthFunc(GL_LESS);
-    glDisable(GL_POLYGON_OFFSET_FILL);
-    glDisable(GL_TEXTURE_2D);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glLineWidth(1.5f);
-    for (int i = 1; i < nb; i++) {
-        if (boxes[i].kind == B_HIDDEN) continue;
-        if (boxes[i].kind == B_PAD) glColor4f(0.6f, 1.0f, 1.0f, 0.9f);
-        else if (boxes[i].kind == B_SPEED) glColor4f(1.0f, 0.5f, 0.9f, 0.9f);
-        else if (stone) continue;                         /* pierre : pas de liseres sombres, les aretes viennent de la lumiere */
-        else if (gxEdges > 0.001f) glColor4f(0.05f, 0.05f, 0.1f, gxEdges);
-        else continue;
-        box_edges(boxes[i].mn, boxes[i].mx);
-    }
-    glDisable(GL_BLEND);
-    glDisable(GL_CULL_FACE);                                  /* n'affecte que ce display list, pas le reste du rendu */
-    decor_bake();                                             /* decor maille : eclairage par sommet, puis triangles */
-    if (ndv > 0) {
-        glBegin(GL_TRIANGLES);
-        for (int i = 0; i < ndv; i++) {
-            glColor3f(clampf(DV[i].c.x * DVL[i][0], 0, 1), clampf(DV[i].c.y * DVL[i][1], 0, 1), clampf(DV[i].c.z * DVL[i][2], 0, 1));
-            glVertex3f(DV[i].p.x, DV[i].p.y, DV[i].p.z);
-        }
-        glEnd();
-    }
-    glEndList();
-    build_skyline_list();
-}
+static void build_world_list(void);                       /* monde_secteurs.c : lightmaps, decor, listes par secteur */
+static void build_sky_list(void);                         /* ciel_ombres_bloom.c : degrade du ciel */
 
 /* change de carte : boites, liste d'affichage, et plus rien de la carte precedente (projectiles, pieces, drones...) */
 static int glReady;                                       /* contexte OpenGL cree (les tests --test n'en ont pas) */
@@ -408,12 +364,8 @@ static void load_map(int m) {
     build_level(m);
     map_light_apply();                                    /* eclairage propre a la carte (ou celui de rendu.ini) */
     if (glReady) {
-        if (worldList) glDeleteLists(worldList, 1);
         if (skylineList) glDeleteLists(skylineList, 1);
-        for (int i = 0; i < MAXB; i++)                    /* lightmaps de la carte precedente : liberees (sinon fuite) */
-            for (int f = 0; f < 6; f++)
-                if (lmaps[i][f].on) { glDeleteTextures(1, &lmaps[i][f].tex); lmaps[i][f].on = 0; }
-        build_world_list();
+        build_world_list();                               /* libere d'abord listes et lightmaps de la carte precedente */
     }
     memset(PR, 0, sizeof PR); memset(CO, 0, sizeof CO); memset(E, 0, sizeof E);
     memset(PA, 0, sizeof PA); memset(BM, 0, sizeof BM); memset(TR, 0, sizeof TR);

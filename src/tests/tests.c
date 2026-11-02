@@ -203,6 +203,63 @@ static void run_tests(const char *path) {
         wheelLastEv = wheelLastOk = -1e9;
     }
 
+    {                                                     /* plafond d'images : cadence reguliere, pas de rattrapage, bouton */
+        double a = fps_cap_deadline(1.0, 1.003, 100);     /* en avance : image suivante une periode apres */
+        double b = fps_cap_deadline(1.0, 1.5, 100);       /* tres en retard : on repart de maintenant */
+        double c = fps_cap_deadline(1.0, 1.012, 100);     /* un peu en retard : pas d'attente, cadence gardee */
+        fprintf(f, "plafond d'images : echeances %.3f %.3f %.3f, sans plafond %.3f, bouton 0->%d 240->%d 360->%d 100->%d "
+                   "(attendu 1.010 1.500 1.010, 2.000, 30 360 0 120)\n",
+                a, b, c, fps_cap_deadline(1.0, 2.0, 0), fps_cap_cycle(0), fps_cap_cycle(240), fps_cap_cycle(360), fps_cap_cycle(100));
+    }
+
+    {                                                     /* GRILLE-PAIN : prereglages, plafonds du rendu, ancien velocity.ini */
+        gfx_preset(GFX_Q_TOASTER);
+        int t0 = gfxShadows, t1 = gfxBloom, t2 = gfxScale, t3 = fpsCap;
+        gfx_preset(GFX_Q_ULTRA);
+        int u0 = gfxShadows, u1 = gfxBloom, u2 = gfxScale, u3 = fpsCap;
+        float sv[4] = { gxLmDens, gxGrain, gxLights, gxStars };
+        gxLmDens = 3; gxGrain = 0.22f; gxLights = 1; gxStars = 260;
+        gfxQuality = GFX_Q_TOASTER;
+        gfx_quality_apply();
+        float q0 = gxLmDens, q1 = gxGrain, q2 = gxLights, q3 = gxStars;
+        gxLmDens = sv[0]; gxGrain = sv[1]; gxLights = sv[2]; gxStars = sv[3];
+        snprintf(cfgPath, sizeof cfgPath, "cfg_test.ini");
+        FILE *c = fopen(cfgPath, "w");                    /* fichier d'avant GRILLE-PAIN : quality=2 (ULTRA), ombres et bloom */
+        if (c) { fprintf(c, "quality=2\nshadows=1\nbloom=1\nmax_fps=144\n"); fclose(c); }
+        gfx_preset(GFX_Q_ULTRA);
+        cfg_load();
+        int o0 = gfxQuality, o1 = gfxShadows + gfxBloom, o2 = fpsCap;
+        c = fopen(cfgPath, "w");                          /* fichier recent : le choix du joueur est garde */
+        if (c) { fprintf(c, "graphismes=3\nresolution=80\nshadows=1\nbloom=0\nmax_fps=144\n"); fclose(c); }
+        cfg_load();
+        int n0 = gfxQuality, n1 = gfxScale, n2 = gfxShadows, n3 = gfxBloom;
+        remove(cfgPath);
+        cfgPath[0] = 0;
+        gfx_preset(GFX_Q_ULTRA);
+        fprintf(f, "grille-pain : prereglage ombres %d bloom %d 3D %d %% fps %d, ULTRA %d %d %d %d ; plafonds lightmap %.1f grain %.2f "
+                   "lumieres %.0f etoiles %.0f ; ancien ini -> qualite %d ombres+bloom %d fps %d ; nouvel ini -> %d %d %% %d %d ; "
+                   "bouton resolution 67->%d 100->%d (attendu 0 0 100 60, 1 1 100 240 ; 1.0 0.00 0 0 ; 0 0 60 ; 3 80 1 0 ; 75 50)\n",
+                t0, t1, t2, t3, u0, u1, u2, u3, q0, q1, q2, q3, o0, o1, o2, n0, n1, n2, n3, render_scale_cycle(67), render_scale_cycle(100));
+    }
+
+    {                                                     /* secteurs du monde : case d'un point, tri par la pyramide de vision */
+        float sx0 = wsX0, sz0 = wsZ0, sc = wsCell; int sgx = wsGX, sgz = wsGZ;
+        float pm[16], mm[16];
+        memcpy(pm, prMat, sizeof pm); memcpy(mm, mvMat, sizeof mm);
+        wsX0 = -48; wsZ0 = -48; wsCell = 24; wsGX = wsGZ = 4;
+        int c0 = wsec_of(-40, -40), c1 = wsec_of(1, 1), c2 = wsec_of(500, -500);
+        memset(prMat, 0, sizeof prMat); memset(mvMat, 0, sizeof mvMat);
+        for (int i = 0; i < 4; i++) prMat[i * 5] = mvMat[i * 5] = 1;   /* identite : la vision = le cube -1..1 */
+        world_frustum();
+        int in = world_box_visible(v3(-0.5f, -0.5f, -0.5f), v3(0.5f, 0.5f, 0.5f));
+        int across = world_box_visible(v3(0.9f, -5, -5), v3(3, 5, 5));
+        int out = world_box_visible(v3(2, 2, 2), v3(3, 3, 3));
+        memcpy(prMat, pm, sizeof pm); memcpy(mvMat, mm, sizeof mm);
+        wsX0 = sx0; wsZ0 = sz0; wsCell = sc; wsGX = sgx; wsGZ = sgz;
+        fprintf(f, "secteurs : cases %d %d %d, boite dedans %d, a cheval %d, dehors %d (attendu 0 10 3, 1 1 0)\n",
+                c0, c1, c2, in, across, out);
+    }
+
     {                                                     /* changement d'arme : le nom s'affiche, pas si on garde la meme */
         reset_game();
         nowT = 50; weapon_select(P.loadout[1]);
@@ -3038,8 +3095,12 @@ static void run_tests(const char *path) {
             load_map(cm);
             int hid = 0;
             for (int i = 0; i < nb; i++) hid += boxes[i].kind == B_HIDDEN;
+            int nDet = 0, nSim = 0;
+            for (int i = 0; i < ndv; i += 3) { nDet += DVlod[i] == DEC_DETAIL; nSim += DVlod[i] == DEC_SIMPLE; }
             fprintf(f, "decor (%s) : %d triangles (max %d), %d boites dont %d collisions de decor (attendu > 20000, < max)\n",
                     maps[cm].name, ndv / 3, DEC_MAXV / 3, nb, hid);
+            fprintf(f, "decor (%s) GRILLE-PAIN : %d triangles de details retires, %d simples ajoutes, reste %d (attendu > 0, > 0, < la moitie de %d)\n",
+                    maps[cm].name, nDet, nSim, ndv / 3 - nDet, ndv / 3);
             load_map(0); reset_game();
         }
         {   /* --- Modes, specialisations, boutique (l'hote arbitre ; 4 joueurs : 0 et 2 BLEUS, 1 et 3 ROUGES) --- */

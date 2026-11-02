@@ -35,6 +35,17 @@ static unsigned char *load_bmp_square(const char *path, int *size) {
     return img;
 }
 
+/* couleur moyenne de chaque texture (son dernier mipmap, 1 x 1) : le monde sans textures (GRILLE-PAIN) garde la meme clarte */
+#define TEX_MEAN_N 8
+static GLuint texMeanId[TEX_MEAN_N];
+static float texMean[TEX_MEAN_N][3];
+static int nTexMean;
+static void tex_mean(GLuint t, float out[3]) {
+    out[0] = out[1] = out[2] = 1;
+    for (int i = 0; i < nTexMean; i++)
+        if (texMeanId[i] == t) { out[0] = texMean[i][0]; out[1] = texMean[i][1]; out[2] = texMean[i][2]; }
+}
+
 /* envoie une image RGB a OpenGL avec des mipmaps faits main (filtre boite) ; modifie/consomme img */
 static void upload_rgb_mip(GLuint *tex, unsigned char *img, int N) {
     glGenTextures(1, tex);
@@ -45,7 +56,15 @@ static void upload_rgb_mip(GLuint *tex, unsigned char *img, int N) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     for (int level = 0, s = N; ; level++) {                /* mipmaps faits main */
         glTexImage2D(GL_TEXTURE_2D, level, GL_RGB, s, s, 0, GL_RGB, GL_UNSIGNED_BYTE, img);
-        if (s == 1) break;
+        if (s == 1) {                                     /* moyenne : remplace l'entree du meme numero, ou s'ajoute */
+            int k = 0;
+            while (k < nTexMean && texMeanId[k] != *tex) k++;
+            if (k == TEX_MEAN_N) k = 0;
+            if (k == nTexMean) nTexMean++;
+            texMeanId[k] = *tex;
+            for (int c = 0; c < 3; c++) texMean[k][c] = img[c] / 255.0f;
+            break;
+        }
         int h = s / 2;
         for (int y = 0; y < h; y++)
             for (int x = 0; x < h; x++)
@@ -260,11 +279,8 @@ static void box_faces(V3 a, V3 b) {
     glEnd();
 }
 
-/* masque de faces et quad a echelle de texture libre : rendu du monde en plusieurs passes (world_faces),
- * sans toucher a box_faces, utilise partout ailleurs (armes, ennemis) a l'echelle fixe 0.5 */
-enum { FACE_PX = 1, FACE_NX = 2, FACE_PY = 4, FACE_NY = 8, FACE_PZ = 16, FACE_NZ = 32,
-       FACE_SIDES = FACE_PX | FACE_NX | FACE_PZ | FACE_NZ, FACE_UD = FACE_PY | FACE_NY,
-       FACE_ALL = FACE_SIDES | FACE_UD };
+/* quad a echelle de texture libre : rendu du monde (monde_secteurs.c), sans toucher a box_faces,
+ * utilise partout ailleurs (armes, ennemis) a l'echelle fixe 0.5 */
 
 static void quad_tex(V3 n, V3 a, V3 b, V3 c, V3 d, float scale) {
     V3 vs[4] = { a, b, c, d };

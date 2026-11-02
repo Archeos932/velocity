@@ -7,6 +7,7 @@
 
 /* --- fenetre + contexte OpenGL (pipeline fixe, surface non Retina : 1 point = 1 pixel) --- */
 int  mac_window_create(int w, int h, const char *title, int visible);   /* 1 si ok */
+void mac_gl_software(int on);                                           /* avant mac_window_create : rendu logiciel d'Apple (--soft) */
 void mac_window_place(int x, int y, int cw, int ch);                    /* zone cliente cw x ch, coin haut gauche en (x, y) */
 void mac_window_size(int *w, int *h);                                   /* taille de la zone cliente */
 int  mac_pump(void);                                                    /* traite les evenements ; 0 = quitter */

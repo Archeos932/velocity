@@ -66,26 +66,26 @@ static void draw_settings(float cx, float cy) {
     y += 30;
     snprintf(buf, sizeof buf, "%.2f", sens * 1000);
     sens = slider(1, lx, y, lw, "Sensibilite de la souris", buf, sens, 0.0003f, 0.008f);
-    y += 56;
+    y += 48;
     snprintf(buf, sizeof buf, "%.0f deg", fovBase);
     fovBase = slider(2, lx, y, lw, "Champ de vision (horizontal)", buf, fovBase, 80, 130);
-    y += 56;
+    y += 48;
     snprintf(buf, sizeof buf, "%.0f %%", masterVol * 100);
     masterVol = slider(3, lx, y, lw, "Volume", buf, masterVol, 0, 1);
-    y += 56;
+    y += 48;
     snprintf(buf, sizeof buf, "%.0f %%", musicVol * 100);
     musicVol = slider(4, lx, y, lw, "Musique", buf, musicVol, 0, 1);
-    y += 50;
+    y += 48;
     snprintf(buf, sizeof buf, "AXE Y : %s", invertY ? "INVERSE" : "NORMAL");
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) invertY = !invertY;
     snprintf(buf, sizeof buf, "FPS : %s", showFps ? "OUI" : "NON");
     if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) showFps = !showFps;
-    y += 50;
+    y += 48;
     snprintf(buf, sizeof buf, "FLASHS : %s", impactFrames ? "OUI" : "NON");   /* impact frames */
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) impactFrames = !impactFrames;
     snprintf(buf, sizeof buf, "CAM. MORT:%s", killcamOn ? "OUI" : "NON");     /* camera de mort */
     if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) killcamOn = !killcamOn;
-    y += 50;
+    y += 48;
     snprintf(buf, sizeof buf, "EFFETS : %s", screenFx ? "OUI" : "NON");
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) screenFx = !screenFx;
     snprintf(buf, sizeof buf, "2e ECRAN:%s", !secondScreen ? "NON" : mapView3d ? "3D" : "HAUT");   /* carte : NON, de haut, 3D */
@@ -94,29 +94,33 @@ static void draw_settings(float cx, float cy) {
         else if (!mapView3d) mapView3d = 1;
         else secondScreen = 0;
     }
-    y += 50;
+    y += 48;
     snprintf(buf, sizeof buf, "OMBRES : %s", gfxShadows ? "OUI" : "NON");   /* graphismes : deux demi-boutons */
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) gfxShadows = !gfxShadows;
     snprintf(buf, sizeof buf, "BLOOM : %s", gfxBloom ? "OUI" : "NON");
     if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) gfxBloom = !gfxBloom;
-    y += 50;
-    snprintf(buf, sizeof buf, "QUALITE:%s", qualityNames[gfxQuality]);   /* preregle : refait l'eclairage du decor */
-    if (button(lx, y, lw * 0.5f - 5, 44, buf)) {
-        gfxQuality = (gfxQuality + 1) % 3;
-        gfxShadows = gfxQuality > 0; gfxBloom = gfxQuality == 2;
+    y += 48;
+    snprintf(buf, sizeof buf, glSoftware ? "QUALITE:%s (PILOTE?)" : "QUALITE : %s", qualityNames[gfxQuality]);   /* prereglage : refait */
+    if (button(lx, y, lw, 44, buf)) {                     /* l'eclairage du decor ; GRILLE-PAIN par defaut */
+        gfx_preset((gfxQuality + 1) % GFX_Q_COUNT);
         gfx_reload(); popT = 0;
     }
+    y += 48;
+    snprintf(buf, sizeof buf, "RES. 3D:%d%%", gfxScale);  /* 3D dessinee plus petite puis agrandie, HUD net */
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) gfxScale = render_scale_cycle(gfxScale);
     snprintf(buf, sizeof buf, "CIEL:%s", ambianceNames[gfxAmbiance]);
     if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) { gfxAmbiance = (gfxAmbiance + 1) % 4; gfx_reload(); popT = 0; }
-    y += 50;
-    snprintf(buf, sizeof buf, "Plein ecran : %s", fullscreen ? "OUI" : "NON");
-    if (button(lx, y, lw, 44, buf)) pendingAction = ACT_FULLSCREEN;
-    y += 50;
+    y += 48;
+    snprintf(buf, sizeof buf, "PLEIN ECR:%s", fullscreen ? "OUI" : "NON");
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) pendingAction = ACT_FULLSCREEN;
+    if (fpsCap > 0) snprintf(buf, sizeof buf, "MAX FPS:%d", fpsCap); else snprintf(buf, sizeof buf, "MAX FPS:SANS");
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) fpsCap = fps_cap_cycle(fpsCap);   /* plafond d'images */
+    y += 48;
     snprintf(buf, sizeof buf, "EN LIGNE:%s", onlineOn ? "OUI" : "NON");      /* parties en ligne */
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) { onlineOn = !onlineOn; cfg_save(); }
     snprintf(buf, sizeof buf, "MAJ AUTO:%s", updCheck ? "OUI" : "NON");     /* mises a jour automatiques */
     if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) { updCheck = !updCheck; cfg_save(); }
-    y += 70;
+    y += 56;
     if (button(lx, y, 210, 50, "RETOUR")) { settingsOpen = 0; waitAct = -1; cfg_save(); }
     if (button(lx + 230, y, 210, 50, "PAR DEFAUT")) { memcpy(binds, bindDefault, sizeof binds); cfg_save(); }
 

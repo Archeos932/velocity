@@ -7,10 +7,6 @@ static void gfx_reload(void) {
     gfx_load_all();
     glDeleteTextures(6, t);
     make_textures();
-    for (int i = 0; i < MAXB; i++)
-        for (int f = 0; f < 6; f++)
-            if (lmaps[i][f].on) { glDeleteTextures(1, &lmaps[i][f].tex); lmaps[i][f].on = 0; }
-    glDeleteLists(worldList, 1);
     glDeleteLists(skylineList, 1);
     build_world_list();
     snprintf(popText, sizeof popText, gfxDir[0] ? "GRAPHISMES RECHARGES" : "GRAPHISMES : DOSSIER ABSENT");
@@ -77,6 +73,9 @@ static void draw_map_fx(void) {
 static void render(float alpha, float frameDt) {
     if (shotMap) { maps_shot_fill(); draw_map_screen(winW, winH); return; }   /* --shot carte*.bmp : capture du second ecran */
     BT(0);
+    int fullW = winW, fullH = winH;                       /* RESOLUTION 3D < 100 % : la 3D (jusqu'au bloom) se dessine en */
+    int scaled = gfxScale < 100 && winW >= 320 && winH >= 200;   /* petit, winW/winH reduits le temps de ce passage */
+    if (scaled) { winW = fullW * gfxScale / 100; winH = fullH * gfxScale / 100; }
     glViewport(0, 0, winW, winH);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     float aspect = (float)winW / (float)(winH > 0 ? winH : 1);
@@ -122,12 +121,12 @@ static void render(float alpha, float frameDt) {
     glLightfv(GL_LIGHT1, GL_DIFFUSE, dif1);
     viewSun += (sun_vis(eye) - viewSun) * fminf(1, frameDt * 5);
     BT(1);
-    draw_sky_dome(eye);
-    BT(2);
     if (curMap == 0) glCallList(skylineList);             /* la ville entoure l'Arene ; les autres cartes ont leur ciel seul */
     BT(3);
-    glCallList(worldList);
+    world_draw();                                         /* secteurs dans le champ, passe unique si possible */
     BT(4);
+    draw_sky_dome(eye);                                   /* apres le monde : seulement les pixels encore vides */
+    BT(2);
     fx_world_tick(frameDt);
     storm_tick(frameDt);
     draw_world_marks();
@@ -342,6 +341,11 @@ static void render(float alpha, float frameDt) {
     BT(7);
     if (appState == APP_GAME) draw_flare(eye);
     bloom_apply();
+    if (scaled) {                                         /* on etire la 3D sur toute la fenetre ; le reste est a pleine resolution */
+        int sw = winW, sh = winH;
+        winW = fullW; winH = fullH;
+        render_scale_apply(sw, sh);
+    }
     if (stormFlash > 0) {                                 /* eclair : tout l'ecran blanchit un instant */
         glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, winW, winH, 0, -1, 1);
         glMatrixMode(GL_MODELVIEW); glLoadIdentity();

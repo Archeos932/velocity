@@ -469,6 +469,13 @@ enum { AP_HIT, AP_KILL, AP_PARRY, AP_CELL, AP_LOST, AP_COUNT };   /* origine des
 #define WP_FLASH_T         0.9     /* nom de l'arme affiche (s) apres un changement */
 #define SCREEN_POLL_T      1.0f    /* second ecran : on recompte les moniteurs toutes les secondes */
 #define SCREEN_MAP_FPS     30.0f   /* images par seconde de la carte sur le second ecran */
+#define FPS_CAP_DEFAULT    240     /* plafond d'images par seconde des prereglages BASSE a ULTRA (0 = sans limite ; max_fps=) */
+#define FPS_CAP_TOASTER    60      /* ...du prereglage GRILLE-PAIN (celui par defaut) : moins de chauffe, moins de baisse de frequence */
+enum { GFX_Q_TOASTER, GFX_Q_LOW, GFX_Q_MID, GFX_Q_ULTRA, GFX_Q_COUNT };   /* prereglages QUALITE (graphismes= de velocity.ini) */
+#define WORLD_SECTOR_M     24.0f   /* cote d'un secteur du monde (m) : seuls ceux dans le champ de vision sont dessines */
+#define RENDER_SCALE_TOASTER 100   /* resolution de la 3D (% de la fenetre) des prereglages : l'agrandissement coute ~0,2 ms
+                                      (carte) a ~5 ms (logiciel), mesure : 67 % ne gagnait rien (Mac M4, rendu logiciel) */
+#define RENDER_SCALE_SOFT  50      /* ...quand le pilote graphique manque (rendu logiciel) : 30 -> 24 ms/image mesure */
 #define MAPS_HEAT_R        9.0f    /* carte de chaleur : rayon d'une tache (m) */
 #define KILLCAM_T          1.6f    /* camera de mort : duree (s), avant l'ecran de respawn (RESPAWN_TIME 2,5 s) */
 #define KILLCAM_TURN       0.45f   /* ...temps pour pivoter vers le tueur (s) */
