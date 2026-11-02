@@ -38,6 +38,10 @@ static void in_resize(int w, int h) {
 
 /* renvoie 1 si la touche est consommee par l'attente d'une affectation (Alt+F4 ne passe alors pas) */
 static int in_key_down(int sc, int repeat) {
+    if (waitPad >= 0) {                                   /* on attend un bouton de manette : ECHAP annule, SUPPR efface */
+        if (!repeat) { if (sc == SC_ESC) waitPad = -1; else if (sc == 0x0E || sc == 0x53) { padBinds[waitPad] = 0; waitPad = -1; } }
+        return 1;
+    }
     if (waitAct >= 0) {                                   /* on attend une touche pour une commande */
         if (!repeat) {
             if (sc == SC_ESC) waitAct = -1;
@@ -50,6 +54,7 @@ static int in_key_down(int sc, int repeat) {
         latch[sc] = 1;
         if (sc == SC_ESC) {
             if (uiFocus) uiFocus = 0;
+            else if (settingsOpen && settingsPage) settingsPage = 0;   /* GRAPHISMES / MANETTE : retour aux reglages */
             else if (settingsOpen) { settingsOpen = 0; cfg_save(); }
             else if (loadoutOpen) { loadoutOpen = 0; cfg_save(); }
             else if (hostOpen) { hostOpen = 0; cfg_save(); }
@@ -81,7 +86,7 @@ static void in_char(int c) {                              /* saisie du pseudo et
     }
 }
 
-static void in_mouse_move(int x, int y) { uiMX = x; uiMY = y; }
+static void in_mouse_move(int x, int y) { uiMX = x; uiMY = y; padCursor = 0; }   /* la souris reprend la main */
 
 static void in_button_down(int code) {                    /* code = K_LMB .. K_X2 */
     if (waitAct >= 0) { assign_bind(code); return; }

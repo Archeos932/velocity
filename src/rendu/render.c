@@ -382,5 +382,10 @@ static void render(float alpha, float frameDt) {
     }
     BT(9);
     draw_hud();
+    if (padCursor && !captured) {                         /* curseur des menus pilote a la manette */
+        float x = (float)uiMX, y = (float)uiMY;
+        rect(x - 11, y - 2, 22, 4, 0, 0, 0, 0.7f); rect(x - 2, y - 11, 4, 22, 0, 0, 0, 0.7f);
+        rect(x - 9, y - 1, 18, 2, 1, 0.9f, 0.4f, 1); rect(x - 1, y - 9, 2, 18, 1, 0.9f, 0.4f, 1);
+    }
     BT(10);
 }

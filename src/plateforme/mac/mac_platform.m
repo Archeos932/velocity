@@ -8,6 +8,7 @@
 #import <Carbon/Carbon.h>
 #import <AudioToolbox/AudioToolbox.h>
 #import <CoreText/CoreText.h>
+#import <GameController/GameController.h>
 #include <OpenGL/gl.h>
 #include <stdatomic.h>
 #include "mac_platform.h"
@@ -100,6 +101,44 @@ static void build_menu(void) {
     [m addItem:quit];
     [appItem setSubmenu:m];
     [NSApp setMainMenu:bar];
+}
+
+/* ------------------------------------------------------------------ */
+/* Manette : GameController (DualShock 4, DualSense, Xbox...)          */
+/* ------------------------------------------------------------------ */
+int mac_pad_read(float ax[6], unsigned *btn, char *name, int n) {
+    @autoreleasepool {
+        GCExtendedGamepad *g = nil;
+        GCController *ctl = nil;
+        for (GCController *c in [GCController controllers])
+            if (c.extendedGamepad) { ctl = c; g = c.extendedGamepad; break; }
+        if (!g) return 0;
+        ax[0] = g.leftThumbstick.xAxis.value; ax[1] = g.leftThumbstick.yAxis.value;
+        ax[2] = g.rightThumbstick.xAxis.value; ax[3] = g.rightThumbstick.yAxis.value;
+        ax[4] = g.leftTrigger.value; ax[5] = g.rightTrigger.value;
+        unsigned b = 0;
+#define PB(i, cond) if (cond) b |= 1u << (i)
+        PB(0, g.buttonA.pressed); PB(1, g.buttonB.pressed); PB(2, g.buttonX.pressed); PB(3, g.buttonY.pressed);
+        PB(4, g.leftShoulder.pressed); PB(5, g.rightShoulder.pressed);
+        PB(6, g.leftTrigger.pressed); PB(7, g.rightTrigger.pressed);
+        PB(8, g.buttonOptions && g.buttonOptions.pressed); PB(9, g.buttonMenu.pressed);
+        PB(10, g.leftThumbstickButton && g.leftThumbstickButton.pressed);
+        PB(11, g.rightThumbstickButton && g.rightThumbstickButton.pressed);
+        if (@available(macOS 11.0, *)) {
+            PB(12, g.buttonHome && g.buttonHome.pressed);
+            if ([g isKindOfClass:[GCDualShockGamepad class]]) PB(13, ((GCDualShockGamepad *)g).touchpadButton.pressed);
+        }
+        if (@available(macOS 11.3, *))
+            if ([g isKindOfClass:[GCDualSenseGamepad class]]) PB(13, ((GCDualSenseGamepad *)g).touchpadButton.pressed);
+        PB(14, g.dpad.up.pressed); PB(15, g.dpad.down.pressed); PB(16, g.dpad.left.pressed); PB(17, g.dpad.right.pressed);
+#undef PB
+        *btn = b;
+        if (name && n > 0) {
+            const char *s = ctl.vendorName ? [ctl.vendorName UTF8String] : "manette";
+            snprintf(name, n, "%s", s ? s : "manette");
+        }
+        return 1;
+    }
 }
 
 static int gSoftGL;                                       /* --soft : rendu logiciel (simule une machine sans pilote) */

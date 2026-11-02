@@ -6,7 +6,7 @@
 /* ------------------------------------------------------------------ */
 enum { ACT_NONE, ACT_SOLO, ACT_HOST, ACT_BROWSE, ACT_QUIT, ACT_BACK, ACT_JOIN_FOUND, ACT_JOIN_IP, ACT_RESUME,
        ACT_RESTART, ACT_LEAVE, ACT_FULLSCREEN, ACT_QUICK, ACT_SPEC_FOUND, ACT_VSBOT, ACT_RACE };
-static int settingsOpen, waitAct = -1, waitSlot, uiDown, uiDrag;
+static int settingsOpen, settingsPage, waitAct = -1, waitSlot, uiDown, uiDrag;   /* page : 0 reglages, 1 graphismes, 2 manette */
 static int fullscreen;
 static char cfgPath[MAX_PATH];
 
@@ -14,7 +14,7 @@ static char cfgPath[MAX_PATH];
    La synchro verticale ne bride pas toujours (fenetre masquee, pilote) : sans plafond le jeu
    peut monter a 1000 images/s et occuper un coeur entier pour rien. */
 static int fpsCap = FPS_CAP_TOASTER;                     /* GRILLE-PAIN par defaut (gfx_preset) */
-static int gfxSeen;                                       /* velocity.ini avait graphismes= (sinon : premier lancement ou ancien fichier) */
+static int gfxSeen, gfxTexSeen;                                       /* velocity.ini avait graphismes= (sinon : premier lancement ou ancien fichier) */
 static const int fpsCapList[] = { 0, 30, 60, 90, 120, 144, 165, 240, 360 };
 
 /* prereglage QUALITE : ombres, bloom, resolution de la 3D et plafond d'images vont avec. Le reste (lightmaps, ciel,
@@ -25,6 +25,7 @@ static void gfx_preset(int q) {
     gfxShadows = gfxQuality >= GFX_Q_MID;
     gfxBloom = gfxQuality == GFX_Q_ULTRA;
     gfxScale = scale[gfxQuality];
+    gfxTexOn = gfxDetailOn = gfxQuality != GFX_Q_TOASTER; /* GRILLE-PAIN : sol et murs sans texture, decor sans details */
     fpsCap = gfxQuality == GFX_Q_TOASTER ? FPS_CAP_TOASTER : FPS_CAP_DEFAULT;
 }
 
@@ -52,8 +53,12 @@ static double fps_cap_deadline(double prev, double now, int cap) {
 
 static void key_name(int code, char *out, int n) {
     static const char *mouseNames[] = { "Souris G", "Souris D", "Clic molette", "Souris 4", "Souris 5", "Molette" };
+    static const char *padNames[] = { "Croix", "Rond", "Carre", "Triangle", "L1", "R1", "L2", "R2", "Share", "Options",
+                                      "L3", "R3", "PS", "Pave tactile", "Fleche haut", "Fleche bas", "Fleche gauche",
+                                      "Fleche droite", "Stick G haut", "Stick G bas", "Stick G gauche", "Stick G droite" };
     char buf[64];
     if (code <= 0) { snprintf(out, n, "-"); return; }
+    if (code >= K_PAD_FIRST && code < K_COUNT) { snprintf(out, n, "%s", padNames[code - K_PAD_FIRST]); return; }
     if (code >= K_LMB) { snprintf(out, n, "%s", mouseNames[code - K_LMB]); return; }
 #ifdef _WIN32
     if (GetKeyNameTextA((LONG)code << 16, buf, sizeof buf) > 0) snprintf(out, n, "%s", buf);   /* nom selon le clavier */
@@ -86,6 +91,7 @@ static void cfg_save(void) {
     fprintf(f, "impact_frames=%d" "\n" "screen_fx=%d" "\n" "shadows=%d" "\n" "bloom=%d" "\n", impactFrames, screenFx, gfxShadows, gfxBloom);
     fprintf(f, "second_ecran=%d" "\n" "carte_vue=%d" "\n" "camera_mort=%d" "\n", secondScreen, mapView3d, killcamOn);
     fprintf(f, "graphismes=%d" "\n" "resolution=%d" "\n" "ambiance=%d" "\n" "max_fps=%d" "\n", gfxQuality, gfxScale, gfxAmbiance, fpsCap);
+    fprintf(f, "textures=%d" "\n" "details=%d" "\n" "pad_sens=%.2f" "\n" "pad_invert_y=%d" "\n", gfxTexOn, gfxDetailOn, padSens, padInvertY);
     fprintf(f, "online=%d" "\n" "teams=%d" "\n" "update_check=%d" "\n", onlineOn, wantTeams, updCheck);
     fprintf(f, "loadout=%d,%d" "\n" "melee=%d" "\n" "skill=%d" "\n" "skin=%d" "\n", wantLoadout[0], wantLoadout[1], wantMelee, wantSkill, wantSkin);
     fprintf(f, "map=%d" "\n" "map_rotate=%d" "\n", menuMap, mapRotate);
@@ -93,6 +99,7 @@ static void cfg_save(void) {
             wantRules.specs, wantRules.minutes, wantSpec);
     if (strcmp(lobbyAddr, LOBBY_DEFAULT)) fprintf(f, "lobby=%s" "\n", lobbyAddr);   /* le defaut peut changer avec une mise a jour */
     for (int a = 0; a < A_COUNT; a++) fprintf(f, "bind_%s=%d,%d" "\n", actId[a], binds[a][0], binds[a][1]);
+    for (int a = 0; a < A_COUNT; a++) fprintf(f, "manette_%s=%d" "\n", actId[a], padBinds[a]);
     fclose(f);
 }
 
@@ -100,7 +107,7 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
     char line[256];
     int fs = 0;
     FILE *f = cfgPath[0] ? fopen(cfgPath, "r") : NULL;
-    gfxSeen = 0;
+    gfxSeen = gfxTexSeen = 0;
     if (!f) return 0;
     while (fgets(line, sizeof line, f)) {
         char *eq = strchr(line, '='), *v;
@@ -123,6 +130,14 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
         else if (!strcmp(line, "shadows")) gfxShadows = atoi(v) != 0;
         else if (!strcmp(line, "bloom")) gfxBloom = atoi(v) != 0;
         else if (!strcmp(line, "graphismes")) { gfxQuality = atoi(v) < 0 ? 0 : atoi(v) >= GFX_Q_COUNT ? GFX_Q_COUNT - 1 : atoi(v); gfxSeen = 1; }
+        else if (!strcmp(line, "textures")) { gfxTexOn = atoi(v) != 0; gfxTexSeen = 1; }
+        else if (!strcmp(line, "details")) gfxDetailOn = atoi(v) != 0;
+        else if (!strcmp(line, "pad_sens")) padSens = clampf((float)atof(v), 0.5f, 10);
+        else if (!strcmp(line, "pad_invert_y")) padInvertY = atoi(v) != 0;
+        else if (!strncmp(line, "manette_", 8)) {
+            for (int a = 0; a < A_COUNT; a++)
+                if (!strcmp(line + 8, actId[a]) && (atoi(v) == 0 || (atoi(v) >= K_PAD_FIRST && atoi(v) < K_COUNT))) padBinds[a] = atoi(v);
+        }
         else if (!strcmp(line, "resolution")) gfxScale = atoi(v) < 50 ? 50 : atoi(v) > 100 ? 100 : atoi(v);
         else if (!strcmp(line, "ambiance")) gfxAmbiance = atoi(v) < 0 ? 0 : atoi(v) > 3 ? 3 : atoi(v);
         else if (!strcmp(line, "online")) onlineOn = atoi(v) != 0;
@@ -156,6 +171,7 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
     /* ancien fichier (quality= de 0 a 2, sans graphismes=) : on repart du prereglage GRILLE-PAIN, ombres et bloom compris ;
        le joueur remonte dans PARAMETRES > QUALITE */
     if (!gfxSeen) gfx_preset(GFX_Q_TOASTER);
+    else if (!gfxTexSeen) gfxTexOn = gfxDetailOn = gfxQuality != GFX_Q_TOASTER;   /* fichier d'avant TEXTURES / DETAILS */
     if (!loadout_valid(wantLoadout, wantMelee)) { wantLoadout[0] = WP_RAIL; wantLoadout[1] = WP_ROCKET; wantMelee = MK_SWORD; }
     return fs;
 }

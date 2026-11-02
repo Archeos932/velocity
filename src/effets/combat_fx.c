@@ -57,7 +57,9 @@ static void shard_tick(float dt) {
     }
 }
 
-static int bound_held(int a) { return (binds[a][0] && keys[binds[a][0]]) || (binds[a][1] && keys[binds[a][1]]); }
+static int bound_held(int a) {
+    return (binds[a][0] && keys[binds[a][0]]) || (binds[a][1] && keys[binds[a][1]]) || (padBinds[a] && keys[padBinds[a]]);
+}
 
 static void input_poll(void) {
     for (int a = 0; a < A_COUNT; a++) {
@@ -66,6 +68,7 @@ static void input_poll(void) {
             int c = binds[a][k];
             if (c > 0) { act[a] |= keys[c]; actP[a] |= latch[c]; }
         }
+        if (padBinds[a] > 0) { act[a] |= keys[padBinds[a]]; actP[a] |= latch[padBinds[a]]; }   /* manette */
     }
     memset(botPress, 0, sizeof botPress);
     memset(latch, 0, sizeof latch);

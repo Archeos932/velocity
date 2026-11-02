@@ -508,16 +508,31 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
 - La souris de visée vient de `WM_INPUT` (souris brute) dans `mdx`/`mdy`.
 - **Bots** : écrivent `botHeld[A_*]` (tenu) et `botPress[A_*]` (appui d'un tick). Ils modifient aussi
   directement `P.yaw`, `P.pitch` et parfois `P.weapon`.
+- **Manette** (`src/entrees/manette.c`) : touches `K_PAD_*` après la souris (croix, rond, carré, triangle, L1, R1, L2,
+  R2, share, options, L3, R3, PS, pavé tactile, croix directionnelle, stick gauche poussé), une touche par action
+  dans `padBinds` (défaut `padBindDefault`, clés `manette_<actId>=` de `velocity.ini`), lue par `input_poll` comme
+  les deux touches clavier. `pad_frame` (boucle principale, pas en bot ni capture) lit la manette (`pad_read` :
+  Windows = winmm `joyGetPosEx`, disposition DualShock 4 si le fabricant est Sony, sinon Xbox ; macOS =
+  GameController, `mac_pad_read`), puis `pad_apply` : souris captée = touches `K_PAD_*` (appui du tick dans
+  `latch`) et visée au stick droit (`padSens` rad/s, `pad_curve` : zone morte `PAD_DEADZONE` puis courbe au carré,
+  vertical × `PAD_PITCH_K`, `pad_invert_y`) ; menus = curseur au stick gauche (`padCursor`, dessiné par `render`),
+  CROIX = clic, ROND = Échap. OPTIONS = Échap partout. Fenêtre en arrière-plan : tout relâché. PARAMÈTRES >
+  MANETTE : état, vitesse de visée, axe Y, une case par action (`waitPad`).
+
 
 ### 3.9 Réglages et `velocity.ini`
 
+- **PARAMÈTRES** a trois pages (`settingsPage`) : RÉGLAGES (curseurs, options, touches), GRAPHISMES
+  (`draw_settings_gfx` : QUALITÉ, ombres, bloom, textures, détails, résolution 3D, ciel, plein écran, MAX FPS ; à
+  droite la carte graphique et le mode de dessin), MANETTE (`draw_settings_pad`). Échap revient à RÉGLAGES.
 - Variables : `myName`, `sens`, `fovBase`, `masterVol`, `invertY`, `showFps`, `fullscreen`,
   `wantTeams` (`teams=`), `gfxShadows` (`shadows=`), `gfxBloom` (`bloom=`),
   `impactFrames`, `screenFx`, et les `binds`.
 - Fichier : `velocity.ini` **à côté de l'exécutable** (chemin `cfgPath`, calculé avec
   `GetModuleFileNameA` dans `WinMain`). Format `cle=valeur`, une par ligne, `#` pour un commentaire :
   `name`, `sens`, `fov`, `volume`, `invert_y`, `show_fps`, `max_fps` (plafond d'images, 0 = sans limite), `graphismes`
-  (préréglage QUALITÉ 0 à 3, §3.12), `resolution` (3D en %, 50 à 100), `fullscreen`, `impact_frames`, `screen_fx`,
+  (préréglage QUALITÉ 0 à 3, §3.12), `resolution` (3D en %, 50 à 100), `textures` et `details` (sol et murs
+  texturés, petits détails du décor : non en GRILLE-PAIN), `pad_sens`, `pad_invert_y`, `manette_<actId>`, `fullscreen`, `impact_frames`, `screen_fx`,
   `online`, `update_check` (vérifier les mises à jour au démarrage), `map` (carte choisie, §3.18), `map_rotate`,
   puis `bind_<actId>=code1,code2`.
 - `cfg_load` lit au démarrage (pas en mode bot ni `--shot`), borne les valeurs (`clampf`) et ignore

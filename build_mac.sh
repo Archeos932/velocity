@@ -12,7 +12,7 @@ mkdir -p build "$APP/Contents/MacOS" "$APP/Contents/Resources"
 clang -O2 -std=gnu11 -fobjc-arc -Wall -Wno-deprecated-declarations ${VELOCITY_BUILD:+-DVELOCITY_BUILD=$VELOCITY_BUILD} \
     -mmacosx-version-min=10.15 -arch arm64 -arch x86_64 \
     main.c src/plateforme/mac/mac_platform.m \
-    -framework Cocoa -framework OpenGL -framework AudioToolbox -framework CoreText -framework Carbon \
+    -framework Cocoa -framework OpenGL -framework AudioToolbox -framework CoreText -framework Carbon -framework GameController \
     -o "$APP/Contents/MacOS/velocity"
 
 cat > "$APP/Contents/Info.plist" <<'EOF'

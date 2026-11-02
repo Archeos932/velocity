@@ -56,55 +56,30 @@ static float slider(int id, float x, float y, float w, const char *label, const 
     return v;
 }
 
-static void draw_settings(float cx, float cy) {
-    char buf[64];
-    rect(0, 0, (float)winW, (float)winH, 0.02f, 0.02f, 0.06f, 0.82f);
-    text_c(2, cx, cy - 330, "PARAMETRES", 0.5f, 0.9f, 1.0f, 1);
+/* PARAMETRES, page GRAPHISMES : prereglage, options une par une (chacune refait l'eclairage du decor si besoin),
+ * et a droite ce que la machine fait (carte graphique, mode de dessin, secteurs) */
+static void draw_settings_gfx(float cx, float cy) {
+    static const char *qualityHelp[GFX_Q_COUNT] = {
+        "GRILLE-PAIN : le minimum, pour les petites machines (par defaut)",
+        "BASSE : textures et details du decor, sans ombres ni bloom",
+        "MOYENNE : ombres des joueurs, lumiere plus fine",
+        "ULTRA : tout, aux valeurs de graphismes/rendu.ini" };
+    char buf[96];
     float lx = cx - 660, lw = 440, y = cy - 250;
-
-    text(1, lx, y - 20, "REGLAGES", 0.5f, 0.9f, 1.0f, 1);
+    text(1, lx, y - 20, "GRAPHISMES", 0.5f, 0.9f, 1.0f, 1);
     y += 30;
-    snprintf(buf, sizeof buf, "%.2f", sens * 1000);
-    sens = slider(1, lx, y, lw, "Sensibilite de la souris", buf, sens, 0.0003f, 0.008f);
-    y += 48;
-    snprintf(buf, sizeof buf, "%.0f deg", fovBase);
-    fovBase = slider(2, lx, y, lw, "Champ de vision (horizontal)", buf, fovBase, 80, 130);
-    y += 48;
-    snprintf(buf, sizeof buf, "%.0f %%", masterVol * 100);
-    masterVol = slider(3, lx, y, lw, "Volume", buf, masterVol, 0, 1);
-    y += 48;
-    snprintf(buf, sizeof buf, "%.0f %%", musicVol * 100);
-    musicVol = slider(4, lx, y, lw, "Musique", buf, musicVol, 0, 1);
-    y += 48;
-    snprintf(buf, sizeof buf, "AXE Y : %s", invertY ? "INVERSE" : "NORMAL");
-    if (button(lx, y, lw * 0.5f - 5, 44, buf)) invertY = !invertY;
-    snprintf(buf, sizeof buf, "FPS : %s", showFps ? "OUI" : "NON");
-    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) showFps = !showFps;
-    y += 48;
-    snprintf(buf, sizeof buf, "FLASHS : %s", impactFrames ? "OUI" : "NON");   /* impact frames */
-    if (button(lx, y, lw * 0.5f - 5, 44, buf)) impactFrames = !impactFrames;
-    snprintf(buf, sizeof buf, "CAM. MORT:%s", killcamOn ? "OUI" : "NON");     /* camera de mort */
-    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) killcamOn = !killcamOn;
-    y += 48;
-    snprintf(buf, sizeof buf, "EFFETS : %s", screenFx ? "OUI" : "NON");
-    if (button(lx, y, lw * 0.5f - 5, 44, buf)) screenFx = !screenFx;
-    snprintf(buf, sizeof buf, "2e ECRAN:%s", !secondScreen ? "NON" : mapView3d ? "3D" : "HAUT");   /* carte : NON, de haut, 3D */
-    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) {
-        if (!secondScreen) { secondScreen = 1; mapView3d = 0; }
-        else if (!mapView3d) mapView3d = 1;
-        else secondScreen = 0;
-    }
-    y += 48;
-    snprintf(buf, sizeof buf, "OMBRES : %s", gfxShadows ? "OUI" : "NON");   /* graphismes : deux demi-boutons */
+    snprintf(buf, sizeof buf, glSoftware ? "QUALITE:%s (PILOTE?)" : "QUALITE : %s", qualityNames[gfxQuality]);
+    if (button(lx, y, lw, 44, buf)) { gfx_preset((gfxQuality + 1) % GFX_Q_COUNT); gfx_reload(); popT = 0; }
+    y += 56;
+    snprintf(buf, sizeof buf, "OMBRES : %s", gfxShadows ? "OUI" : "NON");
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) gfxShadows = !gfxShadows;
     snprintf(buf, sizeof buf, "BLOOM : %s", gfxBloom ? "OUI" : "NON");
     if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) gfxBloom = !gfxBloom;
     y += 48;
-    snprintf(buf, sizeof buf, glSoftware ? "QUALITE:%s (PILOTE?)" : "QUALITE : %s", qualityNames[gfxQuality]);   /* prereglage : refait */
-    if (button(lx, y, lw, 44, buf)) {                     /* l'eclairage du decor ; GRILLE-PAIN par defaut */
-        gfx_preset((gfxQuality + 1) % GFX_Q_COUNT);
-        gfx_reload(); popT = 0;
-    }
+    snprintf(buf, sizeof buf, "TEXTURES:%s", gfxTexOn ? "OUI" : "NON");   /* sol et murs */
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) { gfxTexOn = !gfxTexOn; gfx_reload(); popT = 0; }
+    snprintf(buf, sizeof buf, "DETAILS:%s", gfxDetailOn ? "OUI" : "NON");  /* petits details du decor maille */
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) { gfxDetailOn = !gfxDetailOn; gfx_reload(); popT = 0; }
     y += 48;
     snprintf(buf, sizeof buf, "RES. 3D:%d%%", gfxScale);  /* 3D dessinee plus petite puis agrandie, HUD net */
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) gfxScale = render_scale_cycle(gfxScale);
@@ -114,13 +89,126 @@ static void draw_settings(float cx, float cy) {
     snprintf(buf, sizeof buf, "PLEIN ECR:%s", fullscreen ? "OUI" : "NON");
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) pendingAction = ACT_FULLSCREEN;
     if (fpsCap > 0) snprintf(buf, sizeof buf, "MAX FPS:%d", fpsCap); else snprintf(buf, sizeof buf, "MAX FPS:SANS");
-    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) fpsCap = fps_cap_cycle(fpsCap);   /* plafond d'images */
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) fpsCap = fps_cap_cycle(fpsCap);
+    y += 70;
+    if (button(lx, y, 210, 50, "RETOUR")) { settingsPage = 0; cfg_save(); }
+
+    float rx = cx - 150, ry = cy - 270;                   /* a droite : la machine et l'aide des prereglages */
+    text(1, rx, ry, "TA MACHINE", 0.5f, 0.9f, 1.0f, 1);
+    const char *rn = (const char *)glGetString(GL_RENDERER);
+    snprintf(buf, sizeof buf, "carte graphique : %.60s", rn ? rn : "?");
+    text(0, rx, ry + 40, buf, 0.85f, 0.87f, 0.95f, 1);
+    if (glSoftware) text(0, rx, ry + 64, "pilote graphique absent : installe celui de ta carte (jeu tres lent sans lui)", 1, 0.5f, 0.3f, 1);
+    else {
+        snprintf(buf, sizeof buf, "dessin du monde : %s", worldFused ? "passe unique (multitexture)" : "plusieurs passes");
+        text(0, rx, ry + 64, buf, 0.85f, 0.87f, 0.95f, 1);
+    }
+    snprintf(buf, sizeof buf, "%.0f images/s", fps);
+    text(0, rx, ry + 88, buf, 1, 0.9f, 0.55f, 1);
+    text(1, rx, ry + 140, "QUALITE", 0.5f, 0.9f, 1.0f, 1);
+    for (int q = 0; q < GFX_Q_COUNT; q++) {
+        float yy = ry + 176 + q * 52.0f, k = q == gfxQuality ? 1.0f : 0.6f;
+        if (q == gfxQuality) rect(rx - 10, yy - 20, 720, q == GFX_Q_TOASTER ? 50 : 30, 0.4f, 0.85f, 1.0f, 0.12f);
+        text(0, rx, yy, qualityHelp[q], k, k, k * 1.05f, 1);
+        if (q == GFX_Q_TOASTER) text(0, rx, yy + 22, "  ni ombres ni bloom, 60 images/s, sol et murs unis, decor simple", k, k, k * 1.05f, 1);
+    }
+    text(0, rx, ry + 400, "chaque option se change aussi seule", 0.5f, 0.55f, 0.65f, 1);
+    text(0, rx, ry + 422, "le reste : graphismes/rendu.ini (F5 pour le relire)", 0.5f, 0.55f, 0.65f, 1);
+}
+
+/* PARAMETRES, page MANETTE : etat, visee, et une touche de manette par action */
+static void draw_settings_pad(float cx, float cy) {
+    char buf[96];
+    float lx = cx - 660, lw = 440, y = cy - 250;
+    text(1, lx, y - 20, "MANETTE", 0.5f, 0.9f, 1.0f, 1);
+    y += 30;
+    if (padOn) { snprintf(buf, sizeof buf, "branchee : %.40s", padName); text(0, lx, y + 4, buf, 0.4f, 1.0f, 0.5f, 1); }
+    else text(0, lx, y + 4, "aucune manette detectee (USB ou Bluetooth)", 1, 0.6f, 0.3f, 1);
+    y += 50;
+    snprintf(buf, sizeof buf, "%.0f deg/s", padSens * 180 / PI);
+    padSens = slider(5, lx, y, lw, "Visee (stick droit)", buf, padSens, 0.5f, 10);
     y += 48;
+    snprintf(buf, sizeof buf, "AXE Y MANETTE : %s", padInvertY ? "INVERSE" : "NORMAL");
+    if (button(lx, y, lw, 44, buf)) padInvertY = !padInvertY;
+    y += 72;
+    static const char *tips[] = { "stick gauche : bouger, stick droit : viser",
+                                  "OPTIONS : menu",
+                                  "menus : stick gauche = curseur,",
+                                  "        CROIX = cliquer, ROND = retour",
+                                  "PS4, PS5 (USB ou Bluetooth), Xbox" };
+    for (int i = 0; i < 5; i++) text(0, lx, y + i * 22.0f, tips[i], 0.6f, 0.75f, 0.9f, 1);
+    y += 140;
+    if (button(lx, y, 210, 50, "RETOUR")) { settingsPage = 0; waitPad = -1; cfg_save(); }
+    if (button(lx + 230, y, 210, 50, "PAR DEFAUT")) { memcpy(padBinds, padBindDefault, sizeof padBinds); cfg_save(); }
+
+    float rx = cx - 150, cw = 300, ry = cy - 270;
+    text(1, rx, ry, "BOUTONS", 0.5f, 0.9f, 1.0f, 1);
+    text(0, rx + 170, ry, waitPad >= 0 ? "appuie sur un bouton (ECHAP : annuler, SUPPR : effacer)"
+                                       : "clique une case pour la changer", 0.7f, 0.75f, 0.85f, 1);
+    for (int a = 0; a < A_COUNT; a++) {
+        char kn[32];
+        float yy = ry + 22 + a * 36.0f, bx = rx + 270;
+        text(0, rx, yy + 24, actLabel[a], 0.85f, 0.87f, 0.95f, 1);
+        if (waitPad == a) snprintf(kn, sizeof kn, "...");
+        else key_name(padBinds[a], kn, sizeof kn);
+        int hover = uiMX >= bx && uiMX < bx + cw && uiMY >= yy && uiMY < yy + 32, waiting = waitPad == a;
+        rect(bx, yy, cw, 32, waiting ? 0.45f : hover ? 0.2f : 0.08f, waiting ? 0.35f : hover ? 0.4f : 0.1f,
+             waiting ? 0.1f : hover ? 0.6f : 0.18f, 0.9f);
+        text_c(0, bx + cw * 0.5f, yy + 22, kn, 1, 1, 1, 1);
+        if (hover && uiClick) { uiClick = 0; waitPad = a; }
+    }
+}
+
+static void draw_settings(float cx, float cy) {
+    char buf[64];
+    rect(0, 0, (float)winW, (float)winH, 0.02f, 0.02f, 0.06f, 0.82f);
+    text_c(2, cx, cy - 330, "PARAMETRES", 0.5f, 0.9f, 1.0f, 1);
+    if (settingsPage == 1) { draw_settings_gfx(cx, cy); if (uiClick) uiClick = 0; return; }
+    if (settingsPage == 2) { draw_settings_pad(cx, cy); if (uiClick) uiClick = 0; return; }
+    float lx = cx - 660, lw = 440, y = cy - 250;
+
+    text(1, lx, y - 20, "REGLAGES", 0.5f, 0.9f, 1.0f, 1);
+    y += 30;
+    snprintf(buf, sizeof buf, "%.2f", sens * 1000);
+    sens = slider(1, lx, y, lw, "Sensibilite de la souris", buf, sens, 0.0003f, 0.008f);
+    y += 52;
+    snprintf(buf, sizeof buf, "%.0f deg", fovBase);
+    fovBase = slider(2, lx, y, lw, "Champ de vision (horizontal)", buf, fovBase, 80, 130);
+    y += 52;
+    snprintf(buf, sizeof buf, "%.0f %%", masterVol * 100);
+    masterVol = slider(3, lx, y, lw, "Volume", buf, masterVol, 0, 1);
+    y += 52;
+    snprintf(buf, sizeof buf, "%.0f %%", musicVol * 100);
+    musicVol = slider(4, lx, y, lw, "Musique", buf, musicVol, 0, 1);
+    y += 52;
+    snprintf(buf, sizeof buf, "AXE Y : %s", invertY ? "INVERSE" : "NORMAL");
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) invertY = !invertY;
+    snprintf(buf, sizeof buf, "FPS : %s", showFps ? "OUI" : "NON");
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) showFps = !showFps;
+    y += 50;
+    snprintf(buf, sizeof buf, "FLASHS : %s", impactFrames ? "OUI" : "NON");   /* impact frames */
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) impactFrames = !impactFrames;
+    snprintf(buf, sizeof buf, "CAM. MORT:%s", killcamOn ? "OUI" : "NON");     /* camera de mort */
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) killcamOn = !killcamOn;
+    y += 50;
+    snprintf(buf, sizeof buf, "EFFETS : %s", screenFx ? "OUI" : "NON");
+    if (button(lx, y, lw * 0.5f - 5, 44, buf)) screenFx = !screenFx;
+    snprintf(buf, sizeof buf, "2e ECRAN:%s", !secondScreen ? "NON" : mapView3d ? "3D" : "HAUT");   /* carte : NON, de haut, 3D */
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) {
+        if (!secondScreen) { secondScreen = 1; mapView3d = 0; }
+        else if (!mapView3d) mapView3d = 1;
+        else secondScreen = 0;
+    }
+    y += 50;
     snprintf(buf, sizeof buf, "EN LIGNE:%s", onlineOn ? "OUI" : "NON");      /* parties en ligne */
     if (button(lx, y, lw * 0.5f - 5, 44, buf)) { onlineOn = !onlineOn; cfg_save(); }
     snprintf(buf, sizeof buf, "MAJ AUTO:%s", updCheck ? "OUI" : "NON");     /* mises a jour automatiques */
     if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 44, buf)) { updCheck = !updCheck; cfg_save(); }
-    y += 56;
+    y += 62;
+    if (button(lx, y, lw * 0.5f - 5, 50, "GRAPHISMES >")) { settingsPage = 1; waitAct = -1; }
+    snprintf(buf, sizeof buf, padOn ? "MANETTE > (OK)" : "MANETTE >");
+    if (button(lx + lw * 0.5f + 5, y, lw * 0.5f - 5, 50, buf)) { settingsPage = 2; waitAct = -1; }
+    y += 70;
     if (button(lx, y, 210, 50, "RETOUR")) { settingsOpen = 0; waitAct = -1; cfg_save(); }
     if (button(lx + 230, y, 210, 50, "PAR DEFAUT")) { memcpy(binds, bindDefault, sizeof binds); cfg_save(); }
 

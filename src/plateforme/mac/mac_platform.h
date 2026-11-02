@@ -15,6 +15,10 @@ void mac_swap(void);
 void mac_set_fullscreen(int on);
 void mac_set_capture(int on);                                           /* souris captee (curseur cache, deltas bruts) */
 int  mac_has_focus(void);
+/* manette (GameController) : ax = stick gauche x, y (haut +), stick droit x, y (haut +), L2, R2 (0..1) ;
+   btn : bits dans l'ordre K_PAD_CROSS.. de main.c (croix, rond, carre, triangle, L1, R1, L2, R2, share, options,
+   L3, R3, PS, pave tactile, haut, bas, gauche, droite). Renvoie 1 si une manette est branchee. */
+int  mac_pad_read(float ax[6], unsigned *btn, char *name, int n);
 void mac_quit(void);
 void mac_shutdown(void);
 void mac_key_name(int sc, char *out, int n);                            /* nom d'un scancode Windows selon le clavier */

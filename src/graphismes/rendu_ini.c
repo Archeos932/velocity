@@ -170,7 +170,7 @@ static void gfx_quality_apply(void) {
     gxBloom[2] = fminf(gxBloom[2], 1);
     gxDecorAo = fminf(gxDecorAo, toast ? 2.0f : low ? 4.0f : 6.0f);   /* decor maille : precalcul plus court au chargement */
     if (low) gxFlare = 0;
-    if (toast) { gxLights = 0; gxEdges = 0; gxGrain = 0; gxWorldTex = 0; gxDecorDetail = 0; }   /* sans texture : ~2x moins de calcul par pixel */
+    if (toast) { gxLights = 0; gxEdges = 0; gxGrain = 0; }   /* sans texture : ~2x moins de calcul par pixel */
 }
 
 /* eclairage propre a la carte chargee (MapDef.light) : remplace soleil, ciel, rebond et ambiance des objets ;

@@ -348,6 +348,21 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
 
 - Tests : « decor (LA CITADELLE) GRILLE-PAIN : … triangles de details retires… ».
 
+## 26. Page GRAPHISMES et manette PS4
+
+- **PARAMÈTRES** en trois pages : RÉGLAGES, **GRAPHISMES** (QUALITÉ, ombres, bloom, **textures**, **détails**,
+  résolution 3D, ciel, plein écran, MAX FPS ; à droite la carte graphique, le mode de dessin et l'aide des
+  préréglages) et **MANETTE**. TEXTURES et DÉTAILS se changent maintenant seuls (avant : imposés par GRILLE-PAIN).
+- **Manette** : DualShock 4 (et DualSense, Xbox) en USB ou Bluetooth, sans pilote ni dépendance (Windows : winmm ;
+  macOS : GameController). Disposition : stick gauche bouger, stick droit viser, R2 tir, L2 grappin, R1 épée, L1
+  dash, CROIX saut, ROND accroupi/slide, CARRÉ pièce, TRIANGLE changer d'arme, flèches armes et mines, pavé tactile
+  scores, OPTIONS menu. Chaque bouton se réaffecte dans PARAMÈTRES > MANETTE ; vitesse de visée et axe Y réglables.
+  Dans les menus : curseur au stick gauche, CROIX clique, ROND revient.
+- À tester sur une vraie manette : la disposition winmm d'une DualShock 4 vient de la documentation (personne n'a
+  encore branché de manette sur cette version). Si Steam ou DS4Windows tournent, ils peuvent la présenter comme une
+  manette Xbox : c'est aussi géré.
+- Tests : « manette : avance 1 saut 1 tir 1… », « reglages manette et graphismes… ».
+
 ## Vérifications faites
 
 - Compilation macOS sans avertissement ; tous les tests `--test` conformes, y compris ceux d'`origin/dev` (stéréo,

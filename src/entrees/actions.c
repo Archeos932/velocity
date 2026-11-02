@@ -7,8 +7,16 @@
 enum { SC_ESC = 0x01, SC_1 = 0x02, SC_2 = 0x03, SC_W = 0x11, SC_E = 0x12, SC_R = 0x13, SC_LCTRL = 0x1D,
        SC_A = 0x1E, SC_S = 0x1F, SC_D = 0x20, SC_LSHIFT = 0x2A, SC_C = 0x2E, SC_RSHIFT = 0x36,
        SC_SPACE = 0x39, SC_F2 = 0x3C, SC_F3 = 0x3D, SC_F11 = 0x57, SC_F5 = 0x3F, SC_F = 0x21, SC_V = 0x2F, SC_G = 0x22 };
-/* touches physiques (scancodes 0-255) + souris (256+) : etat tenu et appui du tick */
-enum { K_LMB = 256, K_RMB, K_MMB, K_X1, K_X2, K_WHEEL, K_COUNT };
+/* touches physiques (scancodes 0-255) + souris (256+) + manette (K_PAD_*) : etat tenu et appui du tick.
+   Les codes manette suivent l'ordre des bits de padBtn (manette.c) ; on n'insere rien avant K_COUNT (velocity.ini). */
+enum { K_LMB = 256, K_RMB, K_MMB, K_X1, K_X2, K_WHEEL,
+       K_PAD_CROSS, K_PAD_CIRCLE, K_PAD_SQUARE, K_PAD_TRIANGLE, K_PAD_L1, K_PAD_R1, K_PAD_L2, K_PAD_R2,
+       K_PAD_SHARE, K_PAD_OPTIONS, K_PAD_L3, K_PAD_R3, K_PAD_PS, K_PAD_TOUCH,
+       K_PAD_UP, K_PAD_DOWN, K_PAD_LEFT, K_PAD_RIGHT,                         /* croix directionnelle */
+       K_PAD_LS_UP, K_PAD_LS_DOWN, K_PAD_LS_LEFT, K_PAD_LS_RIGHT,             /* stick gauche pousse */
+       K_COUNT };
+#define K_PAD_FIRST K_PAD_CROSS
+#define PAD_NBTN (K_PAD_LS_UP - K_PAD_FIRST)              /* boutons lus tels quels (le stick gauche est a part) */
 static unsigned char keys[K_COUNT], latch[K_COUNT];
 
 /* Actions du jeu, chacune liee a deux touches au plus (0 = aucune). Le jeu ne lit que les actions. */
@@ -30,6 +38,19 @@ static const int bindDefault[A_COUNT][2] = {
     { K_X2, 0x10 }, { 0x2D, 0 },                          /* Ventouse : pouce arriere + Q/A physique ; X */
 };
 static int binds[A_COUNT][2];
+/* manette : une touche par action (PARAMETRES > MANETTE, manette_<actId>= de velocity.ini). Disposition PS4 :
+   stick gauche = deplacement, stick droit = visee, R2 tir, L2 grappin, R1 epee, L1 dash, Croix saut... */
+static const int padBindDefault[A_COUNT] = {
+    K_PAD_LS_UP, K_PAD_LS_DOWN, K_PAD_LS_LEFT, K_PAD_LS_RIGHT, K_PAD_CROSS, K_PAD_CIRCLE, K_PAD_L1,
+    K_PAD_R2, K_PAD_R1, K_PAD_L2, K_PAD_SQUARE, K_PAD_LEFT, K_PAD_RIGHT, K_PAD_TRIANGLE, K_PAD_TOUCH,
+    K_PAD_UP, K_PAD_DOWN };
+static int padBinds[A_COUNT];
+static float padSens = PAD_SENS_DEFAULT;                  /* visee au stick droit : vitesse maxi (rad/s) */
+static int padInvertY;                                    /* stick droit : axe vertical inverse */
+static int padOn;                                         /* une manette est branchee (manette.c) */
+static char padName[64];                                  /* son nom, pour PARAMETRES > MANETTE */
+static int waitPad = -1;                                  /* PARAMETRES > MANETTE : action qui attend un bouton */
+static int padCursor;                                     /* curseur des menus pilote au stick (dessine par render) */
 static unsigned char act[A_COUNT], actP[A_COUNT];          /* tenu / appuye pendant ce tick */
 static unsigned char botHeld[A_COUNT], botPress[A_COUNT];  /* ce que les bots "appuient" */
 
@@ -42,6 +63,7 @@ static int impactFrames = 1, screenFx = 1;               /* options : impact fra
 /* graphismes : par defaut le prereglage GRILLE-PAIN (gfx_preset(GFX_Q_TOASTER)) ; le joueur monte ensuite dans PARAMETRES */
 static int gfxShadows = 0, gfxBloom = 0;                  /* ombres des objets mobiles, halo lumineux (bloom) */
 static int gfxQuality = GFX_Q_TOASTER, gfxAmbiance;       /* qualite (0 grille-pain, 1 basse, 2 moyenne, 3 ultra) ; ambiance */
+static int gfxTexOn, gfxDetailOn;                         /* sol et murs textures ; petits details du decor (GRILLE-PAIN : non) */
 static int gfxScale = RENDER_SCALE_TOASTER;               /* resolution de la 3D, en % de la fenetre (le HUD reste net) */
 static int glSoftware;                                    /* pilote absent : rendu logiciel de Windows (GDI Generic) ou equivalent */
 static int glForceSoft;                                   /* --soft : force le rendu logiciel (simule un PC sans pilote) */

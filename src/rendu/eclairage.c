@@ -335,7 +335,7 @@ static void decor_bake(void) {
     QueryPerformanceFrequency(&f0); QueryPerformanceCounter(&t0);
     float rays = gxAoRays;
     gxAoRays = fminf(gxAoRays, gxDecorAo);                /* moins de rayons : un sommet couvre peu de surface */
-    int skip = gxDecorDetail >= 0.5f ? DEC_SIMPLE : DEC_DETAIL;   /* version non dessinee : pas eclairee non plus */
+    int skip = gxDecorDetail >= 0.5f && gfxDetailOn ? DEC_SIMPLE : DEC_DETAIL;   /* version non dessinee : pas eclairee non plus */
     for (int i = 0; i < ndv; i++) {
         if (DVlod[i] == skip) { DVL[i][0] = DVL[i][1] = DVL[i][2] = 0; continue; }
         if (i > 0 && DVlod[i - 1] == DVlod[i] && vlen(vsub(DV[i].p, DV[i - 1].p)) < 1e-4f && vdot(DV[i].n, DV[i - 1].n) > 0.999f) {

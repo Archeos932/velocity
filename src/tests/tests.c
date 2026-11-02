@@ -242,6 +242,46 @@ static void run_tests(const char *path) {
                 t0, t1, t2, t3, u0, u1, u2, u3, q0, q1, q2, q3, o0, o1, o2, n0, n1, n2, n3, render_scale_cycle(67), render_scale_cycle(100));
     }
 
+    {                                                     /* manette : stick et boutons -> actions, visee, curseur des menus */
+        int capSave = captured, stSave = appState, mx = uiMX, my = uiMY;
+        float yaw0 = P.yaw, pitch0 = P.pitch;
+        memcpy(padBinds, padBindDefault, sizeof padBinds);
+        reset_game(); appState = APP_GAME; captured = 1; padPrev = 0;
+        PadRaw r; memset(&r, 0, sizeof r);
+        r.ly = 0.9f; r.r2 = 0.8f; r.btn = PADB(K_PAD_CROSS);   /* stick gauche en avant, R2 enfonce, CROIX */
+        float y0 = P.yaw;
+        r.rx = 1;                                         /* stick droit a fond a droite pendant 0,1 s */
+        pad_apply(&r, 0.1f);
+        input_poll();
+        int fwd = act[A_FWD], jump = actP[A_JUMP], fire = act[A_FIRE];
+        float turn = P.yaw - y0;
+        r.btn = PADB(K_PAD_CROSS);                        /* CROIX toujours tenue : plus d'appui au tick suivant */
+        pad_apply(&r, 0.1f);
+        input_poll();
+        int jump2 = actP[A_JUMP], held = act[A_JUMP];
+        memset(&r, 0, sizeof r);
+        pad_apply(&r, 0.1f);
+        input_poll();
+        int rel = act[A_FWD] + act[A_FIRE] + act[A_JUMP];
+        captured = 0; uiMX = 100; uiMY = 100; uiClick = 0; padPrev = 0;   /* menus : curseur et clic */
+        r.lx = 1; r.btn = PADB(K_PAD_CROSS);
+        pad_apply(&r, 0.1f);
+        int curX = uiMX, click = uiClick;
+        uiClick = 0; uiDown = 0;
+        waitPad = A_SKILL; padPrev = 0;                   /* reaffectation : le prochain bouton */
+        memset(&r, 0, sizeof r); r.btn = PADB(K_PAD_TRIANGLE);
+        pad_apply(&r, 0.1f);
+        int skillB = padBinds[A_SKILL], swapB = padBinds[A_SWAP];
+        memcpy(padBinds, padBindDefault, sizeof padBinds);
+        fprintf(f, "manette : avance %d saut %d tir %d, visee %.2f rad (attendu %.2f), saut tenu %d appui %d, relache %d ; "
+                   "courbe %.2f %.2f ; menu curseur x %d clic %d ; TRIANGLE -> piece %d, changer d'arme %d "
+                   "(attendu 1 1 1, 1 0, 0 ; 0.00 0.25 ; 210 1 ; %d 0)\n",
+                fwd, jump, fire, turn, padSens * 0.1f, held, jump2, rel, pad_curve(0.1f), pad_curve(0.56f), curX, click,
+                skillB, swapB, K_PAD_TRIANGLE);
+        captured = capSave; appState = stSave; uiMX = mx; uiMY = my; P.yaw = yaw0; P.pitch = pitch0; padPrev = 0;
+        pad_release(); reset_game();
+    }
+
     {                                                     /* secteurs du monde : case d'un point, tri par la pyramide de vision */
         float sx0 = wsX0, sz0 = wsZ0, sc = wsCell; int sgx = wsGX, sgz = wsGZ;
         float pm[16], mm[16];
@@ -2623,11 +2663,16 @@ static void run_tests(const char *path) {
         botMode = 0;                                      /* les bots ne sauvegardent jamais : on simule un joueur */
         snprintf(cfgPath, sizeof cfgPath, "cfg_test.ini");
         binds[A_SKILL][1] = K_X2; sens = 0.003f; fovBase = 115; invertY = 1;
+        padBinds[A_HOOK] = K_PAD_R3; padSens = 4.5f; gfxTexOn = 1; gfxQuality = GFX_Q_TOASTER; gfxScale = 80;
         cfg_save();
         memcpy(binds, bindDefault, sizeof binds); sens = 0.0022f; fovBase = 105; invertY = 0;
+        memcpy(padBinds, padBindDefault, sizeof padBinds); padSens = PAD_SENS_DEFAULT; gfxTexOn = 0; gfxScale = 100;
         cfg_load();
         fprintf(f, "reglages : piece -> %d (attendu %d), sens %.4f, fov %.0f, axe Y inverse %d (attendu 0.0030, 115, 1)%s",
                 binds[A_SKILL][1], K_X2, sens, fovBase, invertY, "\n");
+        fprintf(f, "reglages manette et graphismes : grappin -> %d (attendu %d), vitesse %.1f, textures %d, resolution %d (attendu 4.5, 1, 80)\n",
+                padBinds[A_HOOK], K_PAD_R3, padSens, gfxTexOn, gfxScale);
+        memcpy(padBinds, padBindDefault, sizeof padBinds); padSens = PAD_SENS_DEFAULT; gfx_preset(GFX_Q_ULTRA);
         remove(cfgPath);
         cfgPath[0] = 0;
         botMode = savedBot;

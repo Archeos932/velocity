@@ -116,6 +116,7 @@
 #include "src/rendu/render.c"                    /* rechargement F5 et render() : l'image complete */
 
 #include "src/plateforme/fenetre.c"              /* fenetre, entrees clavier/souris (Windows et macOS) */
+#include "src/entrees/manette.c"                 /* manette PS4 / Xbox : boutons, visee au stick, curseur des menus */
 #include "src/plateforme/second_ecran.c"         /* second ecran : fenetre sur l'autre moniteur (Windows et macOS) */
 
 #include "src/tests/tests.c"                     /* captures --shot et tests automatiques --test */

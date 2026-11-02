@@ -472,6 +472,13 @@ enum { AP_HIT, AP_KILL, AP_PARRY, AP_CELL, AP_LOST, AP_COUNT };   /* origine des
 #define FPS_CAP_DEFAULT    240     /* plafond d'images par seconde des prereglages BASSE a ULTRA (0 = sans limite ; max_fps=) */
 #define FPS_CAP_TOASTER    60      /* ...du prereglage GRILLE-PAIN (celui par defaut) : moins de chauffe, moins de baisse de frequence */
 enum { GFX_Q_TOASTER, GFX_Q_LOW, GFX_Q_MID, GFX_Q_ULTRA, GFX_Q_COUNT };   /* prereglages QUALITE (graphismes= de velocity.ini) */
+#define PAD_SENS_DEFAULT   3.2f    /* manette : visee au stick droit, vitesse maxi (rad/s, ~180 deg/s) */
+#define PAD_PITCH_K        0.7f    /* ...l'axe vertical tourne moins vite */
+#define PAD_DEADZONE       0.12f   /* zone morte des sticks (part de la course) */
+#define PAD_STICK_PRESS    0.4f    /* stick gauche : pousse au-dela = touche K_PAD_LS_* appuyee */
+#define PAD_TRIGGER_PRESS  0.35f   /* L2 / R2 : enfonce au-dela = appuye */
+#define PAD_CURSOR_SPEED   1100.0f /* menus : curseur au stick gauche (pixels/s a fond) */
+#define PAD_SCAN_T         2.0f    /* sans manette : on recherche toutes les 2 s */
 #define WORLD_SECTOR_M     24.0f   /* cote d'un secteur du monde (m) : seuls ceux dans le champ de vision sont dessines */
 #define RENDER_SCALE_TOASTER 100   /* resolution de la 3D (% de la fenetre) des prereglages : l'agrandissement coute ~0,2 ms
                                       (carte) a ~5 ms (logiciel), mesure : 67 % ne gagnait rien (Mac M4, rendu logiciel) */

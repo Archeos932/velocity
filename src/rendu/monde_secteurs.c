@@ -150,7 +150,7 @@ static void build_world_list(void) {
     int grain = gxGrain > 0.001f;
     worldGrainUnit = worldFused && grain && mtUnits >= 3;
     worldGrainPass = grain && !worldGrainUnit;
-    worldNoTex = gxWorldTex < 0.5f;                       /* GRILLE-PAIN : couleur x moyenne de la texture, sans la texture */
+    worldNoTex = gxWorldTex < 0.5f || !gfxTexOn;          /* rendu.ini l'interdit, ou le joueur (GRILLE-PAIN par defaut) */                       /* GRILLE-PAIN : couleur x moyenne de la texture, sans la texture */
     float gmean[2][3];
     for (int g = 0; g < 2; g++) {
         if (worldNoTex) tex_mean(gtex[g], gmean[g]);
@@ -194,7 +194,7 @@ static void build_world_list(void) {
     for (int k = 0; k < nf; k++) ord[k] = k;
     qsort(ord, nf, sizeof ord[0], wf_cmp);
     int *tsec = ntri ? (int *)malloc(sizeof(int) * ntri) : NULL;
-    int lodSkip = gxDecorDetail >= 0.5f ? DEC_SIMPLE : DEC_DETAIL;   /* GRILLE-PAIN : versions simples du decor */
+    int lodSkip = gxDecorDetail >= 0.5f && gfxDetailOn ? DEC_SIMPLE : DEC_DETAIL;   /* GRILLE-PAIN : versions simples du decor */
     worldTris = 0;
     for (int t = 0; t < ntri; t++) {
         if (DVlod[t * 3] == lodSkip) { tsec[t] = -1; continue; }

@@ -220,6 +220,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show) {
 static int velocity_main(const char *cmd) {
 #endif
     memcpy(binds, bindDefault, sizeof binds);
+    memcpy(padBinds, padBindDefault, sizeof padBinds);
     if (cmd && strncmp(cmd, "--test ", 7) == 0) { gfx_preset(GFX_Q_ULTRA); run_tests(cmd + 7); return 0; }
     int shotQuality = GFX_Q_ULTRA;                        /* --shot et --bot : ULTRA (captures de reference), sauf --qualite N */
     const char *shotPath = NULL;
@@ -383,10 +384,10 @@ static int velocity_main(const char *cmd) {
             snprintf(cfgPath, sizeof cfgPath, "%s/Library/Application Support/Velocity/velocity.ini", home);
         } else cfgPath[0] = 0;
 #endif
-        int qBuilt = gfxQuality;                          /* qualite des lightmaps deja calculees (GRILLE-PAIN par defaut) */
+        int qBuilt = gfxQuality | gfxTexOn << 4 | gfxDetailOn << 5;   /* monde deja construit (GRILLE-PAIN par defaut) */
         if (!botMode && !shotMode && cfg_load()) toggle_fullscreen();
         if (!botMode && !shotMode && glSoftware && !gfxSeen) { gfx_preset(GFX_Q_TOASTER); gfxScale = RENDER_SCALE_SOFT; }
-        if (!botMode && !shotMode && (gfxAmbiance || gfxQuality != qBuilt)) { gfx_reload(); popT = 0; }   /* ambiance / qualite du joueur */
+        if (!botMode && !shotMode && (gfxAmbiance || (gfxQuality | gfxTexOn << 4 | gfxDetailOn << 5) != qBuilt)) { gfx_reload(); popT = 0; }   /* ambiance / qualite du joueur */
         if (!botMode && !shotMode && glSoftware) set_status("pilote graphique absent : installe celui de ta carte graphique (jeu tres lent)");
     }
     if (!botMode && !shotMode) {                          /* mise a jour : restes de la precedente, puis verification discrete */
@@ -417,6 +418,8 @@ static int velocity_main(const char *cmd) {
             set_status("nouvelle version disponible : build 5");
         }
         if (strstr(shotPath, "settings")) { settingsOpen = 1; waitAct = A_SKILL; waitSlot = 1; }
+        if (strstr(shotPath, "settings_graph")) { settingsPage = 1; waitAct = -1; }   /* page GRAPHISMES */
+        if (strstr(shotPath, "settings_manette")) { settingsPage = 2; waitAct = -1; waitPad = A_HOOK; }   /* page MANETTE */
         if (strstr(shotPath, "loadout")) { loadoutOpen = 1; if (strstr(shotPath, "charge")) wantSkill = SK_CHARGE; }
         if (strstr(shotPath, "heberger")) { hostOpen = 1; wantTeams = 2; hostBots = 1; }
         if (strstr(shotPath, "skinmenu")) { skinOpen = 1; wantSkin = SKN_POUSSIN; skinPrevTeam = 1; nowT = 0.4; }
@@ -784,6 +787,7 @@ static int velocity_main(const char *cmd) {
         if (fpsAcc > 0.5f) { fps = fpsFrames / fpsAcc; fpsAcc = 0; fpsFrames = 0; }
 
         net_update(dt);
+        if (!botMode && !shotMode) pad_frame(dt);         /* manette : boutons, visee au stick droit, curseur des menus */
         if (botMode) {
             bot_think(dt);
             bot_void_guard(dt);                           /* kill zone : pas de saut dans le vide, grappin de secours */
