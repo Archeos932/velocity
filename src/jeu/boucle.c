@@ -79,14 +79,6 @@ static void saw_dry(int press) {
     dry_fire();
     snprintf(popText, sizeof popText, "SCIE PLANTEE (%d m)", (int)vlen(vsub(s->pos, pcenter())));
 }
-static void cfg_save(void);
-static void loadout_cycle(int slot) {                     /* ecran de mort : arme prete suivante, echange si doublon */
-    int w = wantLoadout[slot];
-    do w = (w + 1) % WP_COUNT; while (!wpReady[w]);
-    if (w == wantLoadout[slot ^ 1]) wantLoadout[slot ^ 1] = wantLoadout[slot];
-    wantLoadout[slot] = w;
-    cfg_save();
-}
 
 static void game_tick(float dt) {
     /* hitstop : le monde se fige un instant sur les gros coups (les entrees attendent) */
@@ -121,12 +113,7 @@ static void game_tick(float dt) {
     if (dmMode && rules.ammo == AMMO_INFINI && !P.dead)   /* regle : munitions infinies */
         for (int s = 0; s < 2; s++) P.ammo[P.loadout[s]] = ammoDef[P.loadout[s]].max;
 
-    if (P.dead) {                                         /* ecran de mort : les touches d'arme changent le loadout */
-        if (w1 && !eco_on()) loadout_cycle(0);            /* (boutique : les armes s'achetent, on ne les fait pas defiler) */
-        if (w2 && !eco_on()) loadout_cycle(1);
-        if (meleePress) { do wantMelee = (wantMelee + 1) % MK_COUNT; while (!mkReady[wantMelee]); cfg_save(); }
-        if (coinPress) { wantSkill = (wantSkill + 1) % SK_COUNT; cfg_save(); }   /* Competences : la touche fait defiler */
-    } else {
+    if (!P.dead) {                                        /* mort : les touches ne changent plus le loadout (menu LOADOUT) */
         int nw = P.weapon;
         if (w1) nw = P.loadout[0];
         if (w2) nw = P.loadout[1];

@@ -359,6 +359,12 @@ code.
 - Tests : « horloge de match » (`--test`), « heure du serveur » (`node test.js`) ; match de bots par un lobby local :
   les deux se calent (17–20 ms d'aller-retour) et se rejoignent par le lobby.
 
+## 27. Plus de changement de loadout sur l'écran de mort
+
+- Les touches d'arme, d'épée et de compétence ne font plus défiler le loadout pendant la mort (ni le sélecteur
+  « LOADOUT DU PROCHAIN RESPAWN ») : le loadout se choisit au menu **LOADOUT** (pause), appliqué au respawn suivant.
+  La boutique (règle BOUTIQUE) s'ouvre toujours à la mort. Test : « ecran de mort ».
+
 ## Vérifications faites
 
 - Compilation macOS sans avertissement ; tous les tests `--test` conformes, y compris ceux d'`origin/dev` (stéréo,

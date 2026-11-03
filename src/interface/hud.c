@@ -889,7 +889,6 @@ static void draw_hud(void) {
         text_c(1, cx, winH - 150.0f, buf, 0.9f, 0.9f, 0.9f, 1);
     } else if (P.dead && killcam_active()) {              /* camera de mort : qui, avec quoi, combien de PV il lui reste */
         draw_killcam_hud(cx, cy);
-        if (dmMode && !eco_on()) draw_death_loadout(cx, winH - 260.0f);
     } else if (dmMode && P.dead) {
         rect(0, 0, (float)winW, (float)winH, 0.15f, 0, 0, 0.4f);
         if (killerOfMe >= 0 && killerOfMe != myId) snprintf(buf, sizeof buf, "ELIMINE PAR %s", pname(killerOfMe));
@@ -898,7 +897,6 @@ static void draw_hud(void) {
         text_c(2, cx, ty, buf, 1, 0.35f, 0.3f, 1);
         snprintf(buf, sizeof buf, "respawn dans %.1f s", fmaxf(0, RESPAWN_TIME - P.deathT));
         if (killerOfMe >= 0) text_c(1, cx, ty + 50, buf, 0.9f, 0.9f, 0.9f, 1);
-        if (!eco_on()) draw_death_loadout(cx, cy + 60);
     } else if (dmMode && bound_held(A_SCORES)) {
         draw_scoreboard(cx, cy);
     } else if (P.dead) {
@@ -909,7 +907,6 @@ static void draw_hud(void) {
         snprintf(buf, sizeof buf, "record %d", bestScore);
         text_c(0, cx, cy + 44, buf, 0.8f, 0.8f, 0.9f, 1);
         if (P.deathT > 1.0f) text_c(1, cx, cy + 100, "[R] ou clic pour recommencer", 0.9f, 0.9f, 0.9f, 1);
-        draw_death_loadout(cx, cy + 150);
     }
 
     if (!captured && !shotMode && !botMode && !ecoShopping) {

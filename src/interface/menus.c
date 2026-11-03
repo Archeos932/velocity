@@ -288,16 +288,6 @@ static void draw_loadout(float cx, float cy) {
     if (uiClick) uiClick = 0;
 }
 
-/* ecran de mort : les touches d'arme et de melee font defiler le loadout du prochain respawn */
-static void draw_death_loadout(float cx, float y) {
-    char buf[160];
-    snprintf(buf, sizeof buf, "[%s] < %s >    [%s] < %s >    [%s] < %s >    [%s] < %s >", bind_text(A_WEAP1),
-             ammoDef[wantLoadout[0]].name, bind_text(A_WEAP2), ammoDef[wantLoadout[1]].name, bind_text(A_MELEE),
-             meleeNames[wantMelee], bind_text(A_SKILL), skillDef[wantSkill].name);
-    text_c(0, cx, y, "LOADOUT DU PROCHAIN RESPAWN", 0.5f, 0.9f, 1.0f, 1);
-    text_c(1, cx, y + 32, buf, 1, 0.9f, 0.6f, 1);
-}
-
 static void map_cycle(int d) {                            /* menu : carte suivante / precedente, montree en fond */
     menuMap = map_step(menuMap, d);                       /* les cartes CHALLENGE (LA TOILE) n'y sont pas : bouton CHALLENGE */
     if (appState == APP_MENU) menu_backdrop();

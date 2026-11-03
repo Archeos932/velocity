@@ -371,6 +371,18 @@ static void run_tests(const char *path) {
     memset(act, 0, sizeof act);
     fprintf(f, "bhop : vitesse depart=%.1f max=%.1f (attendu max > %.1f)\n", startSpeed, maxSpeed, RUN_SPEED + 3);
 
+    {   /* ecran de mort : les touches d'arme, d'epee et de competence ne changent plus le loadout (menu LOADOUT) */
+        reset_game();
+        int l0 = wantLoadout[0], l1 = wantLoadout[1], mk = wantMelee, sk = wantSkill;
+        P.dead = 1; P.deathT = 0.5f;
+        botPress[A_WEAP1] = botPress[A_WEAP2] = botPress[A_MELEE] = botPress[A_SKILL] = 1;
+        game_tick(TICK);
+        int same = wantLoadout[0] == l0 && wantLoadout[1] == l1 && wantMelee == mk && wantSkill == sk;
+        memset(botPress, 0, sizeof botPress);
+        fprintf(f, "ecran de mort : loadout inchange apres les touches %d (attendu 1)\n", same);
+        reset_game();
+    }
+
     reset_game();                                         /* aimant de visee (competence AIMANT active) : corrige un petit ecart */
     P.pos = P.prevPos = v3(-20, 0, 40); P.yaw = 0; P.pitch = 0; P.grounded = 1;   /* couloir degage des tests */
     P.aimT = AIM_T;

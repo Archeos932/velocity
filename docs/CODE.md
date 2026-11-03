@@ -721,7 +721,8 @@ retient l'œil, le cap et le tueur (en solo : l'ennemi vivant le plus proche qui
 `KILLCAM_T` (1,6 s, le respawn reste à `RESPAWN_TIME` 2,5 s), `render` prend la vue de `killcam_view` : la caméra
 recule et monte (`KILLCAM_BACK`, `KILLCAM_UP`, sans traverser les murs), pivote vers le tueur en `KILLCAM_TURN` et
 zoome (`KILLCAM_ZOOM`). `draw_killcam_hud` : bandes noires, « ELIMINE PAR … », arme, PV qui lui restent, crochets autour
-de lui ; le bas du HUD est masqué, le choix du loadout reste. Ni suicide ni chute. Réglage : PARAMETRES > CAMERA DE MORT
+de lui ; le bas du HUD est masqué. Le loadout ne se change plus aux touches sur l'écran de mort : seulement au menu
+LOADOUT (pause), appliqué au respawn. Ni suicide ni chute. Réglage : PARAMETRES > CAMERA DE MORT
 (`camera_mort=`). Capture : `--shot dm_mort.bmp`.
 
 ### 3.17 Mise à jour depuis GitHub (bouton MISE A JOUR)
@@ -963,7 +964,7 @@ des équipes.
   et BOUCLIER** (modes entre joueurs pour l'instant) ; FRAGS et CHRONO les gardent.
 - **Boutique** (`src/jeu/economie.c`, chaque joueur pour lui-même) : `ECO_START` pièces, `ECO_KILL`, `ECO_DEATH`,
   `ECO_OBJ` (objectif personnel), `ECO_TEAM_OBJ`. Début de match : choix d'une arme parmi 4 (`ecoStarters`, 10 s,
-  souris libérée, immobile) ; à chaque mort, la boutique remplace le sélecteur de loadout : acheter une arme
+  souris libérée, immobile) ; à chaque mort, la boutique s'ouvre : acheter une arme
   (`eco_price`) l'équipe en 2e place, inverser les armes, MUNITIONS + (jauges pleines au respawn). Les armes
   achetées restent pour le match. Bots : `eco_bot_shop`.
 - **Spécialisations** (LOADOUT, `spec=`, envoyée dans `NetPState.spare[0]`) : ASSAUT (+15 % de dégâts, hôte),
