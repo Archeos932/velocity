@@ -125,8 +125,9 @@ Sur Mac : `./build_mac.sh`, puis `Velocity.app/Contents/MacOS/velocity --test te
 - `bind` est une fonction Winsock : le tableau des touches s'appelle `binds`.
 - Ordre des définitions : `pname()` et la section réseau sont **après** le combat — avant,
   utiliser `NP[i].name` ; les fonctions `net_fx_*` / `net_hit` y sont déclarées en avance (`src/reseau/etat_partage.c`).
-- `game_tick()` sort tôt pendant le `hitstop` : les minuteurs « temps réel » (impact frames)
-  se décomptent dans `render()`.
+- `game_tick()` sort tôt pendant le `hitstop` (en solo seulement : jamais de pause en LAN / en ligne) : les
+  minuteurs « temps réel » (impact frames) se décomptent dans `render()`. La boucle principale est `main_frame()`,
+  aussi appelée pendant les boucles modales (fenêtre déplacée) : rien ne doit y supposer un appel unique.
 - Les bots ont un temps de réaction et une imprécision voulus ; s'ils sont « trop forts »,
   le match de comparaison n'est plus représentatif d'un humain.
 - Les `.bmp` de `graphismes/` remplacent les textures générées : après une modification de `make_textures`,

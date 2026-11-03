@@ -118,9 +118,14 @@ static void in_wheel(void) {
     else if (captured) latch[K_WHEEL] = 1;
 }
 
+static void modal_frame(void);                           /* plateforme/demarrage.c */
 #ifdef _WIN32
+#define MODAL_TIMER 1                                     /* boucle modale (deplacement, redimensionnement, menu) : ~120 images/s */
 static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     switch (m) {
+    case WM_ENTERSIZEMOVE: case WM_ENTERMENULOOP: SetTimer(h, MODAL_TIMER, 8, NULL); return 0;
+    case WM_EXITSIZEMOVE: case WM_EXITMENULOOP: KillTimer(h, MODAL_TIMER); return 0;
+    case WM_TIMER: if (wp == MODAL_TIMER) modal_frame(); return 0;
     case WM_SIZE:
         in_resize(LOWORD(lp), HIWORD(lp));
         return 0;

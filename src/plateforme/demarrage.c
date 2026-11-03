@@ -159,6 +159,89 @@ static void bench_render(const char *path) {
     fclose(f);
 }
 
+/* Une image de la boucle principale : reseau, bots, simulation, rendu, son. Appelee par la boucle de velocity_main,
+   et aussi pendant les boucles modales du systeme (fenetre deplacee ou redimensionnee, menu de fenetre) : la partie
+   ne s'arrete jamais, en ligne l'hote couperait les joueurs au bout de NET_TIMEOUT. 0 = fin (bots). */
+static LARGE_INTEGER frmFreq, frmStart, frmLast;
+static float frmAcc, frmFpsAcc;
+static int frmFpsFrames, frmBusy;
+static int main_frame(void) {
+    LARGE_INTEGER frmNow;
+    QueryPerformanceCounter(&frmNow);
+    float dt = (float)(frmNow.QuadPart - frmLast.QuadPart) / (float)frmFreq.QuadPart;
+    nowT = (double)(frmNow.QuadPart - frmStart.QuadPart) / (double)frmFreq.QuadPart;
+    frmLast = frmNow;
+    if (dt > 0.1f) dt = 0.1f;
+    frmFpsAcc += dt; frmFpsFrames++;
+    if (frmFpsAcc > 0.5f) { fps = frmFpsFrames / frmFpsAcc; frmFpsAcc = 0; frmFpsFrames = 0; }
+
+    net_update(dt);
+    if (botMode) {
+        bot_think(dt);
+        bot_void_guard(dt);                           /* kill zone : pas de saut dans le vide, grappin de secours */
+        if (nowT > botTime) return 0;
+        if (botLocal && appState != APP_GAME && botT > 12) return 0;   /* l'hote est parti : le bot adverse se ferme */
+        if (appState == APP_GAME) aim_assist(dt);     /* AIMANT du bot : tire sa visee imprecise vers la cible */
+    }
+    if (appState == APP_GAME) {
+        if (captured) {
+            if (!P.dead) {
+                P.yaw += mdx * sens;
+                P.pitch = clampf(P.pitch - mdy * sens * (invertY ? -1.0f : 1.0f), -1.55f, 1.55f);
+                P.swayX = clampf(P.swayX - mdx * 0.00004f, -0.04f, 0.04f);
+                P.swayY = clampf(P.swayY + mdy * 0.00004f, -0.04f, 0.04f);
+                if (!botMode) aim_assist(dt);             /* AIMANT (les bots l'appliquent apres bot_think) */
+            }
+            P.swayX *= expf(-dt * 10); P.swayY *= expf(-dt * 10);
+        }
+        mdx = mdy = 0;
+        if (captured || dmMode) {             /* en LAN la partie ne se met jamais en pause */
+            frmAcc += dt;
+            while (frmAcc >= TICK) { game_tick(TICK); frmAcc -= TICK; }
+        } else {
+            memset(latch, 0, sizeof latch);
+        }
+    } else {
+        P.yaw += dt * 0.05f;                  /* l'arene tourne doucement derriere le menu */
+        mdx = mdy = 0;
+        memset(latch, 0, sizeof latch);
+    }
+    if (botHidden) {                                  /* bot cache : personne ne le regarde, pas de rendu ; */
+#ifdef _WIN32                                             /* boucle limitee (~250 Hz) pour laisser la machine au joueur */
+        Sleep(4);
+#else
+        usleep(4000);
+#endif
+    } else {
+        render((captured || dmMode) && appState == APP_GAME ? frmAcc / TICK : 1.0f, dt);
+        uiClick = 0;                                  /* apres le rendu : les boutons (mode immediat) ont vu le clic */
+#ifdef _WIN32
+        SwapBuffers(hdc);
+#else
+        mac_swap();
+#endif
+        second_screen_frame(dt);                      /* carte sur le deuxieme ecran, s'il y en a un */
+    }
+    tesla_audio();                                    /* Tesla : boucles sonores des arcs */
+    music_follow_game();
+    rk_net_poll();                                    /* mode classe : requetes au serveur de classement */
+    audio_update();
+    if (lbWantHost) { lbWantHost = 0; if (appState == APP_JOIN) { pendingAction = ACT_HOST; hostQuick = 1; hostRanked = rankedWant; } }
+    if (pendingAction) do_action();
+    return 1;
+}
+
+/* boucle modale du systeme (minuteur Windows, NSTimer du suivi d'evenements sur macOS) : une image si on n'y est pas deja */
+static void modal_frame(void) {
+    if (frmBusy || !frmFreq.QuadPart) return;
+    frmBusy = 1;
+    if (!main_frame()) PostQuitMessage(0);
+    frmBusy = 0;
+}
+#ifndef _WIN32
+void plat_modal_frame(void) { modal_frame(); }
+#endif
+
 #ifdef _WIN32
 int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show) {
     (void)prev;
@@ -739,11 +822,9 @@ static int velocity_main(const char *cmd) {
     if (botMode == 2) pendingAction = ACT_BROWSE;
     if (botMode && botRanked) pendingAction = ACT_RANKED;   /* recherche classee ; sans partie, l'hote en cree une */
 
-    LARGE_INTEGER freq, start, last, now;
-    QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&start);
-    last = start;
-    float acc = 0, fpsAcc = 0; int fpsFrames = 0;
+    QueryPerformanceFrequency(&frmFreq);
+    QueryPerformanceCounter(&frmStart);
+    frmLast = frmStart;
 #ifdef _WIN32
     MSG msgw;
 #endif
@@ -757,67 +838,7 @@ static int velocity_main(const char *cmd) {
 #else
         if (!mac_pump()) goto done;
 #endif
-        QueryPerformanceCounter(&now);
-        float dt = (float)(now.QuadPart - last.QuadPart) / (float)freq.QuadPart;
-        nowT = (double)(now.QuadPart - start.QuadPart) / (double)freq.QuadPart;
-        last = now;
-        if (dt > 0.1f) dt = 0.1f;
-        fpsAcc += dt; fpsFrames++;
-        if (fpsAcc > 0.5f) { fps = fpsFrames / fpsAcc; fpsAcc = 0; fpsFrames = 0; }
-
-        net_update(dt);
-        if (botMode) {
-            bot_think(dt);
-            bot_void_guard(dt);                           /* kill zone : pas de saut dans le vide, grappin de secours */
-            if (nowT > botTime) break;
-            if (botLocal && appState != APP_GAME && botT > 12) break;   /* l'hote est parti : le bot adverse se ferme */
-            if (appState == APP_GAME) aim_assist(dt);     /* AIMANT du bot : tire sa visee imprecise vers la cible */
-        }
-        if (appState == APP_GAME) {
-            if (captured) {
-                if (!P.dead) {
-                    P.yaw += mdx * sens;
-                    P.pitch = clampf(P.pitch - mdy * sens * (invertY ? -1.0f : 1.0f), -1.55f, 1.55f);
-                    P.swayX = clampf(P.swayX - mdx * 0.00004f, -0.04f, 0.04f);
-                    P.swayY = clampf(P.swayY + mdy * 0.00004f, -0.04f, 0.04f);
-                    if (!botMode) aim_assist(dt);             /* AIMANT (les bots l'appliquent apres bot_think) */
-                }
-                P.swayX *= expf(-dt * 10); P.swayY *= expf(-dt * 10);
-            }
-            mdx = mdy = 0;
-            if (captured || dmMode) {             /* en LAN la partie ne se met jamais en pause */
-                acc += dt;
-                while (acc >= TICK) { game_tick(TICK); acc -= TICK; }
-            } else {
-                memset(latch, 0, sizeof latch);
-            }
-        } else {
-            P.yaw += dt * 0.05f;                  /* l'arene tourne doucement derriere le menu */
-            mdx = mdy = 0;
-            memset(latch, 0, sizeof latch);
-        }
-        if (botHidden) {                                  /* bot cache : personne ne le regarde, pas de rendu ; */
-#ifdef _WIN32                                             /* boucle limitee (~250 Hz) pour laisser la machine au joueur */
-            Sleep(4);
-#else
-            usleep(4000);
-#endif
-        } else {
-            render((captured || dmMode) && appState == APP_GAME ? acc / TICK : 1.0f, dt);
-            uiClick = 0;                                  /* apres le rendu : les boutons (mode immediat) ont vu le clic */
-#ifdef _WIN32
-            SwapBuffers(hdc);
-#else
-            mac_swap();
-#endif
-            second_screen_frame(dt);                      /* carte sur le deuxieme ecran, s'il y en a un */
-        }
-        tesla_audio();                                    /* Tesla : boucles sonores des arcs */
-        music_follow_game();
-        rk_net_poll();                                    /* mode classe : requetes au serveur de classement */
-        audio_update();
-        if (lbWantHost) { lbWantHost = 0; if (appState == APP_JOIN) { pendingAction = ACT_HOST; hostQuick = 1; hostRanked = rankedWant; } }
-        if (pendingAction) do_action();
+        if (!main_frame()) break;
     }
 done:
     if (botMode) {

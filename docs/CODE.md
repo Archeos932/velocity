@@ -57,11 +57,20 @@ quel fichier se trouve chaque partie.
 - `TICK` vaut `1.0f / 120.0f`. **Toute la simulation** (mouvement, armes, ennemis, projectiles,
   particules, minuteries) avance dans `game_tick(dt)` avec `dt = TICK`.
 - Le jeu ne tourne que si la souris est capturée (`captured`) **ou** en LAN (`dmMode`) : en solo,
-  ouvrir le menu met en pause ; en LAN, la partie continue.
+  ouvrir le menu met en pause ; en LAN et en ligne, **jamais de pause** :
+  - le menu ECHAP laisse la partie tourner ;
+  - une image de la boucle est la fonction `main_frame()` (`src/plateforme/demarrage.c`), appelée par la boucle de
+    `velocity_main` **et** pendant les boucles modales du système, qui sinon bloqueraient tout (et l'hôte couperait
+    les joueurs après `NET_TIMEOUT`) : fenêtre déplacée ou redimensionnée, menu de fenêtre. Windows :
+    `WM_ENTERSIZEMOVE` / `WM_ENTERMENULOOP` lancent un minuteur de 8 ms, `WM_TIMER` → `modal_frame()` ; macOS : un
+    `NSTimer` dans `NSEventTrackingRunLoopMode` → `plat_modal_frame()` ;
+  - macOS : `beginActivityWithOptions` (`NSActivityLatencyCritical`) empêche App Nap de ralentir le jeu ;
+  - le hitstop ne fige pas la simulation (ci-dessous).
 - `render(alpha, frameDt)` interpole **la position du joueur** entre `P.prevPos` et `P.pos` avec
   `alpha = acc / TICK`. Le reste (ennemis, particules) est dessiné à sa position du dernier tick.
-- **Hitstop** : si `hitstop > 0`, `game_tick` décrémente `hitstop` et sort immédiatement — le monde
-  se fige quelques centièmes de seconde sur les gros coups (les entrées attendent).
+- **Hitstop** : si `hitstop > 0`, `game_tick` décrémente `hitstop` et, **en solo seulement**, sort
+  immédiatement — le monde se fige quelques centièmes de seconde sur les gros coups (les entrées attendent). En
+  LAN et en ligne (`dmMode`), la simulation continue : seuls l'impact frame et les effets restent.
 
 ### États de l'application
 
@@ -1774,7 +1783,7 @@ dans un solide et que chaque pad retombe sur un sol. Pour **modifier l'Arène** 
    - avec `player_tick` directement : écrivez `act[A_*]` (et remettez à 0 avec `memset(act, 0, sizeof act)`) ;
      grappin : `hookPressIn`/`hookHeldIn` ;
    - avec `game_tick` : écrivez `botHeld[A_*]`/`botPress[A_*]` (car `input_poll` réécrit `act`).
-4. Pièges : `game_tick` ne fait rien tant que `hitstop > 0` (mettez `hitstop = 0` après un coup) ; un
+4. Pièges : en solo, `game_tick` ne fait rien tant que `hitstop > 0` (mettez `hitstop = 0` après un coup) ; un
    parry ou un coup laisse `P.parryWin` et `P.meleeCd` actifs ; `nowT` n'avance pas tout seul (faites
    `nowT += TICK` si l'hôte compare des temps, comme dans le test de parry d'épée).
 5. Restez dans le couloir dégagé (x = −20) pour ne pas dépendre des blocs aléatoires.

@@ -102,8 +102,16 @@ static void build_menu(void) {
     [NSApp setMainMenu:bar];
 }
 
+static id gActivity;                                       /* pas d'App Nap : la partie ne ralentit jamais, fenetre cachee ou non */
+static NSTimer *gModalTimer;                               /* fenetre deplacee / redimensionnee, menus : la partie continue */
+
 int mac_window_create(int w, int h, const char *title, int visible) {
     @autoreleasepool {
+        gActivity = [[NSProcessInfo processInfo] beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep |
+                                                                          NSActivityLatencyCritical
+                                                                  reason:@"partie VELOCITY"];
+        gModalTimer = [NSTimer timerWithTimeInterval:0.008 repeats:YES block:^(NSTimer *t) { (void)t; plat_modal_frame(); }];
+        [[NSRunLoop currentRunLoop] addTimer:gModalTimer forMode:NSEventTrackingRunLoopMode];   /* seulement pendant un suivi */
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         gDel = [[VDelegate alloc] init];

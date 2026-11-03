@@ -38,6 +38,7 @@ void mac_ws_free(MacWs *w);                                             /* liber
 
 /* --- rappels fournis par main.c --- */
 void plat_key(int sc, int down, int repeat);                            /* scancode Windows */
+void plat_modal_frame(void);                                            /* une image pendant un suivi d'evenements (fenetre deplacee...) */
 void plat_char(int ch);
 void plat_mouse_move(int x, int y);
 void plat_button(int id, int down);                                     /* 0 gauche, 1 droit, 2 milieu, 3 pouce arriere, 4 pouce avant */

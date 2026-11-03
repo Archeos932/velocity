@@ -365,6 +365,16 @@ code.
   « LOADOUT DU PROCHAIN RESPAWN ») : le loadout se choisit au menu **LOADOUT** (pause), appliqué au respawn suivant.
   La boutique (règle BOUTIQUE) s'ouvre toujours à la mort. Test : « ecran de mort ».
 
+## 28. Jamais de pause en ligne
+
+- **Hitstop** : en LAN et en ligne, il ne fige plus ta simulation (les autres joueurs, eux, continuaient) ; l'impact
+  frame et les effets restent. En solo, rien ne change.
+- **Fenêtre déplacée ou redimensionnée, menu de fenêtre** : la boucle de Windows (et le suivi d'événements de
+  macOS) bloquait le jeu, et l'hôte coupait les joueurs au bout de 5 s. La boucle est maintenant `main_frame()`,
+  appelée aussi par un minuteur pendant ces boucles (`WM_TIMER` sous Windows, `NSTimer` sous macOS).
+- **macOS** : plus d'App Nap (`beginActivityWithOptions`), le jeu ne ralentit pas fenêtre cachée.
+- Le menu ECHAP laissait déjà la partie tourner. Test : « hitstop ».
+
 ## Vérifications faites
 
 - Compilation macOS sans avertissement ; tous les tests `--test` conformes, y compris ceux d'`origin/dev` (stéréo,

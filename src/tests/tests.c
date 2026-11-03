@@ -382,6 +382,19 @@ static void run_tests(const char *path) {
         fprintf(f, "ecran de mort : loadout inchange apres les touches %d (attendu 1)\n", same);
         reset_game();
     }
+    {   /* jamais de pause en ligne : le hitstop ne fige la simulation qu'en solo */
+        float moved[2];
+        for (int k = 0; k < 2; k++) {
+            reset_game(); dmMode = k;
+            P.pos = P.prevPos = v3(-20, 0, 40); P.vel = v3(10, 0, 0); P.grounded = 0;
+            V3 p0 = P.pos;
+            hitstop = 0.1f;
+            for (int i = 0; i < 6; i++) game_tick(TICK);
+            moved[k] = hlen(vsub(P.pos, p0));
+        }
+        dmMode = 0; hitstop = 0; reset_game();
+        fprintf(f, "hitstop : solo fige %d, en ligne la partie continue %d (attendu 1 1)\n", moved[0] < 0.01f, moved[1] > 0.3f);
+    }
 
     reset_game();                                         /* aimant de visee (competence AIMANT active) : corrige un petit ecart */
     P.pos = P.prevPos = v3(-20, 0, 40); P.yaw = 0; P.pitch = 0; P.grounded = 1;   /* couloir degage des tests */

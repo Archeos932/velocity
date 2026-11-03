@@ -81,8 +81,9 @@ static void saw_dry(int press) {
 }
 
 static void game_tick(float dt) {
-    /* hitstop : le monde se fige un instant sur les gros coups (les entrees attendent) */
-    if (hitstop > 0) { hitstop -= dt; P.prevPos = P.pos; return; }
+    /* hitstop : le monde se fige un instant sur les gros coups (les entrees attendent) ; jamais en ligne, ou le
+       reste de la partie continue : seuls l'impact frame et les effets restent */
+    if (hitstop > 0) { hitstop -= dt; if (!dmMode) { P.prevPos = P.pos; return; } }
     if (spectating) { spec_tick(dt); return; }
 
     int rp = latch[SC_R];                                 /* R : recommencer (solo), non reaffectable */
