@@ -1336,7 +1336,7 @@ static void run_tests(const char *path) {
         }
         /* 10. cone de l'aide : drone a 5 degres (aide), puis a 10 degres (tout droit dans le viseur) */
         {
-            float res[2];
+            float res[2] = { 0, 0 };
             for (int k = 0; k < 2; k++) {
                 float ang = (k ? 10.0f : 5.0f) * PI / 180;
                 saw_test_reset(v3(-20, 0, 40), 0, 0);
@@ -3307,7 +3307,7 @@ static void run_tests(const char *path) {
             int noMoney = eco_buy(WP_ROCKET);
             eco_gain(ECO_KILL, NULL);
             int bought = eco_buy(WP_ROCKET);
-            int lo[2]; eco_loadout(lo);
+            int lo[2] = { 0, 0 }; eco_loadout(lo);
             fprintf(f, "boutique : depart %d pieces, arme a choisir %d, ROQUETTES trop cheres %d puis achetees %d, reste %d, armes %s + %s (attendu %d, 1, 0, 1, %d, EVENTAIL + ROQUETTES)\n",
                     c0, need, noMoney, bought, credits, ammoDef[lo[0]].name, ammoDef[lo[1]].name, ECO_START, ECO_START + ECO_KILL - eco_price(WP_ROCKET));
             #undef TICKS
