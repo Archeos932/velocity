@@ -2713,8 +2713,24 @@ static void run_tests(const char *path) {
                 skinNames[st.skin < SKN_COUNT ? st.skin : 0], (int)sizeof st, SKN_COUNT, SKN_CHAT);
         wantSkin = ws;
     }
+    {                                                     /* defauts adoucis (HUD leger, ombres lisibles, bloom et soleil discrets) */
+        fprintf(f, "graphismes defauts : hud_fonds=%.2f occlusion_min=%.2f ciel=%.2f soleil_force=%.1f bloom=%.1f/%.0f "
+                   "soleil_taille=%.0f/%.0f/%.0f halo=%.2f reflets=%.2f (attendu 0.22 0.45 0.64 1.2 0.5/4 6/16/50 0.16 0.25)\n",
+                gxHudPanel, gxAoMin, skyCol[0], gxSunPow, gxBloom[0], gxBloom[1], gxSunSize[0], gxSunSize[1], gxSunSize[2],
+                gxSunGlow[0], gxFlare);
+    }
+    {                                                     /* PARAMETRES <-> GRAPHISMES : ECHAP revient d'un ecran a la fois */
+        int so = settingsOpen, sp = settingsPage, wa = waitAct, uf = uiFocus;
+        settingsOpen = 1; settingsPage = 1; waitAct = -1; uiFocus = 0;
+        in_key_down(SC_ESC, 0);
+        int p1 = settingsPage, o1 = settingsOpen;
+        in_key_down(SC_ESC, 0);
+        fprintf(f, "menus : ECHAP depuis GRAPHISMES -> page %d ouvert %d, puis -> ouvert %d (attendu 0 1, 0)\n", p1, o1, settingsOpen);
+        keys[SC_ESC] = 0; latch[SC_ESC] = 0;
+        settingsOpen = so; settingsPage = sp; waitAct = wa; uiFocus = uf;
+    }
     {                                                     /* graphismes/rendu.ini : lecture d'une ligne, cle inconnue, bornes */
-        float d0 = gxSunDir[1], f0 = gxFog[1], b0 = gxBloom[1], a0 = gxAoRays;
+        float d0 = gxSunDir[1], f0 = gxFog[1], b0 = gxBloom[1], a0 = gxAoRays, bf0 = gxBloom[0];
         char l1[] = "  soleil_direction = 0.1 0.9 -0.2   # commentaire", l2[] = "cle_inconnue = 4", l3[] = "bloom = 0.5 9";
         char l4[] = "occlusion_rayons = 3";
         int k1 = gfx_parse_line(l1), k2 = gfx_parse_line(l2), k3 = gfx_parse_line(l3);
@@ -2722,7 +2738,7 @@ static void run_tests(const char *path) {
         gfx_clamp();
         fprintf(f, "graphismes : soleil y=%.1f, cle inconnue=%d, bloom seuil borne=%.0f, rayons=%d, lue=%d%d (attendu 0.9, 0, 4, 3, 11)\n",
                 gxSunDir[1], k2, gxBloom[1], AO_RAYS, k1, k3);
-        gxSunDir[0] = 0.55f; gxSunDir[1] = d0; gxSunDir[2] = -0.82f; gxFog[1] = f0; gxBloom[0] = 0.7f; gxBloom[1] = b0; gxAoRays = a0;
+        gxSunDir[0] = 0.55f; gxSunDir[1] = d0; gxSunDir[2] = -0.82f; gxFog[1] = f0; gxBloom[0] = bf0; gxBloom[1] = b0; gxAoRays = a0;
     }
     {                                                     /* eclairage precalcule : ombre portee de la tour, soleil */
         float lit[3], sh[3];
@@ -3286,8 +3302,13 @@ static void run_tests(const char *path) {
             fprintf(f, "objectifs : modes a objectif acceptes %d sur %d cartes neon (attendu %d)\n", modesOk, mapsN, 3 * mapsN);
             load_map(0); reset_game();
         }
-        {   /* --- Jauge de style : kill aerien a pleine vitesse, puis un deuxieme enchaine, un coup recu, et l'oubli --- */
-            reset_game(); gameTime = 100;
+        {   /* --- Jauge de style : seulement en CHALLENGE ; hors course, rien ne monte et les points restent x1 --- */
+            reset_game(); gameTime = 100; raceOn = 0;
+            P.grounded = 0; P.vel = v3(25, 0, 0);
+            style_kill(W_RAIL); style_tick(TICK);
+            float off = style; float offMul = style_mult();
+            fprintf(f, "style hors CHALLENGE (PvP, vagues) : jauge %.0f, points x%.2f (attendu 0, x1.00)\n", off, offMul);
+            reset_game(); gameTime = 100; raceOn = 1;   /* --- en CHALLENGE : kill aerien a pleine vitesse, enchaine, coup recu, oubli --- */
             P.grounded = 0; P.vel = v3(25, 0, 0);
             style_kill(W_RAIL);
             float s1 = style; int r1 = styleRank;
@@ -3302,7 +3323,7 @@ static void run_tests(const char *path) {
                        "points x%.2f en S (attendu 105 C, %.0f A, %.0f, 0 D, x2.00)\n",
                     s1, styleName[r1], s2, styleName[r2], s3, style, styleName[styleRank], styleMultTab[ST_S],
                     105 + 105 + STYLE_BONUS, 105 + 105 + STYLE_BONUS - 40 * STYLE_HURT_K);
-            reset_game();
+            raceOn = 0; reset_game();
         }
         {   /* --- Navigation des bots : depart -> but sur chaque carte, avec le graphe et les vraies commandes --- */
             static const float nv[8][7] = {               /* carte, depart x y z, but x y z */
@@ -3694,6 +3715,15 @@ static void run_tests(const char *path) {
         PkAnnounce pa;
         fprintf(f, "protocole : NET_VER %d, PkAnnounce %d octets avec ranked a l'octet %d (attendu 17, %d, %d)\n", NET_VER,
                 (int)sizeof(PkAnnounce), (int)((unsigned char *)&pa.ranked - (unsigned char *)&pa), (int)sizeof(PkHead) + 16 + 8, (int)sizeof(PkHead) + 20);
+        double sNow = nowT;                               /* chargement de carte : l'arrivant a NET_LOAD_GRACE de plus */
+        nowT = 100;
+        double joinedAt = nowT + NET_LOAD_GRACE;          /* comme host_on_join */
+        nowT = 100 + NET_TIMEOUT + 3; int okLoad = !net_silent(joinedAt);
+        nowT = 100 + NET_LOAD_GRACE + NET_TIMEOUT + 1; int goneLate = net_silent(joinedAt);
+        nowT = 100 + NET_TIMEOUT + 1; int goneNormal = net_silent(100);
+        fprintf(f, "reseau : arrivant qui charge 8 s garde %d, coupe apres la grace %d, joueur muet 6 s coupe %d (attendu 1 1 1)\n",
+                okLoad, goneLate, goneNormal);
+        nowT = sNow;
     }
 
     botLog = NULL;

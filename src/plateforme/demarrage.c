@@ -226,7 +226,8 @@ static int velocity_main(const char *cmd) {
             else if (!strcmp(t, "--teams") && (t = strtok(NULL, " "))) wantTeams = atoi(t) < 0 ? 0 : atoi(t) > TEAM_MAX ? TEAM_MAX : atoi(t);
             else if (!strcmp(t, "--regles") && (t = strtok(NULL, " "))) {   /* --regles mode,grappin,munitions,boutique,specs,minutes */
                 MatchRules r = wantRules;
-                if (sscanf(t, "%d,%d,%d,%d,%d,%d", &r.mode, &r.hook, &r.ammo, &r.shop, &r.specs, &r.minutes) >= 1 && r.mode >= 0 && r.mode < MODE_COUNT) wantRules = r;
+                if (sscanf(t, "%d,%d,%d,%d,%d,%d", &r.mode, &r.hook, &r.ammo, &r.shop, &r.specs, &r.minutes) >= 1 && r.mode >= 0 && r.mode < MODE_COUNT &&
+                    r.ammo >= 0 && r.ammo < AMMO_COUNT && r.minutes > 0 && r.minutes <= 60) wantRules = r;   /* memes bornes que velocity.ini */
             }
             else if (!strcmp(t, "--updated")) updAfter = 1;
             else if (!strcmp(t, "--level") && (t = strtok(NULL, " "))) botLevel = atoi(t) < 0 ? 0 : atoi(t) > 2 ? 2 : atoi(t);
@@ -347,7 +348,7 @@ static int velocity_main(const char *cmd) {
     reset_game();
 
     if (shotMode && (strstr(shotPath, "settings") || strstr(shotPath, "menu") || strstr(shotPath, "loadout") ||
-                     strstr(shotPath, "heberger") ||
+                     strstr(shotPath, "heberger") || strstr(shotPath, "graphismes") ||
                      strstr(shotPath, "update"))) {   /* "skinmenu" contient "menu" */   /* captures des menus */
         appState = APP_MENU;
         menu_backdrop();
@@ -356,6 +357,11 @@ static int velocity_main(const char *cmd) {
             set_status("nouvelle version disponible : build 5");
         }
         if (strstr(shotPath, "settings")) { settingsOpen = 1; waitAct = A_SKILL; waitSlot = 1; }
+        if (strstr(shotPath, "graphismes")) {             /* PARAMETRES > GRAPHISMES, aide du reglage QUALITE survole */
+            settingsOpen = 1; settingsPage = 1;
+            SetLay L = settings_lay(winW * 0.5f);
+            uiMX = (int)(winW * 0.5f - 100); uiMY = (int)(L.y0 + (L.compact ? 16.0f : 22.0f) + 10);
+        }
         if (strstr(shotPath, "loadout")) { loadoutOpen = 1; if (strstr(shotPath, "charge")) wantSkill = SK_CHARGE; }
         if (strstr(shotPath, "heberger")) { hostOpen = 1; wantTeams = 2; hostBots = 1; }
         if (strstr(shotPath, "skinmenu")) { skinOpen = 1; wantSkin = SKN_POUSSIN; skinPrevTeam = 1; nowT = 0.4; }
@@ -631,6 +637,7 @@ static int velocity_main(const char *cmd) {
             P.vel = v3(0, 0, -32);
         }
         if (strstr(shotPath, "style")) {                  /* jauge de style en S, trois bonus qui defilent */
+            styleShow = 1;                                /* la jauge n'existe qu'en CHALLENGE : forcee pour la capture */
             P.grounded = 0; P.vel = v3(0, 0, -26);
             style_kill(W_COIN); style_kill(W_RAIL); style_add(60, "PARRY");
             styleFlash = 0.4f;

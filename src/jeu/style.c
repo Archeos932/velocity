@@ -7,8 +7,9 @@
 /* des bonus (en l'air, a grande vitesse, pendu au grappin, juste      */
 /* apres un wall-run, au contact, par ricochet, enchaines). Il baisse  */
 /* tout seul (plus vite en haut de l'echelle) et a chaque coup recu.   */
-/* Effets : multiplicateur de points en solo (styleMult), musique plus */
-/* intense en A et S, et le rang affiche a droite du viseur.           */
+/* Seulement en CHALLENGE (mode COURSE, style_on) : ni en PvP ni en  */
+/* solo par vagues pour l'instant. Effets : musique plus intense en A  */
+/* et S, et le rang affiche a droite du viseur.                        */
 /* ------------------------------------------------------------------ */
 enum { ST_D, ST_C, ST_B, ST_A, ST_S, ST_COUNT };
 static const float styleAt[ST_COUNT] = { 0, STYLE_C, STYLE_B, STYLE_A, STYLE_S };   /* seuils de chaque rang */
@@ -24,13 +25,16 @@ static int styleRank, styleChain, styleTopRank;
 static float styleHpPrev = 100;
 static struct { char txt[24]; float t, pts; } styleFeed[STYLE_FEED];   /* derniers bonus, du plus recent au plus ancien */
 
+static int styleShow;                                     /* capture --shot style : jauge forcee hors course */
+static int style_on(void) { return raceOn || styleShow; }   /* jauge active : CHALLENGE seulement */
 static int style_rank(void) { int r = 0; while (r + 1 < ST_COUNT && style >= styleAt[r + 1]) r++; return r; }
-static float style_mult(void) { return styleMultTab[styleRank]; }
+static float style_mult(void) { return style_on() ? styleMultTab[styleRank] : 1.0f; }
 static void style_reset(void) {
     style = 0; styleRank = 0; styleChain = 0; styleFlash = 0; styleHpPrev = P.hp;
     memset(styleFeed, 0, sizeof styleFeed);
 }
 static void style_add(float pts, const char *why) {
+    if (!style_on()) return;
     style = clampf(style + pts, 0, STYLE_MAX);
     if (why && pts > 0) {
         memmove(&styleFeed[1], &styleFeed[0], sizeof styleFeed[0] * (STYLE_FEED - 1));
@@ -47,6 +51,7 @@ static void style_add(float pts, const char *why) {
 }
 /* un kill a moi : w = arme (W_*), en LAN comme en solo */
 static void style_kill(int w) {
+    if (!style_on()) return;                              /* hors CHALLENGE : pas meme le chrono des enchainements */
     float base = STYLE_KILL;
     style_add(base, "KILL");
     if (!P.grounded && P.hook == HOOK_NONE) style_add(STYLE_BONUS, "AERIEN");
@@ -64,7 +69,7 @@ static void style_kill(int w) {
 static void style_parry(void) { style_add(STYLE_PARRY, "PARRY"); }
 
 static void style_tick(float dt) {
-    if (P.dead) { if (style > 0) style_reset(); return; }
+    if (P.dead || !style_on()) { if (style > 0 || styleFeed[0].t > 0) style_reset(); return; }
     float sp = hlen(P.vel);
     if (P.wallrun) styleWallT = 1.0f; else styleWallT -= dt;
     float gain = 0;

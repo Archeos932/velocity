@@ -441,6 +441,8 @@ static void host_start_match(void) {
     NetEvent e = ev_new(EV_MATCH);
     e.target = (unsigned char)(mapRotate ? map_rotate_next(curMap, rules.mode) : curMap);   /* ROTATION : carte suivante a chaque match */
     if (ranked) e.target = (unsigned char)rk_map_pick(e.target);   /* classe : jamais une carte de course */
+    if (e.target != curMap)                               /* changement de carte : chacun la charge, silence attendu */
+        for (int i = 1; i < MAXP; i++) if (NP[i].active) NP[i].lastHeard = fmax(NP[i].lastHeard, nowT + NET_LOAD_GRACE);
     net_emit(&e);
     apply_event(&e);
     for (int i = 0; i < MAXP; i++) if (NP[i].active) host_respawn(i);
@@ -532,7 +534,7 @@ static void host_on_join(const PkJoin *pj, const struct sockaddr_in *from) {
         memcpy(NP[id].name, pj->name, 15);
         NP[id].name[15] = 0;
         NP[id].addr = *from;
-        NP[id].lastHeard = nowT;
+        NP[id].lastHeard = nowT + NET_LOAD_GRACE;         /* il charge la carte avant de repondre */
         NP[id].respawnT = 1.0f;
         NP[id].team = 0;                                  /* equipes : la moins nombreuse, bleue a egalite (id deja compte en bleu) */
         if (teamSize > 0) NP[id].team = (unsigned char)(team_count(0) - 1 > team_count(1) ? 1 : 0);

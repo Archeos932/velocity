@@ -64,7 +64,8 @@ Sur Mac : `./build_mac.sh`, puis `Velocity.app/Contents/MacOS/velocity --test te
    « (attendu …) ». Toute nouvelle mécanique reçoit sa ligne de test dans `run_tests()` (`src/tests/tests.c`).
 2. **Captures** : `velocity.exe --shot X.bmp`. Le nom choisit la scène (sous-chaîne, liste complète dans
    `src/plateforme/demarrage.c`, chercher `strstr(shotPath`, et §6 de `docs/CODE.md`) :
-   - menus : `menu` (avec l'encadré TOP 3 factice), `settings`, `loadout`, `heberger`, `update`, `skinmenu` ;
+   - menus : `menu` (avec l'encadré TOP 3 factice), `settings`, `graphismes` (PARAMETRES > GRAPHISMES), `loadout`,
+     `heberger`, `update`, `skinmenu` ; mise en page en 1024 × 640 : `settings_small`, `graphismes_small` ;
    - LAN : `dm`, `dm_equipes` (`_fin`, `_bas`), `dm_mort`, `dm_<arme>` (`enclume`, `lance`, `fleau`, `poings`, `egide`,
      `eventail`, `tesla`), `skills`, `ranked` (fin de match classée), `boutique`, `armedepart` ;
    - solo (scène par défaut) : `rail`, `impact`, `fx`, `changearme`, `vie`, `style`, et une arme (`elan`, `scie`…) ;

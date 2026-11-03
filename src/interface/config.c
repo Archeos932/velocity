@@ -7,6 +7,7 @@
 enum { ACT_NONE, ACT_SOLO, ACT_HOST, ACT_BROWSE, ACT_QUIT, ACT_BACK, ACT_JOIN_FOUND, ACT_JOIN_IP, ACT_RESUME,
        ACT_RESTART, ACT_LEAVE, ACT_FULLSCREEN, ACT_QUICK, ACT_SPEC_FOUND, ACT_VSBOT, ACT_RACE, ACT_RANKED };
 static int settingsOpen, waitAct = -1, waitSlot, uiDown, uiDrag;
+static int settingsPage;                                  /* ecran PARAMETRES : 0 = reglages et commandes, 1 = GRAPHISMES */
 static int fullscreen;
 static char cfgPath[MAX_PATH];
 
@@ -51,7 +52,7 @@ static void cfg_save(void) {
     fprintf(f, "map=%d" "\n" "map_rotate=%d" "\n", menuMap, mapRotate);
     fprintf(f, "regles=%d,%d,%d,%d,%d,%d" "\n" "spec=%d" "\n", wantRules.mode, wantRules.hook, wantRules.ammo, wantRules.shop,
             wantRules.specs, wantRules.minutes, wantSpec);
-    if (strcmp(lobbyAddr, LOBBY_DEFAULT)) fprintf(f, "lobby=%s" "\n", lobbyAddr);   /* le defaut peut changer avec une mise a jour */
+    if (lobbyIni[0] && strcmp(lobbyIni, LOBBY_DEFAULT)) fprintf(f, "lobby=%s" "\n", lobbyIni);   /* pas --lobby ; le defaut peut changer */
     if (hex_ok(rkId, 32) && hex_ok(rkKey, 32))           /* mode classe : identite, puis cache de la cote (le serveur fait foi) */
         fprintf(f, "ranked_id=%s" "\n" "ranked_key=%s" "\n", rkId, rkKey);
     fprintf(f, "mmr=%d" "\n" "ranked_played=%d" "\n" "ranked_wins=%d" "\n", myMmr, rankPlayed, rankWins);
@@ -88,7 +89,7 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
         else if (!strcmp(line, "online")) onlineOn = atoi(v) != 0;
         else if (!strcmp(line, "teams")) wantTeams = atoi(v) < 0 ? 0 : atoi(v) > TEAM_MAX ? TEAM_MAX : atoi(v);
         else if (!strcmp(line, "update_check")) updCheck = atoi(v) != 0;
-        else if (!strcmp(line, "lobby") && v[0]) snprintf(lobbyAddr, sizeof lobbyAddr, "%s", v);
+        else if (!strcmp(line, "lobby") && v[0]) { snprintf(lobbyAddr, sizeof lobbyAddr, "%s", v); snprintf(lobbyIni, sizeof lobbyIni, "%s", v); }
         else if (!strcmp(line, "ranked_id") && hex_ok(v, 32)) snprintf(rkId, sizeof rkId, "%s", v);
         else if (!strcmp(line, "ranked_key") && hex_ok(v, 32)) snprintf(rkKey, sizeof rkKey, "%s", v);
         else if (!strcmp(line, "mmr")) myMmr = rank_clamp(atoi(v));

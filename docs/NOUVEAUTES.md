@@ -321,6 +321,31 @@ code.
 
 ---
 
+## 24. Jauge de style réservée au CHALLENGE
+
+- La jauge **D → S** (et son multiplicateur de points) n'existe plus qu'en **CHALLENGE** (mode COURSE, LA TOILE) :
+  en PvP et en solo par vagues elle ne monte pas, n'est pas affichée et les points restent ×1 (`style_on()` dans
+  `src/jeu/style.c`). Capture `--shot style` : jauge forcée (`styleShow`). Test : « style hors CHALLENGE ».
+
+## 25. Entre-deux de rendu : HUD allégé, ombres et halo adoucis, écran GRAPHISMES
+
+- **HUD** : on garde la barre de vie (graduations, traînée des dégâts) et les fonds sous les textes, mais en voile
+  léger (`hud_fonds` 0,45 → 0,22) et **sans le liseré clair** du haut (`hud_panel`, `src/interface/texte.c`) ; le fil
+  des kills suit la même opacité.
+- **Lumière** : ombres moins noires (`occlusion_min` 0,15 → 0,45, `ciel_lumiere` 0,52 0,54 0,74 → 0,64 0,66 0,84,
+  `rebond_sol` 0,16 0,13 0,12 → 0,36 0,31 0,29, `soleil_force` 1,3 → 1,2, `ombre_opacite` 0,5 → 0,4) : l'escalier
+  central de l'Arène reste lisible à contre-jour. Bloom discret (`bloom` 0,7 3 → 0,5 4), soleil plus petit
+  (`soleil_taille` 8 30 120 → 6 16 50, `soleil_halo` 0,30 0,55 0,42 → 0,16 0,30 0,30, `reflets_soleil` 0,5 → 0,25).
+  Défauts du code (`src/graphismes/rendu_ini.c`) = `graphismes/rendu.ini` ; ambiances NUIT et JOUR ajustées.
+- **Écran GRAPHISMES** (PARAMETRES > GRAPHISMES) : QUALITE, CIEL, OMBRES, BLOOM, EFFETS D'ECRAN, FLASHS D'IMPACT,
+  PLEIN ECRAN, AFFICHER LES FPS, SECOND ECRAN et sa VUE (HAUT / 3D), rappel de F5, dossier `graphismes` trouvé, aide
+  du réglage survolé. PARAMETRES garde les curseurs, AXE Y, CAMERA DE MORT, PARTIES EN LIGNE, MISES A JOUR AUTO et
+  les commandes. Libellés complets, mise en page qui tient en 1024 × 640 ; Échap revient d'un écran à la fois.
+- **Mode DRAPEAU** : « DRAPEAU BLEU » (et « LES BLEUS MARQUENT », « ZONE A PRISE PAR LES BLEUS » dans les messages),
+  états des drapeaux sur une ligne sous le score au lieu de le chevaucher (`src/interface/modes_hud.c`).
+- Captures : `--shot graphismes.bmp`, `settings_small.bmp`, `graphismes_small.bmp`. Tests : « graphismes defauts »,
+  « menus : ECHAP depuis GRAPHISMES ».
+
 ## Vérifications faites
 
 - Compilation macOS sans avertissement ; tous les tests `--test` conformes, y compris ceux d'`origin/dev` (stéréo,

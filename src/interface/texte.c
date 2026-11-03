@@ -120,9 +120,9 @@ static void rect_vgrad(float x, float y, float w, float h, float r, float g, flo
     glEnd();
 }
 
-/* fond du HUD : plaque sombre (opacite gxHudPanel, rendu.ini) et liseré clair en haut, pour lire sur un ciel clair */
+/* fond du HUD : voile sombre leger (opacite gxHudPanel, cle hud_fonds de rendu.ini), sans liseret : le texte a deja
+ * son ombre portee, le voile aide seulement a le lire sur un ciel clair, sans faire de bloc sombre */
 static void hud_panel(float x, float y, float w, float h) {
     if (gxHudPanel <= 0) return;
     rect(x, y, w, h, 0.02f, 0.025f, 0.06f, gxHudPanel);
-    rect(x, y, w, 2, 0.6f, 0.75f, 1, gxHudPanel * 0.8f);
 }

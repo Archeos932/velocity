@@ -7,29 +7,29 @@
  * F5 en jeu le relit et reconstruit textures et lightmaps. Une cle absente garde son defaut.
  * Les textures sol.bmp, mur.bmp, grain.bmp du meme dossier remplacent les textures generees (et rendent alors
  * sans effet sol_texture, mur_texture, grain_force). */
-static float sunCol[3] = { 1.00f, 0.84f, 0.66f }, skyCol[3] = { 0.52f, 0.54f, 0.74f },
-             bounceCol[3] = { 0.16f, 0.13f, 0.12f }, padGlowCol[3] = { 0.25f, 0.85f, 1.0f };
-static float gxSunDir[3] = { 0.55f, 0.66f, -0.82f }, gxSunPow = 1.3f, gxPad[2] = { 0.9f, 9 };
-static float gxLmDens = 3, gxAoRays = 12, gxAoRange = 4.5f, gxAoMin = 0.15f, gxLmBlur = 2;
+static float sunCol[3] = { 1.00f, 0.84f, 0.66f }, skyCol[3] = { 0.64f, 0.66f, 0.84f },
+             bounceCol[3] = { 0.36f, 0.31f, 0.29f }, padGlowCol[3] = { 0.25f, 0.85f, 1.0f };
+static float gxSunDir[3] = { 0.55f, 0.66f, -0.82f }, gxSunPow = 1.2f, gxPad[2] = { 0.9f, 9 };
+static float gxLmDens = 3, gxAoRays = 12, gxAoRange = 4.5f, gxAoMin = 0.45f, gxLmBlur = 2;
 static float gxObjAmb[3] = { 0.40f, 0.40f, 0.52f }, gxObjSun[2] = { 0.25f, 0.65f };
 static float gxVmAmb[3] = { 0.42f, 0.42f, 0.52f }, gxVmSun[2] = { 0.30f, 0.45f };
-static float gxShadowCol[3] = { 0.02f, 0.02f, 0.06f }, gxShadowAlpha = 0.5f, gxShadowMaxH = 30;
+static float gxShadowCol[3] = { 0.02f, 0.02f, 0.06f }, gxShadowAlpha = 0.4f, gxShadowMaxH = 30;
 static float gxFogCol[3] = { 0.34f, 0.30f, 0.44f }, gxFog[2] = { 50, 240 };
 /* couleurs de la carte : l'Arene suit rendu.ini (et ses ambiances), les autres cartes ont leur ciel (MapDef) */
 static const float *map_fog_col(void) { return curMap == 0 ? gxFogCol : maps[curMap].fog; }
 static float gxSkyZen[3] = { 0.025f, 0.035f, 0.11f }, gxSkyMid[3] = { 0.13f, 0.12f, 0.27f }, gxSkyHor[3] = { 0.36f, 0.30f, 0.45f };
-static float gxSunGlow[3] = { 0.30f, 0.55f, 0.42f }, gxStars = 260, gxSunSize[3] = { 8, 30, 120 };
+static float gxSunGlow[3] = { 0.16f, 0.30f, 0.30f }, gxStars = 260, gxSunSize[3] = { 6, 16, 50 };
 static float gxCity[5] = { 70, 260, 120, 30, 85 }, gxCityCol[3] = { 0.16f, 0.14f, 0.26f }, gxCityWin = 0.35f;
-static float gxBloom[4] = { 0.7f, 3, 2, 1.6f };
+static float gxBloom[4] = { 0.5f, 4, 2, 1.6f };
 static float gxTexScale[3] = { 0.5f, 0.5f, 2.37f }, gxFloorTex[2] = { 64, 0.80f }, gxWallTex[3] = { 128, 64, 0.62f };
 static float gxGrain = 0.22f, gxEdges = 0.25f;
 static float gxTrail[3] = { 16, 0.55f, 0.35f }, gxOutline = 3;
 static float gxMap3d[3] = { 30, 2.0f, 52 };                /* carte du 2e ecran en 3D : champ (deg), recul (x taille), inclinaison (deg) */
-static float gxHudPanel = 0.45f;                         /* opacite des fonds sous les textes du HUD (0 = aucun) */
+static float gxHudPanel = 0.22f;                         /* opacite des fonds sous les textes du HUD (0 = aucun ; leger : le decor reste visible) */
 static float gxNeonC[3] = { 0.2f, 0.95f, 1.0f }, gxNeonM[3] = { 1.0f, 0.25f, 0.85f }, gxNeonO[3] = { 1.0f, 0.6f, 0.15f };
 static float gxNeon[3] = { 1.0f, 0.55f, 5.0f }, gxBleed = 0.35f;   /* neons : eclat, lueur sur le decor, portee ; rebond colore */
 static float gxLights = 1.0f;                             /* lumieres dynamiques (armes, explosions), 0 = aucune */
-static float gxClouds[2] = { 18, 0.35f }, gxCloudCol[3] = { 0.62f, 0.5f, 0.66f }, gxDust = 120, gxFlare = 0.5f;
+static float gxClouds[2] = { 18, 0.35f }, gxCloudCol[3] = { 0.62f, 0.5f, 0.66f }, gxDust = 120, gxFlare = 0.25f;
 static float gxRain = 0, gxStorm = 0;                     /* pluie (gouttes), orage (eclairs par minute) */   /* trainees : vitesse min, opacite, largeur ; contours */
 typedef struct { const char *key; float *v; int n; } GfxKey;
 static const GfxKey gfxKeys[] = {
@@ -86,6 +86,8 @@ static void gfx_clamp(void) {                             /* valeurs absurdes ra
     gxAoMin = clampf(gxAoMin, 0, 1); gxLmBlur = clampf(gxLmBlur, 0, 6);
     gxBloom[1] = clampf(gxBloom[1], 1, 4); gxBloom[2] = clampf(gxBloom[2], 0, 6); gxStars = clampf(gxStars, 0, 2000);
     gxCity[0] = clampf(gxCity[0], 0, 400); gxFog[1] = fmaxf(gxFog[1], gxFog[0] + 1);
+    gxCity[1] = clampf(gxCity[1], 60, 1000); gxCity[2] = clampf(gxCity[2], 0, 600);   /* distance, ecart (m) */
+    gxCity[3] = clampf(gxCity[3], 2, 300); gxCity[4] = clampf(gxCity[4], 0, 300);     /* hauteurs : borne les fenetres */
     gxClouds[0] = clampf(gxClouds[0], 0, 80); gxDust = clampf(gxDust, 0, 600); gxRain = clampf(gxRain, 0, 2000);
     gxNeon[2] = clampf(gxNeon[2], 0.5f, 12); gxOutline = clampf(gxOutline, 0, 8);
     gxMap3d[0] = clampf(gxMap3d[0], 10, 80); gxMap3d[1] = clampf(gxMap3d[1], 1, 5); gxMap3d[2] = clampf(gxMap3d[2], 15, 89);

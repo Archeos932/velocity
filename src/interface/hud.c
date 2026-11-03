@@ -293,7 +293,7 @@ static void draw_killcam_hud(float cx, float cy) {
 
 /* jauge de style : rang (lettre), mot, barre du rang en cours, derniers bonus ; a droite, a mi-hauteur */
 static void draw_style_hud(void) {
-    if (P.dead || spectating || (style <= 0.5f && styleFeed[0].t <= 0)) return;
+    if (!style_on() || P.dead || spectating || (style <= 0.5f && styleFeed[0].t <= 0)) return;
     int r = styleRank;
     const float *c = styleCol[r];
     float x = winW - 250.0f, y = winH * 0.36f, fl = fmaxf(styleFlash, 0), hurt = fmaxf(-styleFlash, 0);

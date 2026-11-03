@@ -8,7 +8,7 @@ Tout l'aspect visuel du jeu se règle ici, **sans toucher au code ni recompiler*
 | `sol.bmp` | texture du sol et des dessus de blocs (256 px) |
 | `mur.bmp` | texture des murs (256 px) |
 | `grain.bmp` | grain fin multiplié par-dessus le décor (64 px, gris clair à blanc) |
-| `ambiance_nuit.ini`, `ambiance_jour.ini`, `ambiance_orage.ini` | ambiances choisies dans PARAMETRES > CIEL : elles remplacent une partie de `rendu.ini` (crée la tienne en copiant une de ces lignes) |
+| `ambiance_nuit.ini`, `ambiance_jour.ini`, `ambiance_orage.ini` | ambiances choisies dans PARAMETRES > GRAPHISMES > CIEL : elles remplacent une partie de `rendu.ini` (crée la tienne en copiant une de ces lignes) |
 
 ## Mode d'emploi
 
@@ -17,7 +17,14 @@ Tout l'aspect visuel du jeu se règle ici, **sans toucher au code ni recompiler*
 3. En jeu, appuie sur **F5** : le fichier et les textures sont relus, l'éclairage est recalculé
    (« GRAPHISMES RECHARGES » s'affiche). Pas besoin de relancer le jeu.
 
-PARAMETRES > QUALITE (BASSE / MOYENNE / ULTRA) allège les réglages coûteux pour les petites machines.
+PARAMETRES > GRAPHISMES > QUALITE (BASSE / MOYENNE / ULTRA) allège les réglages coûteux pour les petites machines.
+Le même écran GRAPHISMES rappelle la touche F5 et affiche le chemin du dossier `graphismes` que le jeu a trouvé
+(ou « dossier absent » : le jeu garde alors son aspect par défaut).
+
+Réglages par défaut : ombres douces (les zones à l'ombre restent lisibles : `occlusion_min`, `ciel_lumiere`,
+`rebond_sol`), bloom discret (seuls néons et soleil ont un halo), petit soleil sans grosse tache, fonds du HUD
+légers (`hud_fonds`). Pour retrouver un rendu plus contrasté : `occlusion_min = 0.15`, `ciel_lumiere = 0.52 0.54 0.74`,
+`bloom = 0.7 3 2 1.6`, `soleil_taille = 8 30 120`, `hud_fonds = 0.45`.
 
 Une ligne effacée reprend sa valeur d'origine. Une valeur hors limites est ramenée dans des bornes raisonnables.
 

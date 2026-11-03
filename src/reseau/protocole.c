@@ -14,6 +14,7 @@
 #define NET_VER   17      /* 15 : regles (mode, grappin, munitions, boutique, specs) et objectifs dans PkSnap, EV_OBJ, spec dans NetPState ;
                              16 = fusion du fork + mode classe (PkJoin, PkRoster, PkAnnounce.ranked, PkWelcome pad[1]) ;
                              17 = cartes CITADELLE et OASIS retirees, objectifs sur les cartes neon */
+static int net_silent(double last) { return nowT - last > NET_TIMEOUT; }   /* plus de nouvelles (grace : last dans le futur) */
 enum { PK_QUERY = 1, PK_ANNOUNCE, PK_JOIN, PK_WELCOME, PK_STATE, PK_SNAP, PK_ROSTER, PK_EVENT, PK_LEAVE,
        PK_PUNCH, PK_KEEP };   /* PUNCH : ouvre le NAT vers un client ; KEEP : un spectateur dit qu'il est la */
 enum { EV_RAIL = 1, EV_ROCKET, EV_ROCKET_END, EV_PARRY, EV_HIT, EV_MELEE, EV_KILL, EV_RESPAWN, EV_MATCH, EV_INFO, EV_PICKUP,
@@ -902,6 +903,7 @@ static void apply_event(const NetEvent *ev) {
     case EV_MATCH:
         if (ev->sub == 0) {
             if (ev->target < NMAPS && ev->target != curMap) {   /* changement de carte entre deux matchs */
+                if (netMode == NET_CLIENT) lastSnapT = fmax(lastSnapT, nowT + NET_LOAD_GRACE);   /* l'hote charge aussi */
                 load_map(ev->target);
                 if (!spectating) { P.pos = P.prevPos = maps[curMap].start; P.vel = v3(0, 0, 0); }
                 else { P.pos = P.prevPos = vadd(maps[curMap].menuCam, v3(0, maps[curMap].specUp, 0)); }
@@ -928,7 +930,8 @@ static void apply_event(const NetEvent *ev) {
         break;
     case EV_OBJ: {                                        /* objectifs : message, son, pieces */
         int t = ev->target & 1, a = ev->actor, idx = (int)ev->f[0];
-        const char *tn = teamNames[t];
+        static const char *teamM[2] = { "BLEU", "ROUGE" };   /* au masculin : DRAPEAU BLEU, LES BLEUS (teamNames : EQUIPE BLEUE) */
+        const char *tn = teamM[t];
         static const char *zl[NZONES] = { "A", "B", "C" };
         int mine = myId < MAXP && (NP[myId].team & 1) == t;
         switch (ev->sub) {

@@ -50,7 +50,10 @@ static int in_key_down(int sc, int repeat) {
         latch[sc] = 1;
         if (sc == SC_ESC) {
             if (uiFocus) uiFocus = 0;
-            else if (settingsOpen) { settingsOpen = 0; cfg_save(); }
+            else if (settingsOpen) {                      /* GRAPHISMES -> PARAMETRES -> menu precedent */
+                if (settingsPage) settingsPage = 0; else settingsOpen = 0;
+                cfg_save();
+            }
             else if (loadoutOpen) { loadoutOpen = 0; cfg_save(); }
             else if (hostOpen) { hostOpen = 0; cfg_save(); }
             else if (skinOpen) { skinOpen = 0; cfg_save(); }

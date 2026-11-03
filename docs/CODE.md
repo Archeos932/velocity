@@ -69,6 +69,7 @@ quel fichier se trouve chaque partie.
 |---|---|---|
 | `appState` | `APP_MENU`, `APP_JOIN`, `APP_GAME` | menu principal / recherche de parties LAN / en jeu |
 | `settingsOpen` | 0 / 1 | écran PARAMÈTRES par-dessus le menu principal ou la pause |
+| `settingsPage` | 0 / 1 | dans PARAMÈTRES : 0 = réglages et commandes, 1 = écran GRAPHISMES (Échap revient d'un écran à la fois) |
 | `captured` | 0 / 1 | souris capturée (jeu) ; sinon le menu de pause s'affiche (`draw_pause`) |
 | `netMode` | `NET_OFF`, `NET_HOST`, `NET_CLIENT` | rôle réseau |
 | `dmMode` | 0 / 1 | 1 = deathmatch LAN (pas d'ennemis ni de vagues, PV tenus par l'hôte) |
@@ -437,7 +438,7 @@ Touche `A_SKILL` (ancien `A_COIN`), charges `P.skillCh` (max et recharge par `sk
 | Textes | `popText`/`popT` (centre), `msg`/`msgT` (gros titre), `streakLostT` | `snprintf` + durée | `game_tick` | `draw_hud` |
 | Effets d'écran | vignette, lignes de vitesse | — | — | `draw_hud`, si `screenFx` |
 | Changement d'arme | `wpFlashAt` (temps réel `nowT`), `P.switchT` | `weapon_select` | — (`WP_FLASH_T` 0,9 s) | `draw_hud` : nom de l'arme sous le viseur + emplacement surligné ; `draw_viewmodel` : l'arme remonte en pivotant. Capture : `--shot changearme.bmp` |
-| Fonds du HUD | `gxHudPanel` (`hud_fonds` dans `rendu.ini`, 0 = aucun) | — | — | `hud_panel` (`interface/texte.c`) sous les infos de partie, la mêlée, la vitesse, la chaîne de tir, le panneau d'arme ; un fond par ligne de killfeed |
+| Fonds du HUD | `gxHudPanel` (`hud_fonds` dans `rendu.ini`, 0,22 par défaut, 0 = aucun) | — | — | `hud_panel` (`interface/texte.c`) : voile sombre léger, sans liseré, sous les infos de partie, la mêlée, la vitesse, la chaîne de tir, le panneau d'arme ; un fond par ligne de killfeed |
 | Barre de vie | `hpGhost`, `hpHitAt`, `hpHealAt` | — | `hp_ghost_tick` (appelé par `draw_hud`, temps réel) : la partie perdue reste `HP_GHOST_HOLD` 0,4 s puis se vide à `HP_GHOST_RATE` 80 PV/s | `draw_hud` : traînée blanche puis rouge, éclat vert au soin, graduations tous les 25 PV. Capture : `--shot vie.bmp` |
 
 ### 3.7 Audio synthétisé
@@ -544,7 +545,15 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
 - Écrans : `draw_main_menu` (pseudo, SOLO, PARTIE RAPIDE / PARTIE CLASSEE, HÉBERGER, REJOINDRE, encadré CLASSEMENT + TOP 3, PARAMÈTRES, QUITTER + aide
   `draw_controls`), `draw_join_menu` (parties trouvées + IP), `draw_pause` (en jeu, souris libre),
   `draw_settings` (réglages à gauche, commandes à droite ; `waitAct`/`waitSlot` = case en attente d'une
-  touche ; Échap annule, Retour arrière/Suppr efface).
+  touche ; Échap annule, Retour arrière/Suppr efface). PARAMÈTRES garde la sensibilité, le champ de vision, le
+  volume, la musique, AXE Y, CAMERA DE MORT, PARTIES EN LIGNE, MISES A JOUR AUTO, les commandes, RETOUR / PAR
+  DEFAUT et un bouton **GRAPHISMES** (liseré doré) qui ouvre `draw_graphics_settings` (`settingsPage` = 1) :
+  RENDU (QUALITE, CIEL, OMBRES, BLOOM, EFFETS D'ECRAN, FLASHS D'IMPACT) et ECRAN (PLEIN ECRAN, AFFICHER LES FPS,
+  SECOND ECRAN, VUE DU SECOND ECRAN : HAUT / 3D, grisée sans second écran), l'aide de F5, le dossier `graphismes`
+  trouvé (`gfxDir`, ou « dossier absent ») et l'explication du réglage survolé (`gfx_button`). Libellés complets
+  (« CAMERA DE MORT : OUI », pas d'abréviation). Mise en page commune `settings_lay` : compacte sous 760 px de
+  haut, tout tient en 1024 × 640 (`--shot settings_small.bmp`, `graphismes_small.bmp`). Échap : GRAPHISMES →
+  PARAMÈTRES → menu précédent (`in_key_down`). Test : « menus : ECHAP depuis GRAPHISMES ».
 - `draw_hud` : si `appState != APP_GAME`, dessine seulement le menu correspondant. En jeu : noms au-dessus
   des joueurs (`draw_name_tags`), vignette, chiffres de dégâts, flèche de direction des dégâts, viseur,
   marqueurs, vitesse en m/s, charges de dash, recharge et cible du grappin, panneau ÉPÉE
@@ -605,6 +614,13 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
   ville lointaine `skylineList` (`build_skyline_list`, décor sans collision).
 - **Bloom** (`bloom_apply`, réglage `bloom=`) : copie de l'image, réduction au quart, seuil doux (x^8 par
   multiplications), flou séparable, ajout. Fait avant l'impact frame et le HUD.
+- **Valeurs par défaut adoucies** (entre-deux entre la release b1dcfd6 et le rendu du fork) : ombres lisibles
+  (`occlusion_min` 0,45, `ciel_lumiere` 0,64 0,66 0,84, `rebond_sol` 0,36 0,31 0,29, `soleil_force` 1,2 : les marches
+  de l'escalier central, à contre-jour, ne sont plus noires), bloom discret (`bloom` 0,5 4 2 1,6 : seuil x^16, seuls
+  néons et soleil brillent), petit soleil (`soleil_taille` 6 16 50, `soleil_halo` 0,16 0,30 0,30, `reflets_soleil`
+  0,25), ombres des joueurs `ombre_opacite` 0,4, fonds du HUD `hud_fonds` 0,22 sans liseré. Mêmes valeurs dans
+  `rendu_ini.c` et `graphismes/rendu.ini` ; test « graphismes defauts ». Ambiances : NUIT (lune 7 14 34, ciel un peu
+  plus clair 0,34 0,38 0,62), JOUR (halo 0,14 0,26, bloom 0,35).
 - **Texte** : `glBitmap` (polices de `make_font`) est très lent sur certains pilotes (12 ms/image sur macOS). Au
   démarrage, `make_font_atlas` dessine les 224 glyphes une fois, les relit (`glReadPixels`, par lots si la fenêtre
   est petite) dans un atlas `GL_ALPHA` ; `text` dessine ensuite des quads texturés, au pixel près.
@@ -658,8 +674,8 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
   boîte ajoutent sa couleur.
 - **Ciel et météo** : nuages (`nuages`), poussière (`poussiere`), pluie (`pluie`), orage (`orage`, `storm_tick` :
   flash et tonnerre), reflets du soleil (`draw_flare`, `reflets_soleil`).
-- **Ambiances** : `gfxAmbiance` (PARAMETRES > CIEL, `ambiance=`) charge `graphismes/ambiance_nuit|jour|orage.ini`
-  par-dessus `rendu.ini`. **Qualité** : `gfxQuality` (PARAMETRES > QUALITE, `quality=`) plafonne les coûts
+- **Ambiances** : `gfxAmbiance` (PARAMETRES > GRAPHISMES > CIEL, `ambiance=`) charge `graphismes/ambiance_nuit|jour|orage.ini`
+  par-dessus `rendu.ini`. **Qualité** : `gfxQuality` (PARAMETRES > GRAPHISMES > QUALITE, `quality=`) plafonne les coûts
   (`gfx_quality_apply`) et règle ombres/bloom. Captures : `--shot arene_nuit.bmp`, `skins.bmp`, `skins_course.bmp`,
   `skinmenu.bmp`.
 - **Radar des alliés** (`draw_radar`) : mode équipes, en haut à gauche.
@@ -691,7 +707,8 @@ classement frags / morts / ratio, ma vitesse et ma vitesse max, chaîne de tir, 
 - **Carte de chaleur** (`maps_heat_add` appelé par `apply_event` sur `EV_KILL`, `maps_draw_heat`) : position de la
   victime (rouge) et du tireur (jaune) à chaque kill ; taches additives de rayon `MAPS_HEAT_R`. Affichée à la fin du
   match (`matchOver`), toujours en vue de dessus. Capture : `--shot carte_dm_equipes_fin.bmp`.
-- Réglage : PARAMETRES > « 2e ECRAN : NON / HAUT / 3D » (`second_ecran=`, `carte_vue=` dans `velocity.ini`).
+- Réglage : PARAMETRES > GRAPHISMES > « SECOND ECRAN : OUI / NON » et « VUE DU SECOND ECRAN : HAUT / 3D »
+  (`second_ecran=`, `carte_vue=` dans `velocity.ini`).
   **Désactivé par défaut** (`secondScreen` = 0) : la fenêtre ne s'ouvre que si le joueur l'a demandée.
   Jamais en `--bot`/`--shot`. Capture de la vue 3D : `--shot carte3d.bmp`, `carte3d_dm.bmp`…
 - Capture : `--shot carte.bmp` (solo), `carte_dm.bmp`, `carte_dm_equipes.bmp` dessinent cet écran dans la fenêtre du jeu.
@@ -703,7 +720,7 @@ retient l'œil, le cap et le tueur (en solo : l'ennemi vivant le plus proche qui
 `KILLCAM_T` (1,6 s, le respawn reste à `RESPAWN_TIME` 2,5 s), `render` prend la vue de `killcam_view` : la caméra
 recule et monte (`KILLCAM_BACK`, `KILLCAM_UP`, sans traverser les murs), pivote vers le tueur en `KILLCAM_TURN` et
 zoome (`KILLCAM_ZOOM`). `draw_killcam_hud` : bandes noires, « ELIMINE PAR … », arme, PV qui lui restent, crochets autour
-de lui ; le bas du HUD est masqué, le choix du loadout reste. Ni suicide ni chute. Réglage : PARAMETRES > CAM. MORT
+de lui ; le bas du HUD est masqué, le choix du loadout reste. Ni suicide ni chute. Réglage : PARAMETRES > CAMERA DE MORT
 (`camera_mort=`). Capture : `--shot dm_mort.bmp`.
 
 ### 3.17 Mise à jour depuis GitHub (bouton MISE A JOUR)
@@ -844,7 +861,9 @@ cartes de partie et une carte **CHALLENGE** (LA TOILE, mode COURSE seulement, §
   VITESSE (≥ `STYLE_FAST`), TARZAN (au grappin), SUR LE MUR (< 1 s après un wall-run), RICOCHET, AU CONTACT, DOUBLE /
   TRIPLE / CARNAGE (< `STYLE_CHAIN_T`) ; parry `STYLE_PARRY` ; porte de course. Baisse de `STYLE_DECAY` +
   `STYLE_DECAY_RANK` par rang et par seconde (×1,6 à l'arrêt), et de `STYLE_HURT_K` par PV perdu. Remise à zéro à la mort.
-- Effets : points du solo × `style_mult()` (1 ; 1,1 ; 1,25 ; 1,5 ; 2), musique +1 en A et +2 en S, rien sur
+- **Seulement en CHALLENGE** (mode COURSE : `style_on()` = `raceOn`) : en PvP et en solo par vagues, la jauge ne monte
+  pas, n'est pas dessinee et `style_mult()` vaut 1 (choix du proprietaire, pour l'instant).
+- Effets : points × `style_mult()` (1 ; 1,1 ; 1,25 ; 1,5 ; 2 ; sans effet hors CHALLENGE), musique +1 en A et +2 en S, rien sur
   l'équilibre PvP. Affichage `draw_style_hud` (lettre, mot, barre, derniers bonus). Branché dans `kill_enemy`,
   `apply_event` (`EV_KILL` à moi), `parry_feedback`, `game_tick`. Capture : `--shot style.bmp`.
 
@@ -1451,6 +1470,7 @@ Ouvre la fenêtre sans l'activer, prépare une scène, la dessine une fois (`ren
 | Le nom contient | Scène |
 |---|---|
 | `settings` | menu principal + écran PARAMÈTRES, avec une case en attente de touche (pièce, 2ᵉ touche) |
+| `graphismes` | menu principal + PARAMÈTRES > GRAPHISMES, aide du bouton QUALITE survolé (aucun autre nom de scène ne contient « graphismes ») |
 | `menu` | menu principal |
 | `dm` | scène de deathmatch factice : joueurs « Rival » (grappin, épée) et « Ninja », fil des kills, HUD LAN |
 | *(autre)* | combat solo scripté : vague 3, 8 ennemis, tirs rail et roquette, grappin sur la tour, HUD des deux axes |
@@ -1474,7 +1494,7 @@ Autres noms reconnus (voir `src/plateforme/demarrage.c`, chercher `strstr(shotPa
 
 Options après le nom : `--map N` (carte, §3.18), `--yaw A` (orientation) et `--pos x,y,z[,inclinaison]` (point de vue,
 cartes autres que l'Arène et `objectifs_*`). Sur une carte autre que l'Arène
-(hors `menu`/`settings`/`dm`), la scène est une vue de la carte depuis la caméra du menu ; le nom peut contenir
+(hors `menu`/`settings`/`graphismes`/`dm`), la scène est une vue de la carte depuis la caméra du menu ; le nom peut contenir
 `spawn` (depuis le premier point de départ), `chute` (3 m au-dessus de `killY` en tombant : plan rouge et
 vignette) ou `solo` (avec 8 drones). Exemple : `velocity.exe --shot puits.bmp --map 1 --yaw 0.8`.
 
@@ -1660,8 +1680,9 @@ Exemple : une troisième arme principale (`P.weapon == 2`).
    prend sa valeur par défaut.
 3. Lisez-la dans `game_tick` (ou une fonction appelée par lui) : `actP[A_XXX]` pour un appui,
    `act[A_XXX]` pour un maintien. Ne lisez jamais `keys[]` directement pour une commande de jeu.
-4. Mise en page : `draw_settings` affiche une ligne de 36 px par action et `draw_controls` une ligne de
-   21 px ; vérifiez que tout tient avec `--shot settings.bmp` et `--shot menu.bmp`.
+4. Mise en page : `draw_settings` affiche une ligne de 24 à 36 px par action (selon la hauteur de la fenêtre) et
+   `draw_controls` une ligne de 21 px ; vérifiez que tout tient avec `--shot settings.bmp`,
+   `--shot settings_small.bmp` (1024 × 640) et `--shot menu.bmp`.
 5. Bot (facultatif) : `botPress[A_XXX] = 1` ou `botHeld[A_XXX] = 1` dans `bot_think`.
 6. Test : étendez le scénario « reglages » de `run_tests` si la sauvegarde est concernée.
 
@@ -1672,9 +1693,11 @@ Exemple : une troisième arme principale (`P.weapon == 2`).
 2. `cfg_save` : ajoutez un `fprintf(f, "cle=%d" "\n", var);`.
 3. `cfg_load` : ajoutez un `else if (!strcmp(line, "cle")) var = ...;` en **bornant** la valeur
    (`clampf`, `!= 0`). Les clés inconnues sont ignorées, donc l'ordre n'a pas d'importance.
-4. `draw_settings` : un bouton bascule (`if (button(lx, y, lw, 46, buf)) var = !var;`) ou un curseur
+4. `draw_settings` (ou `draw_graphics_settings` pour un réglage d'affichage, avec son aide : `gfx_button`) :
+   un bouton bascule à libellé complet (`if (button(lx, y, lw, L.bh, buf)) var = !var;`) ou un curseur
    (`var = slider(id, lx, y, lw, "Libelle", buf, var, min, max);` avec un `id` unique : 1 à 3 sont
-   pris). Avancez `y` ; vérifiez que le bouton RETOUR reste à l'écran (`--shot settings.bmp`).
+   pris). Avancez `y` ; vérifiez que le bouton RETOUR reste à l'écran (`--shot settings.bmp`, `settings_small.bmp`,
+   `graphismes_small.bmp`).
 5. Utilisez la variable dans le code concerné.
 6. Test : ajoutez-la au scénario « reglages » de `run_tests` (modifier, `cfg_save`, remettre la valeur
    par défaut, `cfg_load`, afficher, puis restaurer).

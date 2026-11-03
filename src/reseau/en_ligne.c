@@ -17,6 +17,7 @@
 
 enum { LB_OFF, LB_CONNECTING, LB_ON, LB_FAILED };
 static char lobbyAddr[96] = LOBBY_DEFAULT;                /* "hote" (wss, 443) ou "hote:port" (ws si le port n'est pas 443) */
+static char lobbyIni[96];                                 /* lobby= de velocity.ini ("" = defaut) : --lobby ne change que lobbyAddr */
 static int onlineOn = 1;                                  /* chercher et publier les parties en ligne */
 static int lanEp;                                         /* --lanep : adresses locales a la place de STUN (tests sur une machine) */
 static int lbWantHost;                                    /* le lobby n'a trouve aucune partie : do_action() en heberge une */

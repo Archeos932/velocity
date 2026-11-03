@@ -156,15 +156,17 @@ static void draw_modes_hud(void) {
         text_c(0, cx, y + 70, buf, 0.9f, 0.9f, 1, 1);
     }
     if (rules.mode == MODE_DRAPEAU && md->flags) {
-        for (int f = 0; f < 2; f++) {
-            const char *st = obj.fl[f].state == FLAG_HOME ? "A LA BASE" : obj.fl[f].state == FLAG_DROPPED ? "TOMBE" : "PORTE";
-            if (obj.fl[f].state == FLAG_CARRIED && obj.fl[f].carrier < MAXP) st = obj.fl[f].carrier == myId ? "TU LE PORTES !" : pname(obj.fl[f].carrier);
-            snprintf(buf, sizeof buf, "DRAPEAU %s : %s", teamNames[f], st);
-            text_c(0, cx + (f ? 170.0f : -170.0f), y + 14, buf, teamCol[f][0], teamCol[f][1], teamCol[f][2], 1);
-            if (obj.fl[f].state != FLAG_HOME || f != me) obj_marker(flag_pos(f), f == me ? "TON DRAPEAU" : "DRAPEAU", teamCol[f]);
-        }
+        static const char *flagNames[2] = { "BLEU", "ROUGE" };   /* le drapeau : masculin (teamNames dit l'EQUIPE BLEUE) */
         snprintf(buf, sizeof buf, "%d  -  %d   (%d)", obj.pts[0], obj.pts[1], FLAG_CAPS);
         text_c(1, cx, y + 20, buf, 1, 1, 1, 1);
+        for (int f = 0; f < 2; f++) {                     /* une ligne sous le score : BLEU a gauche du centre, ROUGE a droite */
+            const char *st = obj.fl[f].state == FLAG_HOME ? "A LA BASE" : obj.fl[f].state == FLAG_DROPPED ? "TOMBE" : "PORTE";
+            if (obj.fl[f].state == FLAG_CARRIED && obj.fl[f].carrier < MAXP) st = obj.fl[f].carrier == myId ? "TU LE PORTES !" : pname(obj.fl[f].carrier);
+            snprintf(buf, sizeof buf, "DRAPEAU %s : %s", flagNames[f], st);
+            float tw = fontW[0] * (float)strlen(buf);
+            text(0, f ? cx + 24 : cx - 24 - tw, y + 48, buf, teamCol[f][0], teamCol[f][1], teamCol[f][2], 1);
+            if (obj.fl[f].state != FLAG_HOME || f != me) obj_marker(flag_pos(f), f == me ? "TON DRAPEAU" : "DRAPEAU", teamCol[f]);
+        }
         if (obj.fl[1 - me].state == FLAG_CARRIED && obj.fl[1 - me].carrier == myId)
             text_c(1, cx, winH * 0.5f + 90, obj.fl[me].state == FLAG_HOME ? "RAMENE-LE A TON DRAPEAU" : "TON DRAPEAU DOIT ETRE A LA BASE", 1, 0.85f, 0.3f, 0.9f);
     }

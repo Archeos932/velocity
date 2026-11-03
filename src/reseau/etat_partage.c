@@ -7,6 +7,9 @@
 #define MAXP          8
 #define MAXSPEC       4       /* spectateurs en direct sur l'hote (28 Ko/s chacun) */
 #define NET_PORT      27960
+#define NET_TIMEOUT    5.0    /* silence (s) au-dela duquel un joueur ou l'hote est considere comme parti */
+#define NET_LOAD_GRACE 10.0   /* delai en plus pendant le chargement d'une carte (arrivee, changement de carte) :
+                                 load_map est synchrone, le joueur n'envoie rien pendant ce temps */
 #define FRAG_LIMIT    15      /* frags pour gagner : partie hebergee a la main ou en LAN */
 #define FRAG_LIMIT_QUICK 7    /* partie rapide : l'hote l'annonce a tous dans PkSnap.fragLimit */
 #define MATCH_TIME    600.0f

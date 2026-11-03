@@ -215,9 +215,9 @@ static void net_update(float dt) {
     sendAcc += dt; rosterAcc += dt; queryAcc += dt; joinAcc += dt;
     if (netMode == NET_HOST) {
         for (int i = 1; i < MAXP; i++)
-            if (NP[i].active && nowT - NP[i].lastHeard > 5) host_drop(i);
+            if (NP[i].active && net_silent(NP[i].lastHeard)) host_drop(i);
         for (int i = 0; i < MAXSPEC; i++)
-            if (SP[i].active && nowT - SP[i].lastHeard > 5) { SP[i].active = 0; netlog("spectateur %d perdu", i); }
+            if (SP[i].active && net_silent(SP[i].lastHeard)) { SP[i].active = 0; netlog("spectateur %d perdu", i); }
         if (sendAcc >= 1.0f / 60) {
             sendAcc = fminf(sendAcc - 1.0f / 60, 0.05f);
             PkSnap s;
@@ -272,7 +272,7 @@ static void net_update(float dt) {
                 head(&k, PK_KEEP);
                 net_send(&k, sizeof k, &hostAddr);
             }
-            if (nowT - lastSnapT > 5) { net_disconnect_to_menu("connexion perdue avec l'hote"); return; }
+            if (net_silent(lastSnapT)) { net_disconnect_to_menu("connexion perdue avec l'hote"); return; }
         } else {
             if (sendAcc >= 1.0f / 60) {
                 sendAcc = fminf(sendAcc - 1.0f / 60, 0.05f);
@@ -282,7 +282,7 @@ static void net_update(float dt) {
                 net_send(&s, sizeof s, &hostAddr);
                 flush_events();
             }
-            if (nowT - lastSnapT > 5) { net_disconnect_to_menu("connexion perdue avec l'hote"); return; }
+            if (net_silent(lastSnapT)) { net_disconnect_to_menu("connexion perdue avec l'hote"); return; }
         }
     }
     rk_tick(dt);                                          /* mode classe */
