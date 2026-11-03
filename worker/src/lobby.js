@@ -39,6 +39,11 @@ export function handle(conns, c, raw) {
       c.send('pong');
       break;
 
+    case 'time':
+      // heure du serveur (ms) : les joueurs y calent l'horloge de match (src/reseau/horloge.c)
+      c.send(`time ${Date.now()}`);
+      break;
+
     case 'list': {
       m.sub = parseInt(w[1], 10) || 0;
       c.meta = m;

@@ -98,7 +98,9 @@ Sur Mac : `./build_mac.sh`, puis `Velocity.app/Contents/MacOS/velocity --test te
   Chaque joueur simule son mouvement ; les touches sont validées chez le tireur puis arbitrées
   dans `host_handle()`. Nouvel événement = `EV_*` + `net_fx_*()` émetteur + cas dans
   `apply_event()` (+ `host_handle()` s'il faut arbitrer). **Incrémenter `NET_VER`** dès qu'un
-  paquet ou un événement change (actuellement **16**, `src/reseau/protocole.c`).
+  paquet ou un événement change (actuellement **18**, `src/reseau/protocole.c`).
+  Chrono du match : temps réel, calé sur l'heure du worker (`time`), voir « Horloge de match commune » au §4 de
+  `docs/CODE.md` (`src/reseau/horloge.c`).
 - **Équité en réseau** : pas d'aide à la visée passive. L'aimant de visée (`aim_assist`) n'existe que comme
   compétence AIMANT (`SK_AIM`, `AIM_T` / `AIM_RECHARGE`), la même pour tous.
 - **Texte à l'écran** : la police ne couvre que CP1252 et le source est en UTF-8 → **pas

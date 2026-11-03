@@ -63,6 +63,7 @@
 
 #include "src/jeu/economie.c"                   /* boutique : pieces, arme de depart, achats a la mort */
 #include "src/reseau/classe.c"                   /* mode classe : etat, cote Elo, paliers, identite de classement */
+#include "src/reseau/horloge.c"                  /* horloge de match commune : heure du serveur, calage des joueurs */
 #include "src/reseau/protocole.c"                /* paquets, evenements EV_*, apply_event */
 #include "src/reseau/hote.c"                     /* hote : arbitrage (PV, kills, respawns, parry) */
 #include "src/reseau/modes.c"                    /* modes : chrono, 3 zones, drapeau, bouclier ; SOUTIEN */

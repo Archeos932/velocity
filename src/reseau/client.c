@@ -80,7 +80,7 @@ static void on_welcome(int id) {
 
 static void apply_snap(const PkSnap *s) {
     lastSnapT = nowT;
-    matchT = s->matchT;
+    matchT = clk_match_from_snap(s->matchT, s->clk, s->clkSrv & 1, s->matchOver);   /* + le trajet du paquet */
     matchOver = s->matchOver;
     matchWinner = s->winner;
     fragLimit = s->fragLimit > 0 ? s->fragLimit : FRAG_LIMIT;
@@ -224,6 +224,7 @@ static void net_update(float dt) {
             memset(&s, 0, sizeof s);
             head(&s.h, PK_SNAP);
             s.matchT = matchT; s.matchOver = (unsigned char)matchOver; s.winner = (unsigned char)matchWinner;
+            s.clk = clk_now(); s.clkSrv = (unsigned char)clkSrvOk;
             s.fragLimit = (unsigned char)fragLimit;
             for (int i = 0; i < npu; i++) if (PU[i].t <= 0) s.pickMask |= (unsigned short)(1 << i);
             for (int i = 0; i < MAXP; i++) {
@@ -324,7 +325,7 @@ static int net_host_start(void) {
     int m = host_setup_rules();
     if (curMap != m) load_map(m);                         /* carte choisie dans le menu (ou --map) */
     dm_local_start();
-    matchOver = 0; matchT = 0;
+    matchOver = 0; match_clock_start();
     if (ranked) rk_new_match();
     rkMmr[0] = myMmr; rkPlay[0] = rankPlayed;
     if (hex_ok(rkId, 32)) bin_of(rkId, rkRid[0], 16);

@@ -36,11 +36,13 @@ possibilité de regarder une partie. L'hôte reste un joueur (id 0) et fait auto
 | C→S | `host <ver> <joueurs> <max> <spec> <ep_public> <ep_lan> <nom> [<classe 0/1> <cote>]` | publier / mettre à jour mon salon (classé : cote moyenne des joueurs) |
 | C→S | `join <id> <mon_ep> <spec 0/1>` | rejoindre ou regarder un salon |
 | C→S | `quick <ver> <mon_ep> [<classe 0/1> <cote>]` | partie rapide : salon non classé le plus rempli et non plein ; **classée** : salon classé de cote la plus proche |
-| C→S | `ping` | maintien de connexion (toutes les 25 s) |
+| C→S | `ping` | maintien de connexion (après 25 s de silence) |
+| C→S | `time` | heure du serveur, pour l'horloge de match commune (6 fois à la connexion, puis toutes les 24 s) |
 | S→C | `hello <id>` | à la connexion |
 | S→C | `room <id> <joueurs> <max> <spec> <ep> <nom> <classe> <cote>` / `gone <id>` / `end` | liste et mises à jour |
 | S→C | `go <ep> <spec>` | adresse à rejoindre |
 | S→C | `punch <ep>` | (hôte) un client arrive, ouvre ton NAT vers lui |
+| S→C | `time <ms>` | heure du serveur (`Date.now()`) : chaque joueur y cale le chrono du match (`src/reseau/horloge.c`) |
 | S→C | `none` / `err <texte>` / `pong` | réponses |
 
 `ep` = `a.b.c.d:port`. Un salon disparaît quand l'hôte se déconnecte.

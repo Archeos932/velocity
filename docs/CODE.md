@@ -149,6 +149,7 @@ velocity/
 | `combat/roquettes.c`, `combat/projectiles.c` | projectiles | `spawn_proj`, `fire_rocket`, `proj_tick` |
 | `armes/*.c` | une arme par fichier (logique ; fiche de conception dans `docs/armes/`) | `slam_*`, `lance_*`, `flail_*`, `fist_*`, `shield_*`, `kin_*`, `sg_*`, `tesla_*`, `saw_*`, `mine_*` |
 | `solo/ennemis_vagues.c` | mode solo | `spawn_enemy`, `enemy_tick`, `wave_tick`, `reset_game` |
+| `reseau/horloge.c` | horloge de match commune | `match_clock_start` / `match_clock_tick` (hôte, temps réel), `clk_srv_sample` (heure du worker), `clk_match_from_snap` (client) |
 | `reseau/protocole.c` | paquets et événements | `NET_VER`, `PK_*`, `EV_*`, `net_emit`, `net_hit`, `net_fx_*`, `apply_event` |
 | `reseau/hote.c` | autorité de l'hôte | `host_handle`, `host_kill`, `host_tick`, `pick_spawn`, `map_rotate_next`, `host_start_match` |
 | `reseau/client.c` | client | `on_welcome`, `apply_snap`, `client_recv`, `net_update`, `net_connect` |
@@ -1122,7 +1123,8 @@ Plan et protocole complet : [`PLAN_EN_LIGNE.md`](PLAN_EN_LIGNE.md). Le jeu de co
   `worker/src/lobby.js` = logique pure (testée par `worker/test.js`), `index.js` = Worker/DO hibernable,
   `dev-server.js` = même logique en local (`node dev-server.js 8787`).
 - **Client** (`src/reseau/en_ligne.c`, inclus après `client.c` qui définit `net_connect_ex`) :
-  - fil WinHTTP (`lb_reader`) qui lit le WebSocket et fil d'écriture (`lb_writer`, `ping` toutes les 25 s),
+  - fil WinHTTP (`lb_reader`) qui lit le WebSocket et fil d'écriture (`lb_writer`, `ping` après 25 s de silence ;
+    en pratique la demande d'heure `time` de l'horloge de match, toutes les 24 s, en tient lieu),
     deux files protégées par `lbCs` ; le jeu ne touche aux sockets du lobby que via `lb_send` / `lb_update`.
   - `lb_update(dt)` (appelé par `net_update`) : (re)connexion avec attente de 4 s, lecture des lignes
     (`lb_line`), requêtes STUN, publication du salon de l'hôte (`host …`, au changement et toutes les 20 s),
@@ -1253,7 +1255,27 @@ deux ; 15 règles de partie et objectifs (`PkSnap` : `rMode`…, `obj` ; `EV_OBJ
 **16** fusion avec le mode classé du dépôt original (qui avait pris 14 de son côté) : `PkJoin` (`rid`, `mmr`,
 `rplay`), `PkRoster` (cotes, identifiants, `ranked`, `mid`, partis), `PkAnnounce.ranked`, `PkWelcome.pad[1]` et
 `refused = 2` ; **17** cartes LA CITADELLE et L'OASIS retirées (ordre de `maps[]`), objectifs sur les cartes néon
-(plateau du Canyon, balcons du Puits). La valeur fait foi dans `src/reseau/protocole.c`.
+(plateau du Canyon, balcons du Puits) ; **18** horloge de match commune (`PkSnap.clk`, `clkSrv`). La valeur fait foi
+dans `src/reseau/protocole.c`.
+
+### Horloge de match commune (`src/reseau/horloge.c`)
+
+Le chrono du match (`matchT`) suit le **temps réel**, plus les ticks : sous 10 images/s (le `dt` de la boucle est
+plafonné à 0,1 s) ou pendant le `hitstop`, la simulation ralentit mais pas le chrono.
+- **Hôte** : `match_clock_tick()` (dans `host_tick`) ajoute le temps réel écoulé depuis le tick précédent ; un seul
+  tick par image le reçoit, un tick sauté (hitstop) est rattrapé au suivant. Plus de `CLK_LOAD` (1 s) d'un coup =
+  chargement de carte, compté 1 s.
+- **Heure de référence** : celle du worker du lobby. Le jeu envoie `time`, le serveur répond `time <ms>`
+  (`Date.now()`) ; `clk_srv_sample` garde la mesure à l'aller-retour le plus court (décalage = heure serveur − milieu
+  de l'aller-retour ; la mesure gardée « vieillit » de 2 ms à chaque nouvelle pour suivre une dérive). 6 mesures à
+  0,5 s d'écart à la connexion au lobby, puis une toutes les 24 s, qui remplace le `ping` de maintien (même coût).
+  Un ancien worker répond `err cmd` : pas de calage, rien ne casse.
+- **Instantanés** : `PkSnap` porte `matchT`, `clk` (heure de l'hôte à l'envoi, `clk_now()`) et `clkSrv` (hôte calé
+  sur le serveur). Le client calcule `matchT` de l'hôte + le trajet du paquet : si les deux sont calés sur le
+  serveur, trajet = son heure serveur − `clk` ; sinon (LAN, lobby injoignable) il se cale sur l'horloge de l'hôte,
+  en gardant le plus grand `clk − nowT` reçu (le trajet le plus court). Trajet borné à [0, 1 s] ; match fini :
+  chrono figé à la valeur de l'hôte.
+- Journal : `horloge : calee sur le serveur (aller-retour N ms)`. Test : « horloge de match ».
 
 ---
 

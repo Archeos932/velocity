@@ -434,7 +434,7 @@ static int map_rotate_next(int from, int mode) {
 }
 
 static void host_start_match(void) {
-    matchOver = 0; matchT = 0;
+    matchOver = 0; match_clock_start();
     mode_reset();
     host_balance_teams();
     for (int i = 0; i < MAXP; i++) NP[i].kills = NP[i].deaths = 0;
@@ -484,7 +484,7 @@ static void host_tick(float dt) {
             n->shieldGauge = fminf(SHIELD_GAUGE_MAX, n->shieldGauge + SHIELD_REGEN * dt);
     }
     if (!matchOver) {
-        matchT += dt;
+        match_clock_tick();                               /* temps reel, pas les ticks (horloge.c) */
         mode_tick(dt);                                    /* zones, drapeaux, bouclier, salles de depart, SOUTIEN */
         if (!matchOver && matchT >= match_time_limit()) host_end_match(mode_time_winner());   /* temps ecoule : selon le mode */
         for (int i = 0; i < MAXP; i++)

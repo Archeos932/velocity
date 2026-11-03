@@ -3713,7 +3713,7 @@ static void run_tests(const char *path) {
     {   /* fusion : 2e ecran opt-in ; protocole */
         fprintf(f, "second ecran : actif par defaut %d (attendu 0)\n", secondScreen);
         PkAnnounce pa;
-        fprintf(f, "protocole : NET_VER %d, PkAnnounce %d octets avec ranked a l'octet %d (attendu 17, %d, %d)\n", NET_VER,
+        fprintf(f, "protocole : NET_VER %d, PkAnnounce %d octets avec ranked a l'octet %d (attendu 18, %d, %d)\n", NET_VER,
                 (int)sizeof(PkAnnounce), (int)((unsigned char *)&pa.ranked - (unsigned char *)&pa), (int)sizeof(PkHead) + 16 + 8, (int)sizeof(PkHead) + 20);
         double sNow = nowT;                               /* chargement de carte : l'arrivant a NET_LOAD_GRACE de plus */
         nowT = 100;
@@ -3723,6 +3723,32 @@ static void run_tests(const char *path) {
         nowT = 100 + NET_TIMEOUT + 1; int goneNormal = net_silent(100);
         fprintf(f, "reseau : arrivant qui charge 8 s garde %d, coupe apres la grace %d, joueur muet 6 s coupe %d (attendu 1 1 1)\n",
                 okLoad, goneLate, goneNormal);
+        {   /* horloge de match : temps reel chez l'hote, calage du client sur le serveur ou sur l'hote */
+            float sMatch = matchT; double sOff = clkSrvOff, sRtt = clkSrvRtt, sHost = clkHostOff, sClk = matchClkT;
+            int sOk = clkSrvOk, sN = clkSamples, sHOk = clkHostOk, sHSrv = clkHostSrv;
+            nowT = 200; match_clock_start();
+            nowT += 0.2; for (int i = 0; i < 12; i++) match_clock_tick();   /* 5 images/s : 12 ticks pour 0,2 s reelles */
+            float slow = matchT;
+            nowT += 0.3; float before = matchT;                 /* hitstop : pas de tick pendant 0,3 s, rattrape au suivant */
+            match_clock_tick(); float hit = matchT - before;
+            nowT += 6; match_clock_tick(); float load = matchT - before - hit;   /* chargement de carte : 1 s au plus */
+            clkSrvOk = 0; clkSamples = 0;
+            clk_srv_sample(300.0, 300.2, 5000.0e3 + 100);        /* aller-retour 200 ms */
+            clk_srv_sample(310.0, 310.04, 5010.0e3 + 20);        /* 40 ms : plus juste, gardee */
+            clk_srv_sample(320.0, 320.5, 5020.0e3 + 999);        /* 500 ms : ignoree */
+            double off = clkSrvOff;                               /* 5010,02 - (310 + 310,04) / 2 = 4700 */
+            nowT = 400; clkHostOk = 0;                            /* les deux cales : instantane parti il y a 50 ms (heure serveur) */
+            float both = clk_match_from_snap(100, nowT + clkSrvOff - 0.05, 1, 0);
+            clkHostOk = 0;                                        /* LAN : heure de l'hote = la mienne + 1000 s, trajets 30, 10 puis 30 ms */
+            clk_match_from_snap(0, 1000 + nowT - 0.03, 0, 0); clk_match_from_snap(0, 1000 + nowT - 0.01, 0, 0);
+            float lan = clk_match_from_snap(100, 1000 + nowT - 0.03, 0, 0);
+            float over = clk_match_from_snap(100, 1000 + nowT - 0.03, 0, 1);
+            fprintf(f, "horloge de match : 0,2 s a 5 images/s -> %.2f, apres hitstop 0,3 s +%.2f, chargement 6 s +%.2f, "
+                       "calage serveur %.2f (rtt %.0f ms), client cale %.2f, LAN %.2f, fini %.0f (attendu 0.20, 0.30, 1.00, 4700.00 (42 : 40 + 2 de vieillissement), 100.05, 100.02, 100)\n",
+                    slow, hit, load, off, clkSrvRtt * 1000, both, lan, over);
+            matchT = sMatch; clkSrvOff = sOff; clkSrvRtt = sRtt; clkHostOff = sHost; matchClkT = sClk;
+            clkSrvOk = sOk; clkSamples = sN; clkHostOk = sHOk; clkHostSrv = sHSrv;
+        }
         nowT = sNow;
     }
 

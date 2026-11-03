@@ -11,9 +11,10 @@
 /* HIT. Les evenements sont renvoyes 3 fois et dedoublonnes par id.    */
 /* ------------------------------------------------------------------ */
 #define NET_MAGIC 0x564C4F43u
-#define NET_VER   17      /* 15 : regles (mode, grappin, munitions, boutique, specs) et objectifs dans PkSnap, EV_OBJ, spec dans NetPState ;
+#define NET_VER   18      /* 15 : regles (mode, grappin, munitions, boutique, specs) et objectifs dans PkSnap, EV_OBJ, spec dans NetPState ;
                              16 = fusion du fork + mode classe (PkJoin, PkRoster, PkAnnounce.ranked, PkWelcome pad[1]) ;
-                             17 = cartes CITADELLE et OASIS retirees, objectifs sur les cartes neon */
+                             17 = cartes CITADELLE et OASIS retirees, objectifs sur les cartes neon ;
+                             18 = horloge de match commune (PkSnap.clk, clkSrv) */
 static int net_silent(double last) { return nowT - last > NET_TIMEOUT; }   /* plus de nouvelles (grace : last dans le futur) */
 enum { PK_QUERY = 1, PK_ANNOUNCE, PK_JOIN, PK_WELCOME, PK_STATE, PK_SNAP, PK_ROSTER, PK_EVENT, PK_LEAVE,
        PK_PUNCH, PK_KEEP };   /* PUNCH : ouvre le NAT vers un client ; KEEP : un spectateur dit qu'il est la */
@@ -48,7 +49,8 @@ typedef struct { unsigned char active, alive; short hp, kills, deaths; NetPState
 typedef struct { PkHead h; float matchT; unsigned char matchOver, winner; unsigned short pickMask; unsigned char fragLimit, teamSize;
                  SnapP p[MAXP];
                  unsigned char rMode, rFlags, rMinutes, rAmmo;   /* regles : mode, grappin | boutique << 1 | specs << 2, duree, munitions */
-                 ObjState obj; } PkSnap;
+                 ObjState obj;
+                 double clk; unsigned char clkSrv, pad2[3]; } PkSnap;   /* heure de l'hote a l'envoi, calee sur le serveur (horloge.c) */
 typedef struct {
     PkHead h; char names[MAXP][16];
     unsigned short mmr[MAXP]; unsigned char rplay[MAXP];  /* mode classe : cote et matchs annonces par chacun */

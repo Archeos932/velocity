@@ -345,6 +345,15 @@ static void lb_room(const char *id, int players, int maxp, int spec, const char 
 static void lb_line(const char *s) {
     char a[64], b[64], c[64];
     int n1, n2, n3, n4 = 0, n5 = 0;
+    double ms;
+    if (sscanf(s, "time %lf", &ms) == 1) {               /* heure du serveur : calage de l'horloge de match */
+        int was = clkSrvOk;
+        if (clkAskT >= 0) clk_srv_sample(clkAskT, nowT, ms);
+        if (clkSrvOk && !was) netlog("horloge : calee sur le serveur (aller-retour %.0f ms)", clkSrvRtt * 1000);
+        clkAskT = -1;
+        return;
+    }
+    if (!strcmp(s, "err cmd") && clkAskT >= 0) { clkAskT = -1; clkSamples++; return; }   /* ancien worker : sans "time" */
     netlog("lobby << %s", s);
     if (sscanf(s, "room %7s %d %d %d %63s %63s %d %d", a, &n1, &n2, &n3, b, c, &n4, &n5) >= 6) lb_room(a, n1, n2, n3, b, c, n4 & 1, n5);
     else if (sscanf(s, "gone %7s", a) == 1) {
@@ -378,8 +387,10 @@ static void lb_update(float dt) {
         lbGreeted = 1;
         for (int i = 0; i < nFound; i++) if (found[i].online) { found[i] = found[--nFound]; i--; }
         lbLastPlayers = -1;
+        clkSamples = 0; clkAskT = -1; clkLastAskT = -100;  /* horloge : nouvelles mesures sur cette connexion */
         if (browsing) lb_send("list %d", NET_VER);
     }
+    if (lbState == LB_ON && lbGreeted && clk_want_ask()) { lb_send("time"); clkAskT = clkLastAskT = nowT; }
     if (lbState == LB_FAILED) lbGreeted = 0;
 
     if (lbCsReady) {                                      /* lignes recues */

@@ -346,6 +346,19 @@ code.
 - Captures : `--shot graphismes.bmp`, `settings_small.bmp`, `graphismes_small.bmp`. Tests : « graphismes defauts »,
   « menus : ECHAP depuis GRAPHISMES ».
 
+## 26. Chrono de match en temps réel, calé sur l'heure du serveur
+
+- **Avant** : le chrono avançait avec les ticks de l'hôte ; sous 10 images/s (`dt` plafonné à 0,1 s) ou pendant le
+  hitstop, il prenait du retard sur l'horloge, et le client recevait le chrono avec le retard du paquet.
+- **Maintenant** (`src/reseau/horloge.c`) : l'hôte compte le temps réel écoulé ; le worker du lobby donne son heure
+  (`time` → `time <ms>`), l'hôte et le client s'y calent (aller-retour le plus court), et chaque instantané porte
+  l'heure de l'hôte à l'envoi : le client ajoute le trajet du paquet. Sans lobby (LAN), le client se cale sur
+  l'horloge de l'hôte. Seul le chrono change : la simulation, elle, ralentit toujours sous 10 images/s.
+- `NET_VER` **18** (`PkSnap.clk`, `clkSrv`). Le worker doit être redéployé (`npx wrangler deploy`) pour répondre à
+  `time` ; d'ici là le jeu se cale sur l'hôte, sans erreur.
+- Tests : « horloge de match » (`--test`), « heure du serveur » (`node test.js`) ; match de bots par un lobby local :
+  les deux se calent (17–20 ms d'aller-retour) et se rejoignent par le lobby.
+
 ## Vérifications faites
 
 - Compilation macOS sans avertissement ; tous les tests `--test` conformes, y compris ceux d'`origin/dev` (stéréo,

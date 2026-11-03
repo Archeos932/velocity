@@ -43,6 +43,12 @@ check('hello hote', await hello(host), 'hello');
 check('hello a', await hello(a), 'hello');
 check('hello b', await hello(b), 'hello');
 
+// heure du serveur : l'horloge de match des joueurs s'y cale (src/reseau/horloge.c)
+const t0 = Date.now();
+a.send('time');
+const tm = ((await a.next()) || '').split(' ');
+check('heure du serveur', tm[0] === 'time' && Number(tm[1]) >= t0 && Number(tm[1]) <= Date.now(), true);
+
 a.send('list 4');
 check('liste vide', await a.next(), 'end');
 
