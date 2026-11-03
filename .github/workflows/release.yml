@@ -1,4 +1,4 @@
-# Branche `release` : uniquement les binaires (velocity.exe, Velocity-macOS.zip), construits depuis `stable`,
+# Branche `release` : uniquement les binaires (velocity.exe, Velocity-macOS.zip, Velocity-Linux.tar.gz), construits depuis `stable`,
 # et version.txt (numero de build, taille et SHA-256 de chaque binaire) lu par le bouton MISE A JOUR du jeu.
 # Le numero de build est github.run_number : compile dans le jeu (VELOCITY_BUILD) et ecrit dans version.txt.
 # Se lance a chaque push sur stable, ou a la main (onglet Actions > Release > Run workflow).
@@ -73,8 +73,36 @@ jobs:
           name: Velocity-macOS
           path: Velocity-macOS.zip
 
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stable
+
+      - name: Compiler
+        if: hashFiles('build_linux.sh') != ''
+        env:
+          VELOCITY_BUILD: ${{ github.run_number }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libgl-dev libasound2-dev libfreetype-dev xvfb libgl1-mesa-dri fonts-dejavu-core
+          chmod +x build_linux.sh
+          ./build_linux.sh
+          xvfb-run -a -s "-screen 0 1280x720x24" Velocity-Linux/velocity --test test.txt
+
+      - name: Pas de port Linux dans stable
+        if: hashFiles('build_linux.sh') == ''
+        run: echo "::notice::stable n'a pas encore build_linux.sh, pas de binaire Linux"
+
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('Velocity-Linux.tar.gz') != ''
+        with:
+          name: Velocity-Linux
+          path: Velocity-Linux.tar.gz
+
   publish:
-    needs: [windows, macos]
+    needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -94,6 +122,7 @@ jobs:
           git rm -rqf --ignore-unmatch .
           cp ../bin/Velocity-Windows/velocity.exe .
           if [ -f ../bin/Velocity-macOS/Velocity-macOS.zip ]; then cp ../bin/Velocity-macOS/Velocity-macOS.zip .; fi
+          if [ -f ../bin/Velocity-Linux/Velocity-Linux.tar.gz ]; then cp ../bin/Velocity-Linux/Velocity-Linux.tar.gz .; fi
           {                                       # lu par le bouton MISE A JOUR du jeu
             echo "build=$BUILD"
             echo "sha=$SHA"
@@ -102,6 +131,10 @@ jobs:
             if [ -f Velocity-macOS.zip ]; then
               echo "mac_size=$(stat -c %s Velocity-macOS.zip)"
               echo "mac_sha256=$(sha256sum Velocity-macOS.zip | cut -d' ' -f1)"
+            fi
+            if [ -f Velocity-Linux.tar.gz ]; then
+              echo "linux_size=$(stat -c %s Velocity-Linux.tar.gz)"
+              echo "linux_sha256=$(sha256sum Velocity-Linux.tar.gz | cut -d' ' -f1)"
             fi
           } > version.txt
           {
@@ -112,6 +145,9 @@ jobs:
             echo "- Windows : \`velocity.exe\`"
             if [ -f Velocity-macOS.zip ]; then
               echo "- macOS : \`Velocity-macOS.zip\` (au premier lancement : clic droit > Ouvrir)"
+            fi
+            if [ -f Velocity-Linux.tar.gz ]; then
+              echo "- Linux : \`Velocity-Linux.tar.gz\` (\`tar xzf Velocity-Linux.tar.gz && ./Velocity-Linux/velocity\`)"
             fi
           } > README.md
           git add -A

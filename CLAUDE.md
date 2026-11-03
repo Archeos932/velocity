@@ -10,6 +10,8 @@ Le propriétaire est francophone : réponses, commentaires et docs **en françai
   Nouvelle fonction : dans le fichier de son thème ; nouveau fichier : l'ajouter à `main.c` au bon endroit (l'ordre compte).
 - Port macOS (`src/plateforme/mac/`, `build_mac.sh`, CI GitHub Actions) : **§8 de `docs/CODE.md`**. Toute nouvelle
   API Win32 dans le code doit avoir son équivalent macOS (`#ifdef _WIN32` / `mac_*`).
+- Port Linux (`src/plateforme/linux/linux_platform.c`, `build_linux.sh`, CI `linux.yml`) : **§8 bis**. Il implémente la
+  même API `mac_*` : toute nouvelle fonction `mac_*` doit aussi y être écrite.
 - Nouveautés de `dev`, une section par fonctionnalité (à compléter à chaque ajout) : **`docs/NOUVEAUTES.md`**
 - Idées d'armes et de cartes à implémenter : **`docs/IDEES_ARMES_CARTES.md`**
 - Parties en ligne (lobby Cloudflare gratuit, STUN, perçage de NAT, spectateurs) : **`docs/PLAN_EN_LIGNE.md`**

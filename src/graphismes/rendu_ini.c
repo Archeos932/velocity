@@ -120,6 +120,16 @@ static void gfx_find_dir(void) {
 #ifdef _WIN32
     GetModuleFileNameA(NULL, cand[n], sizeof cand[n]);
     { char *sl = strrchr(cand[n], '\\'); if (sl) { strcpy(sl + 1, "graphismes"); n++; } }
+#elif defined(__linux__)
+    {                                                     /* ~/.config/velocity/graphismes, puis a cote de l'executable */
+        char cfg[400], exe[400];
+        uint32_t len = sizeof exe;
+        if (linux_config_dir(cfg, sizeof cfg, 0)) snprintf(cand[n++], sizeof cand[0], "%s/graphismes", cfg);
+        if (_NSGetExecutablePath(exe, &len) == 0) {
+            char *sl = strrchr(exe, '/');
+            if (sl) { *sl = 0; snprintf(cand[n++], sizeof cand[0], "%s/graphismes", exe); }
+        }
+    }
 #else
     const char *home = getenv("HOME");
     if (home) snprintf(cand[n++], sizeof cand[0], "%s/Library/Application Support/Velocity/graphismes", home);

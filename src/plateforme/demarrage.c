@@ -377,6 +377,10 @@ static int velocity_main(const char *cmd) {
         GetModuleFileNameA(NULL, cfgPath, sizeof cfgPath);
         slash = strrchr(cfgPath, '\\');
         if (slash) strcpy(slash + 1, "velocity.ini"); else cfgPath[0] = 0;
+#elif defined(__linux__)                                  /* ~/.config/velocity/velocity.ini (XDG) */
+        char dir[MAX_PATH - 16];
+        if (linux_config_dir(dir, sizeof dir, 1)) snprintf(cfgPath, sizeof cfgPath, "%s/velocity.ini", dir);
+        else cfgPath[0] = 0;
 #else                                                     /* le .app peut etre en lecture seule : reglages dans ~/Library */
         const char *home = getenv("HOME");
         if (home) {

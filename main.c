@@ -2,12 +2,13 @@
  * VELOCITY - movement shooter 3D en C
  * Win32 + OpenGL 1.1 + waveOut, aucune dependance externe.
  * macOS : meme code, couche plateforme dans src/plateforme/mac/ (Cocoa, AudioQueue, NSURLSession).
+ * Linux : meme API, src/plateforme/linux/linux_platform.c (X11 + GLX, ALSA, FreeType, OpenSSL), build_linux.sh.
  *
  * Mouvement : bhop (maintenir saut), air-strafe facon Quake, slide, dash,
  *             double saut, wall-run, wall-jump, jump pads, rocket-jump.
  *
  * Ce fichier est la table des matieres du jeu : il inclut les morceaux de src/ DANS CET ORDRE et le tout
- * forme une seule unite de compilation (build.bat et build_mac.sh ne compilent que main.c).
+ * forme une seule unite de compilation (build.bat, build_mac.sh et build_linux.sh ne compilent que main.c).
  * Les morceaux ne se compilent pas seuls : une fonction doit etre definie (ou declaree) dans un morceau
  * place plus haut que celui qui l'utilise. Carte detaillee : docs/CODE.md, section 2.
  */

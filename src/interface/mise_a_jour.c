@@ -19,12 +19,18 @@
 #define UPD_PAGE "https://github.com/" UPD_REPO "/tree/release"
 #ifdef _WIN32
 #define UPD_BIN "velocity.exe"
+#elif defined(__linux__)
+#define UPD_BIN "Velocity-Linux.tar.gz"                   /* dossier Velocity-Linux/ : velocity + graphismes/ */
+#define UPD_CURL "curl"                                   /* cherches dans le PATH (posix_spawnp) */
+#define UPD_OPEN "xdg-open"
 #else
 #define UPD_BIN "Velocity-macOS.zip"
+#define UPD_CURL "/usr/bin/curl"
+#define UPD_OPEN "/usr/bin/open"
 #endif
 
 enum { UPD_IDLE, UPD_CHECKING, UPD_UPTODATE, UPD_AVAILABLE, UPD_DOWNLOADING, UPD_READY, UPD_ERROR };
-typedef struct { int build; char sha[16]; long winSize, macSize; char winHash[65], macHash[65]; } UpdInfo;
+typedef struct { int build; char sha[16]; long winSize, macSize, linSize; char winHash[65], macHash[65], linHash[65]; } UpdInfo;
 static volatile LONG updState, updGot, updTotal;          /* ecrits par le fil, lus par le menu */
 static CRITICAL_SECTION updCs;
 static int updCsReady, updSeen = UPD_IDLE, updCheck = 1, updAfter, updPage;   /* updCheck : reglage ; updAfter : --updated */
@@ -114,6 +120,8 @@ static int upd_parse(const char *txt, UpdInfo *o) {
         else if (!strcmp(line, "mac_size")) o->macSize = atol(v);
         else if (!strcmp(line, "win_sha256")) snprintf(o->winHash, sizeof o->winHash, "%s", v);
         else if (!strcmp(line, "mac_sha256")) snprintf(o->macHash, sizeof o->macHash, "%s", v);
+        else if (!strcmp(line, "linux_size")) o->linSize = atol(v);
+        else if (!strcmp(line, "linux_sha256")) snprintf(o->linHash, sizeof o->linHash, "%s", v);
     }
     return o->build > 0;
 }
@@ -140,7 +148,7 @@ static void upd_fail(const char *msg, int page) {         /* page : proposer la 
 #ifndef _WIN32
 static int upd_spawn(char *const argv[], pid_t *pid) {
     extern char **environ;
-    return posix_spawn(pid, argv[0], NULL, NULL, argv, environ) == 0;
+    return posix_spawnp(pid, argv[0], NULL, NULL, argv, environ) == 0;
 }
 static int upd_run(char *const argv[]) {                  /* lance et attend ; 1 si le code de sortie est 0 */
     pid_t pid;
@@ -152,6 +160,17 @@ static void upd_rmrf(const char *path) {
     char *argv[] = { "/bin/rm", "-rf", (char *)path, NULL };
     upd_run(argv);
 }
+#ifdef __linux__
+#define UPD_WHERE "lance VELOCITY depuis son dossier pour le mettre a jour"
+static int upd_bundle(char *out, int n) {                 /* Linux : chemin de l'executable lui-meme */
+    char exe[MAX_PATH], real[PATH_MAX];
+    uint32_t len = sizeof exe;
+    if (_NSGetExecutablePath(exe, &len) != 0 || !realpath(exe, real)) return 0;
+    snprintf(out, n, "%s", real);
+    return 1;
+}
+#else
+#define UPD_WHERE "lance VELOCITY depuis Velocity.app pour le mettre a jour"
 static int upd_bundle(char *out, int n) {                 /* chemin du .app qui contient l'executable */
     char exe[MAX_PATH], real[PATH_MAX];
     uint32_t len = sizeof exe;
@@ -162,6 +181,7 @@ static int upd_bundle(char *out, int n) {                 /* chemin du .app qui 
     snprintf(out, n, "%s", real);
     return 1;
 }
+#endif
 #endif
 
 /* GET https://UPD_HOST<path>, vers le fichier outPath (avec progression updGot) ou en memoire (mem, cap octets).
@@ -208,14 +228,14 @@ static int upd_http_get(const char *path, const char *outPath, char *mem, int ca
     if (ses) WinHttpCloseHandle(ses);
     if (mem && cap > 0) mem[n] = 0;
     return ok;
-#else                                                     /* macOS : curl, fourni avec le systeme */
+#else                                                     /* macOS et Linux : curl, fourni avec le systeme */
     char url[320], tmp[MAX_PATH];
     const char *dst = outPath;
     pid_t pid;
     int st = 0, ok;
     snprintf(url, sizeof url, "https://" UPD_HOST "%s", path);
     if (!dst) { snprintf(tmp, sizeof tmp, "/tmp/velocity-%d.txt", (int)getpid()); dst = tmp; }
-    char *argv[] = { "/usr/bin/curl", "-fsSL", "--connect-timeout", "10", "--speed-time", "60", "--speed-limit", "1",
+    char *argv[] = { UPD_CURL, "-fsSL", "--connect-timeout", "10", "--speed-time", "60", "--speed-limit", "1",
                      "-o", (char *)dst, url, NULL };
     if (!upd_spawn(argv, &pid)) return 0;
     while (waitpid(pid, &st, WNOHANG) == 0) {             /* progression : taille du fichier en cours d'ecriture */
@@ -263,6 +283,8 @@ static DWORD WINAPI upd_download_th(LPVOID arg) {
     LeaveCriticalSection(&updCs);
 #ifdef _WIN32
     want = in.winSize; hash = in.winHash;
+#elif defined(__linux__)
+    want = in.linSize; hash = in.linHash;
 #else
     want = in.macSize; hash = in.macHash;
 #endif
@@ -305,7 +327,7 @@ static void upd_open_page(void) {
 #ifdef _WIN32
     ShellExecuteA(NULL, "open", UPD_PAGE, NULL, NULL, SW_SHOWNORMAL);
 #else
-    char *argv[] = { "/usr/bin/open", UPD_PAGE, NULL };
+    char *argv[] = { UPD_OPEN, UPD_PAGE, NULL };
     pid_t pid;
     if (upd_spawn(argv, &pid)) waitpid(pid, NULL, 0);
 #endif
@@ -339,10 +361,43 @@ static void upd_install(void) {
         set_status("mise a jour installee : relance VELOCITY");
         updState = UPD_UPTODATE;
     }
+#elif defined(__linux__)
+    /* l'archive contient Velocity-Linux/velocity et Velocity-Linux/graphismes : on remplace les deux */
+    char exe[MAX_PATH], tmp[MAX_PATH], got[MAX_PATH + 32], dir[MAX_PATH], gfx[MAX_PATH + 16], gfxOld[MAX_PATH + 32], gfxNew[MAX_PATH + 48];
+    struct stat sb;
+    if (!upd_bundle(exe, sizeof exe)) { upd_fail(UPD_WHERE, 1); return; }
+    upd_paths(exe, nw, old, MAX_PATH);
+    snprintf(tmp, sizeof tmp, "%s.upd", exe);
+    upd_rmrf(tmp);
+    mkdir(tmp, 0755);
+    char *untar[] = { "tar", "-xzf", updFile, "-C", tmp, NULL };
+    snprintf(got, sizeof got, "%s/Velocity-Linux/velocity", tmp);
+    if (!upd_run(untar) || stat(got, &sb) != 0) { upd_rmrf(tmp); upd_fail("archive illisible", 0); return; }
+    remove(old);
+    if (rename(exe, old) != 0) { upd_rmrf(tmp); upd_fail("impossible de remplacer velocity", 1); return; }
+    if (rename(got, exe) != 0) { rename(old, exe); upd_rmrf(tmp); upd_fail("impossible d'installer la nouvelle version", 1); return; }
+    chmod(exe, 0755);
+    snprintf(dir, sizeof dir, "%s", exe);
+    { char *sl = strrchr(dir, '/'); if (sl) *sl = 0; }
+    snprintf(gfx, sizeof gfx, "%s/graphismes", dir);
+    snprintf(gfxOld, sizeof gfxOld, "%s/graphismes.old", dir);
+    snprintf(gfxNew, sizeof gfxNew, "%s/Velocity-Linux/graphismes", tmp);
+    if (stat(gfxNew, &sb) == 0) {                         /* reglages graphiques livres avec la version */
+        upd_rmrf(gfxOld);
+        rename(gfx, gfxOld);
+        if (rename(gfxNew, gfx) != 0) rename(gfxOld, gfx);
+    }
+    upd_rmrf(tmp);
+    remove(updFile);
+    cfg_save();
+    char *relaunch[] = { exe, "--updated", NULL };
+    pid_t pid;
+    if (upd_spawn(relaunch, &pid)) mac_quit();
+    else { set_status("mise a jour installee : relance VELOCITY"); updState = UPD_UPTODATE; }
 #else
     char app[MAX_PATH], tmp[MAX_PATH], got[MAX_PATH + 16];
     struct stat sb;
-    if (!upd_bundle(app, sizeof app)) { upd_fail("lance VELOCITY depuis Velocity.app pour le mettre a jour", 1); return; }
+    if (!upd_bundle(app, sizeof app)) { upd_fail(UPD_WHERE, 1); return; }
     upd_paths(app, nw, old, MAX_PATH);
     snprintf(tmp, sizeof tmp, "%s.upd", app);
     upd_rmrf(tmp);
@@ -377,8 +432,12 @@ static void upd_click(void) {
     upd_paths(exe, updFile, old, MAX_PATH);
 #else
     char app[MAX_PATH];
-    if (!upd_bundle(app, sizeof app)) { upd_fail("lance VELOCITY depuis Velocity.app pour le mettre a jour", 1); return; }
+    if (!upd_bundle(app, sizeof app)) { upd_fail(UPD_WHERE, 1); return; }
+#ifdef __linux__
+    snprintf(updFile, sizeof updFile, "%s.tar.gz", app);
+#else
     snprintf(updFile, sizeof updFile, "%s.zip", app);
+#endif
 #endif
     if (VELOCITY_BUILD == 0) set_status("version de dev : elle sera remplacee par la derniere version stable");
     upd_start(upd_download_th, UPD_DOWNLOADING);
@@ -431,12 +490,19 @@ static void upd_cleanup(void) {
     DeleteFileA(old);                                     /* l'ancien exe, libere depuis que l'ancien processus est sorti */
     DeleteFileA(nw);
 #else
-    char app[MAX_PATH], tmp[MAX_PATH + 8];
+    char app[MAX_PATH], tmp[MAX_PATH + 24];
     if (!upd_bundle(app, sizeof app)) return;
     upd_paths(app, nw, old, MAX_PATH);
     snprintf(tmp, sizeof tmp, "%s.upd", app);
     upd_rmrf(old); upd_rmrf(tmp);
+#ifdef __linux__
+    snprintf(tmp, sizeof tmp, "%s.tar.gz", app);
+    remove(tmp);
+    snprintf(tmp, sizeof tmp, "%s", app);                 /* graphismes.old, a cote de l'executable */
+    { char *sl = strrchr(tmp, '/'); if (sl) { snprintf(sl, sizeof tmp - (size_t)(sl - tmp), "/graphismes.old"); upd_rmrf(tmp); } }
+#else
     snprintf(tmp, sizeof tmp, "%s.zip", app);
     remove(tmp);
+#endif
 #endif
 }

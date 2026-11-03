@@ -114,7 +114,8 @@ velocity/
 │   │                 ciel_ombres_bloom, render.c (l'image complete)
 │   ├── interface/    texte.c, mise_a_jour.c, config.c (velocity.ini), menus.c, scores.c, hud.c, carte_ecran.c
 │   ├── plateforme/   fenetre.c (Win32 + entrees communes), second_ecran.c, demarrage.c (WinMain, boucle)
-│   │   └── mac/      mac_platform.m / .h, mac_compat.h (port macOS, voir §8)
+│   │   ├── mac/      mac_platform.m / .h, mac_compat.h (port macOS, voir §8)
+│   │   └── linux/    linux_platform.c (port Linux : meme API mac_*, voir §8 bis)
 │   └── tests/        tests.c (--shot, --test)
 ├── graphismes/       rendu.ini, ambiances, textures .bmp : modifiables sans recompiler (F5)
 ├── outils/           musique.c (ecoute du design musical, Windows)
@@ -1673,3 +1674,37 @@ Même `main.c`, compilé avec `clang` (pas de MSVC). Tout ce qui est propre à l
 - **Bot adverse** (`ACT_VSBOT`) : `posix_spawn` du même exécutable (`_NSGetExecutablePath`).
 - **Statut** : écrit sans pouvoir compiler ni lancer sur un Mac (développé sous Windows). À valider sur machine réelle :
   clavier/souris, son, texte, plein écran, lobby, partie contre bot.
+
+## 8 bis. Port Linux
+
+Même `main.c`, compilé avec `gcc`. `src/plateforme/linux/linux_platform.c` implémente **la même API** que la couche
+macOS (`mac_platform.h`, fonctions `mac_*`) : le code partagé ne distingue pas macOS de Linux, sauf quelques chemins
+(`#ifdef __linux__`). `mac_compat.h` sert aux deux (sockets, fils, horloge) ; sous Linux il ajoute `_NSGetExecutablePath`
+(lit `/proc/self/exe`), `clock_gettime_nsec_np` et `linux_config_dir`.
+
+| Partie | Linux | Remarques |
+|---|---|---|
+| Fenêtre + OpenGL | Xlib + GLX (`glXChooseVisual`, MSAA 4x si possible) | marche sous Wayland via XWayland ; `--soft` = `LIBGL_ALWAYS_SOFTWARE` |
+| Clavier | code X − 8 = code Linux = **scancode set 1** pour 1..88 ; flèches, Inser/Suppr… convertis (`sc_of_keycode`) | répétition : `XkbSetDetectableAutoRepeat` ; noms selon la disposition (`XkbKeycodeToKeysym`) |
+| Souris captée | `XGrabPointer` + curseur vide, retour au centre (`XWarpPointer`) quand on s'en éloigne | deltas = différence avec la position précédente |
+| Plein écran | `_NET_WM_STATE_FULLSCREEN` (F11) | |
+| Manette | `/dev/input/js0..3` (pilotes xpad et hid-playstation), nouvel essai toutes les 2 s | |
+| Police | FreeType (DejaVu Sans Mono Bold, Liberation Mono, Noto Sans Mono ou `fc-match`) → 224 listes `glBitmap` | repli : police X (`glXUseXFont`) |
+| Son | ALSA (`default`, donc PulseAudio / PipeWire) ; un fil écrit les tampons dans l'ordre | `mac_audio_done` = tampon envoyé à ALSA |
+| Lobby | socket TCP + TLS (`libssl.so.3` chargée avec `dlopen`, certificat vérifié) + trames WebSocket écrites à la main | lecture et écriture en parallèle : socket non bloquante, un verrou autour de chaque appel TLS |
+| Second écran | pas encore (`mac_map_update` rend 0) | |
+| Réglages | `$XDG_CONFIG_HOME/velocity/velocity.ini` (par défaut `~/.config/velocity/`) | `graphismes/` : `~/.config/velocity/graphismes`, puis à côté de l'exécutable |
+| Mise à jour | `Velocity-Linux.tar.gz` de la branche `release` (`linux_size` / `linux_sha256` dans `version.txt`), `curl` + `tar` | remplace `velocity` et `graphismes/` à côté, relance avec `--updated` |
+
+- **Build** : `./build_linux.sh` → `Velocity-Linux/velocity` + `Velocity-Linux/graphismes/` + `Velocity-Linux.tar.gz`.
+  Paquets (Debian/Ubuntu) : `gcc libx11-dev libgl-dev libasound2-dev libfreetype-dev`. Bibliothèques à l'exécution :
+  libX11, libGL, libasound, libfreetype (présentes sur tout bureau Linux), libssl pour le lobby.
+  `-Wno-format-truncation` : gcc signale chaque `snprintf` qui pourrait couper, ce qui est voulu.
+- **CI** : `.github/workflows/linux.yml` (Ubuntu 22.04 : binaire compatible avec les distributions plus anciennes)
+  compile, échoue sur le moindre avertissement, lance `--test` sous `xvfb-run` et publie l'archive en artefact.
+  La release (`release.yml`) construit aussi l'archive Linux et l'ajoute à `version.txt`.
+- **Tester sans Linux** : Docker (`ubuntu:24.04` + les paquets ci-dessus + `xvfb`), `Xvfb :99 &` puis `DISPLAY=:99`.
+  Vérifié ainsi : `--test`, captures `menu` / `settings` / `dm`, match bot contre bot en LAN, connexion TLS au lobby.
+- **Écart connu** : la libm de glibc n'arrondit pas `sinf`/`atan2f`… comme celle d'Apple ; les simulations de bots
+  divergent après quelques secondes et le test « cross-up » (rail tiré de justesse dans le dos) passe sur Mac mais
+  rate de peu sous Linux. Le reste de `--test` est identique.

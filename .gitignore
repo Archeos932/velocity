@@ -24,3 +24,6 @@ Velocity-macOS.zip
 Velocity-Windows.zip
 build/
 velocity
+# Linux
+Velocity-Linux/
+Velocity-Linux.tar.gz

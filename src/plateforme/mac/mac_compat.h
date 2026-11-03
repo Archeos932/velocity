@@ -1,19 +1,27 @@
 /*
- * VELOCITY - compatibilite macOS pour main.c : quelques types / fonctions Win32
+ * VELOCITY - compatibilite macOS et Linux pour main.c : quelques types / fonctions Win32
  * reimplementes (sockets, fils, evenements, horloge, en-tetes BMP) pour que le
  * code partage ne change pas. Tout ce qui touche a la fenetre, au son, a la
- * police et au lobby est dans mac_platform.m.
+ * police et au lobby est dans mac_platform.m (macOS) ou linux_platform.c (Linux),
+ * qui implementent la meme API mac_* (mac_platform.h).
  */
 #ifndef MAC_COMPAT_H
 #define MAC_COMPAT_H
 
+#ifdef __APPLE__
 #define GL_SILENCE_DEPRECATION
 #include <OpenGL/gl.h>
+#include <mach-o/dyld.h>
+#else
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#include <GL/gl.h>
+#endif
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
-#include <mach-o/dyld.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
@@ -33,6 +41,34 @@
 #include <unistd.h>
 
 #include "mac_platform.h"
+
+#ifndef __APPLE__
+/* chemin de l'executable (meme signature que sous macOS) */
+static inline int _NSGetExecutablePath(char *buf, uint32_t *len) {
+  ssize_t n = readlink("/proc/self/exe", buf, (size_t)*len - 1);
+  if (n <= 0) return -1;
+  buf[n] = 0;
+  return 0;
+}
+#define CLOCK_UPTIME_RAW CLOCK_MONOTONIC
+static inline uint64_t clock_gettime_nsec_np(clockid_t c) {
+  struct timespec ts;
+  clock_gettime(c, &ts);
+  return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
+/* dossier des reglages : $XDG_CONFIG_HOME/velocity ou ~/.config/velocity ; make : le creer. 1 si trouve */
+static inline int linux_config_dir(char *out, int n, int make) {
+  const char *x = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
+  char base[512];
+  if (x && x[0]) snprintf(base, sizeof base, "%s", x);
+  else if (home && home[0]) snprintf(base, sizeof base, "%s/.config", home);
+  else return 0;
+  if (make) mkdir(base, 0755);
+  snprintf(out, (size_t)n, "%s/velocity", base);
+  if (make) mkdir(out, 0755);
+  return 1;
+}
+#endif
 
 /* --- types Win32 --- */
 typedef int32_t LONG;

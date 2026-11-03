@@ -407,3 +407,18 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
 - Fenêtre du second écran essayée en vrai sur un Mac (contexte partagé, police, partie solo en direct).
 - **Pas encore vérifié sous Windows** : la CI Windows d'`origin/dev` compilera et testera `dev` à chaque push ; reste
   à essayer le second écran avec deux moniteurs.
+
+## 30. Version Linux
+
+- **Avant** : Windows et macOS seulement (sous Linux, il fallait passer par Wine).
+- **Maintenant** : `./build_linux.sh` compile une version Linux native (X11, marche aussi sous Wayland via XWayland) :
+  fenêtre OpenGL, clavier (AZERTY compris, noms des touches selon le clavier), souris captée, F11 plein écran,
+  manette, son ALSA (PulseAudio / PipeWire), lobby en ligne en TLS, bots, bouton MISE A JOUR.
+  Archive `Velocity-Linux.tar.gz` : `tar xzf Velocity-Linux.tar.gz && ./Velocity-Linux/velocity`.
+  Réglages dans `~/.config/velocity/velocity.ini`.
+- Pas encore : le second écran (carte sur un autre moniteur).
+- Code : `src/plateforme/linux/linux_platform.c` (même API `mac_*` que macOS), quelques `#ifdef __linux__` pour les
+  chemins et la mise à jour. CI : `.github/workflows/linux.yml` ; la release publie aussi l'archive Linux.
+- Vérifié dans Docker (Ubuntu 24.04, ARM et x86_64, écran virtuel Xvfb) : compilation sans avertissement, `--test`,
+  captures du menu / des paramètres / d'un deathmatch, match bot contre bot en LAN, connexion au lobby en ligne.
+  Pas encore essayé sur un vrai bureau Linux (son réel, souris, manette).

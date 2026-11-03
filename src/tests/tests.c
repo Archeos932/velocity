@@ -3003,14 +3003,15 @@ static void run_tests(const char *path) {
         Sha256 sh;
         char h1[65], h2[65], h3[65], nw[64], old[64];
         int ok = upd_parse("build=52\r\nsha=1A2B3C4\nwin_size=1834496\nwin_sha256=9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08\n"
-                           "mac_size=2310144\nmac_sha256=60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752\n", &in);
+                           "mac_size=2310144\nmac_sha256=60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752\n"
+                           "linux_size=987654\nlinux_sha256=60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752\n", &in);
         int nok = upd_parse("bonjour\n<html>404</html>\n", &bad);
         sha_init(&sh); sha_final(&sh, h1);
         sha_init(&sh); sha_update(&sh, "abc", 3); sha_final(&sh, h2);
         sha_init(&sh); sha_update(&sh, "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq", 56); sha_final(&sh, h3);
         upd_paths("C:/jeu/velocity.exe", nw, old, sizeof nw);
-        fprintf(f, "mise a jour : lu=%d build=%d sha=%s win=%ld mac=%ld hash_min=%d illisible=%d (attendu 1 52 1a2b3c4 1834496 2310144 1 0)\n",
-                ok, in.build, in.sha, in.winSize, in.macSize, !strcmp(in.winHash, "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"), nok);
+        fprintf(f, "mise a jour : lu=%d build=%d sha=%s win=%ld mac=%ld linux=%ld hash_min=%d illisible=%d (attendu 1 52 1a2b3c4 1834496 2310144 987654 1 0)\n",
+                ok, in.build, in.sha, in.winSize, in.macSize, in.linSize, !strcmp(in.winHash, "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"), nok);
         fprintf(f, "mise a jour : plus recente que build %d=%d, que build 52=%d, que build 60=%d (attendu %d 0 0)\n",
                 VELOCITY_BUILD, in.build > VELOCITY_BUILD, in.build > 52, in.build > 60, 52 > VELOCITY_BUILD);
         fprintf(f, "sha256 : vide=%d abc=%d 2 blocs=%d (attendu 1 1 1)\n",

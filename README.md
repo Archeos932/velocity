@@ -1,8 +1,11 @@
 # VELOCITY
 
-Movement shooter 3D en C, sans aucune dépendance (Win32 / Cocoa + OpenGL 1.1, son synthétisé, réseau UDP).
+Movement shooter 3D en C, sans aucune dépendance (Win32 / Cocoa / X11 + OpenGL 1.1, son synthétisé, réseau UDP).
 
-- **Compiler** : `build.bat` (Windows, MSVC) ou `./build_mac.sh` (macOS).
+- **Compiler** : `build.bat` (Windows, MSVC), `./build_mac.sh` (macOS) ou `./build_linux.sh` (Linux).
+- **Jouer sous Linux** : télécharger `Velocity-Linux.tar.gz` (branche `release`, ou artefact de la CI « Linux »), puis
+  `tar xzf Velocity-Linux.tar.gz && ./Velocity-Linux/velocity`. Ou compiler : `sudo apt install gcc libx11-dev
+  libgl-dev libasound2-dev libfreetype-dev && ./build_linux.sh && ./Velocity-Linux/velocity`.
 - **Changer l'aspect sans recompiler** : `graphismes/` (puis F5 en jeu).
 - **Documentation du code** : [`docs/CODE.md`](docs/CODE.md) — le §2 détaille chaque fichier.
 - **Nouveautés** (détail de chaque fonctionnalité ajoutée) : [`docs/NOUVEAUTES.md`](docs/NOUVEAUTES.md).
@@ -28,7 +31,7 @@ src/
   bots/                bots
   entrees/             touches et actions
   jeu/                 boucle de simulation (game_tick)
-  plateforme/          fenetre, point d'entree ; mac/ = port macOS
+  plateforme/          fenetre, point d'entree ; mac/ = port macOS ; linux/ = port Linux
   tests/               --test et --shot
   noyau/               includes et maths
 graphismes/            reglages visuels et textures modifiables
