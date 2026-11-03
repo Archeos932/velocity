@@ -12,8 +12,9 @@
 /* choix parmi 4. Reglages : src/reglages/equilibrage.c (ZONE_*, ...). */
 /* ------------------------------------------------------------------ */
 
-/* --- carte : objectifs disponibles --- */
+/* --- carte : objectifs disponibles (une carte CHALLENGE n'accueille aucun mode : course seulement) --- */
 static int mode_ok(int m, int map) {
+    if (map < 0 || map >= NMAPS || maps[map].challenge) return 0;
     const MapDef *md = &maps[map];
     if (m == MODE_ZONES) return md->zones != NULL;
     if (m == MODE_DRAPEAU) return md->flags != NULL;
@@ -23,6 +24,8 @@ static int mode_ok(int m, int map) {
 static V3 zone_pos(int z) { const float *p = maps[curMap].zones[z]; return v3(p[0], p[1], p[2]); }
 static V3 flag_home(int t) { const float *p = maps[curMap].flags[t]; return v3(p[0], p[1], p[2]); }
 static V3 shield_pos(void) { const float *p = maps[curMap].shield; return v3(p[0], p[1], p[2]); }
+static float zone_r(void) { return ZONE_R * map_obj_scale(curMap); }            /* rayons a l'echelle de la carte */
+static float shield_r(void) { return SHIELD_ZONE_R * map_obj_scale(curMap); }
 static V3 flag_pos(int t) { return obj.fl[t].state == FLAG_HOME ? flag_home(t) : fv(obj.fl[t].pos); }
 static int np_spec(int i) { return rules.specs && i >= 0 && i < MAXP ? NP[i].st.spare[0] % SPEC_COUNT : SPEC_AUCUNE; }
 static V3 np_feet(int i) { return i == myId ? P.pos : NP[i].disp; }
@@ -30,7 +33,6 @@ static int near_point(int i, V3 c, float r) {             /* pieds a moins de r 
     V3 p = np_feet(i);
     return hlen(vsub(p, c)) < r && fabsf(p.y - c.y) < 3.5f;
 }
-static int in_room(V3 p, const float *b) { return p.x > b[0] && p.x < b[3] && p.y > b[1] - 1 && p.y < b[4] && p.z > b[2] && p.z < b[5]; }
 
 /* --- evenements d'objectif (hote -> tous) --- */
 static void obj_event(int sub, int team, int actor, int idx) {
@@ -41,7 +43,7 @@ static void obj_event(int sub, int team, int actor, int idx) {
     apply_event(&e);
 }
 
-static float modeScoreAcc[2], flagDropT[2], spawnDmgAcc[MAXP];
+static float modeScoreAcc[2], flagDropT[2];
 static float zoneProg[NZONES], flagRet[2];                /* hote : progression exacte (l'octet de ObjState ne sert qu'a l'envoi) */
 static void mode_reset(void) {
     memset(&obj, 0, sizeof obj);
@@ -51,7 +53,7 @@ static void mode_reset(void) {
     memset(zoneProg, 0, sizeof zoneProg); memset(flagRet, 0, sizeof flagRet); memset(modeScoreAcc, 0, sizeof modeScoreAcc);
 }
 
-/* l'hote : un pas de mode (zones, drapeaux, bouclier), salles de depart, soins du SOUTIEN */
+/* l'hote : un pas de mode (zones, drapeaux, bouclier), soins du SOUTIEN */
 static void mode_tick(float dt) {
     const MapDef *md = &maps[curMap];
     for (int i = 0; i < MAXP; i++) {                      /* SOUTIEN : regeneration hors combat, soin des allies proches */
@@ -61,19 +63,13 @@ static void mode_tick(float dt) {
             if (j != i && NP[j].active && NP[j].alive && same_team(i, j) && vlen(vsub(np_feet(i), np_feet(j))) < SPEC_HEAL_R)
                 NP[j].hp = fminf(100, NP[j].hp + SPEC_HEAL * dt);
     }
-    if (md->spawnRooms && teamSize > 0)                   /* salle de depart adverse : on y brule */
-        for (int i = 0; i < MAXP; i++) {
-            if (!NP[i].active || !NP[i].alive) continue;
-            if (!in_room(np_feet(i), md->spawnRooms[1 - (NP[i].team & 1)])) { spawnDmgAcc[i] = 0; continue; }
-            if ((spawnDmgAcc[i] += dt) >= 0.25f) { spawnDmgAcc[i] = 0; host_apply_damage(i, i, SPAWN_ROOM_DPS * 0.25f, W_SELF); }
-        }
     if (teamSize <= 0) return;
     if (rules.mode == MODE_ZONES && md->zones) {
         for (int z = 0; z < NZONES; z++) {
             ZoneSt *Z = &obj.z[z];
             int n[2] = { 0, 0 };
             for (int i = 0; i < MAXP; i++)
-                if (NP[i].active && NP[i].alive && near_point(i, zone_pos(z), ZONE_R)) n[NP[i].team & 1]++;
+                if (NP[i].active && NP[i].alive && near_point(i, zone_pos(z), zone_r())) n[NP[i].team & 1]++;
             int t = n[0] && !n[1] ? 0 : n[1] && !n[0] ? 1 : -1;
             float prog = zoneProg[z];
             if (t >= 0 && Z->owner != t) {                /* une seule equipe dedans : elle prend la zone */
@@ -152,7 +148,7 @@ static void mode_tick(float dt) {
     if (rules.mode == MODE_BOUCLIER && md->shield) {      /* les ROUGES surchargent le bouclier des BLEUS */
         int att = 0, def = 0;
         for (int i = 0; i < MAXP; i++)
-            if (NP[i].active && NP[i].alive && near_point(i, shield_pos(), SHIELD_ZONE_R)) { if (NP[i].team & 1) att++; else def++; }
+            if (NP[i].active && NP[i].alive && near_point(i, shield_pos(), shield_r())) { if (NP[i].team & 1) att++; else def++; }
         static float drainAcc;
         int before = obj.shield;
         if (att && !def) {

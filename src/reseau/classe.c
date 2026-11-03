@@ -129,8 +129,8 @@ static void rk_new_match(void) {                          /* hote : un nouveau m
     memset(rkLeft, 0, sizeof rkLeft);
 }
 
-/* regles imposees : une carte classee n'a pas de portes de course (LA TOILE n'a pas de deathmatch FRAGS) */
-static int rk_map_ok(int m) { return m >= 0 && m < NMAPS && maps[m].ngates == 0; }
+/* regles imposees : une carte classee n'est jamais une carte CHALLENGE (LA TOILE : course seulement) */
+static int rk_map_ok(int m) { return map_pvp(m); }
 static int rk_map_pick(int m) {                           /* la carte demandee si elle convient, sinon la suivante qui convient */
     for (int k = 0; k < NMAPS; k++) if (rk_map_ok((m + k) % NMAPS)) return (m + k) % NMAPS;
     return 0;

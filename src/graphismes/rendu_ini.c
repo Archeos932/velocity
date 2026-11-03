@@ -5,8 +5,8 @@
  * Tout ce qui fait l'aspect du jeu (soleil, ombres, brouillard, ciel, ville, bloom, textures) est
  * ici, avec la valeur par defaut. Le fichier graphismes/rendu.ini les remplace (cle = valeurs) ;
  * F5 en jeu le relit et reconstruit textures et lightmaps. Une cle absente garde son defaut.
- * Les textures sol.bmp, mur.bmp, pierre.bmp, enduit.bmp, grain.bmp du meme dossier remplacent les textures
- * generees (et rendent alors sans effet sol_texture, mur_texture, pierre, enduit, grain_force). */
+ * Les textures sol.bmp, mur.bmp, grain.bmp du meme dossier remplacent les textures generees (et rendent alors
+ * sans effet sol_texture, mur_texture, grain_force). */
 static float sunCol[3] = { 1.00f, 0.84f, 0.66f }, skyCol[3] = { 0.52f, 0.54f, 0.74f },
              bounceCol[3] = { 0.16f, 0.13f, 0.12f }, padGlowCol[3] = { 0.25f, 0.85f, 1.0f };
 static float gxSunDir[3] = { 0.55f, 0.66f, -0.82f }, gxSunPow = 1.3f, gxPad[2] = { 0.9f, 9 };
@@ -29,9 +29,6 @@ static float gxHudPanel = 0.45f;                         /* opacite des fonds so
 static float gxNeonC[3] = { 0.2f, 0.95f, 1.0f }, gxNeonM[3] = { 1.0f, 0.25f, 0.85f }, gxNeonO[3] = { 1.0f, 0.6f, 0.15f };
 static float gxNeon[3] = { 1.0f, 0.55f, 5.0f }, gxBleed = 0.35f;   /* neons : eclat, lueur sur le decor, portee ; rebond colore */
 static float gxLights = 1.0f;                             /* lumieres dynamiques (armes, explosions), 0 = aucune */
-static float gxStoneTex[3] = { 32, 0.80f, 0.35f };        /* pierre (LA CITADELLE) : taille des pavés (px), clarte, echelle */
-static float gxPlasterTex[3] = { 0.86f, 0.07f, 0.35f };   /* enduit : clarte, grain, echelle */
-static float gxDecorAo = 8;                               /* decor maille : rayons d'occlusion par sommet */
 static float gxClouds[2] = { 18, 0.35f }, gxCloudCol[3] = { 0.62f, 0.5f, 0.66f }, gxDust = 120, gxFlare = 0.5f;
 static float gxRain = 0, gxStorm = 0;                     /* pluie (gouttes), orage (eclairs par minute) */   /* trainees : vitesse min, opacite, largeur ; contours */
 typedef struct { const char *key; float *v; int n; } GfxKey;
@@ -56,7 +53,6 @@ static const GfxKey gfxKeys[] = {
     { "rebond_couleur", &gxBleed, 1 }, { "lumieres_dynamiques", &gxLights, 1 },
     { "nuages", gxClouds, 2 }, { "nuages_couleur", gxCloudCol, 3 }, { "poussiere", &gxDust, 1 }, { "reflets_soleil", &gxFlare, 1 },
     { "pluie", &gxRain, 1 }, { "orage", &gxStorm, 1 },
-    { "pierre", gxStoneTex, 3 }, { "enduit", gxPlasterTex, 3 }, { "decor_occlusion", &gxDecorAo, 1 },
 };
 #define GFX_NKEYS ((int)(sizeof gfxKeys / sizeof gfxKeys[0]))
 static char gfxDir[512];                                  /* dossier graphismes trouve ("" : aucun, valeurs par defaut) */
@@ -167,25 +163,6 @@ static void gfx_quality_apply(void) {
     if (low) gxFlare = 0;
 }
 
-/* eclairage propre a la carte chargee (MapDef.light) : remplace soleil, ciel, rebond et ambiance des objets ;
- * en revenant sur une carte sans eclairage propre, les valeurs de rendu.ini reviennent */
-static float mapLightSaved[MAPL_N];
-static int mapLightOn;
-static void map_light_swap(float *dst, const float *src, int n) { for (int i = 0; i < n; i++) dst[i] = src[i]; }
-static void map_light_apply(void) {
-    const float *L = maps[curMap].light;
-    float *slots[6] = { gxSunDir, sunCol, &gxSunPow, skyCol, bounceCol, gxObjAmb };
-    static const int off[6] = { MAPL_SUNDIR, MAPL_SUNCOL, MAPL_SUNPOW, MAPL_SKY, MAPL_BOUNCE, MAPL_OBJAMB }, cnt[6] = { 3, 3, 1, 3, 3, 3 };
-    if (L) {
-        if (!mapLightOn) for (int k = 0; k < 6; k++) map_light_swap(mapLightSaved + off[k], slots[k], cnt[k]);
-        mapLightOn = 1;
-        for (int k = 0; k < 6; k++) map_light_swap(slots[k], L + off[k], cnt[k]);
-    } else if (mapLightOn) {
-        for (int k = 0; k < 6; k++) map_light_swap(slots[k], mapLightSaved + off[k], cnt[k]);
-        mapLightOn = 0;
-    }
-}
-
 static void gfx_load_all(void) {
     char p[600];
     if (!gfxDefaultsSaved) gfx_defaults(0); else gfx_defaults(1);
@@ -203,6 +180,4 @@ static void gfx_load_all(void) {
         }
     }
     gfx_quality_apply();
-    mapLightOn = 0;                                       /* valeurs relues : l'eclairage de la carte se remet par-dessus */
-    map_light_apply();
 }

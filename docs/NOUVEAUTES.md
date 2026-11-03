@@ -231,7 +231,7 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
   identique à l'échantillon près.
 - Docs : §3.19 à §3.21 de `docs/CODE.md`. Tests : navigation, style, course, musiques.
 
-## 20. LA CITADELLE et le décor maillé
+## 20. LA CITADELLE et le décor maillé (retirés au point 23)
 
 - **Nouvelle carte LA CITADELLE**, dans l'esprit des shooters tactiques à l'architecture soignée (carte originale) :
   ville fortifiée en plein soleil, pierre, enduit, tuiles et coupoles turquoise. Deux spawns, trois couloirs, site A
@@ -246,7 +246,7 @@ Le dépôt original a avancé sur `stable` dans l'ancien `main.c` d'un seul bloc
 - Moteur : jusqu'à 768 boîtes par carte, lightmaps libérées au changement de carte, `--pos` pour les captures.
 - Vérifié : tous les tests (aucune régression), match de bots sur la carte (4 kills, navigation, 0 chute).
 
-## 21. Règles de partie, modes d'équipe, boutique, spécialisations, L'OASIS
+## 21. Règles de partie, modes d'équipe, boutique, spécialisations, L'OASIS (carte retirée au point 23)
 
 - **Règles choisies par l'hôte** (HEBERGER > RÈGLES) : mode, grappin oui/non, munitions normales / ×2 / infinies,
   boutique, spécialisations, durée.
@@ -294,6 +294,30 @@ code.
 - Tests : lignes `classe …` de `--test`, `node test.js` (lobby classé, Elo, concordance des rapports, abandon, TOP),
   captures `--shot ranked.bmp` et `--shot menu.bmp`, match de bots classé sur le lobby local
   (`--ranked --frags 2`, §6 de `docs/CODE.md`).
+
+## 23. Retour aux cartes néon : objectifs partout, LA TOILE en CHALLENGE
+
+- **LA CITADELLE et L'OASIS sont retirées** (elles sortaient de l'esthétique néon), avec tout ce qui n'existait que
+  pour elles : décor maillé (`src/monde/decor.c`), `citadelle.c`, `oasis.c`, boîtes invisibles `B_HIDDEN`, textures
+  pierre / enduit (et leurs `.bmp`, clés `pierre`, `enduit`, `decor_occlusion` de `rendu.ini`), éclairage propre à
+  une carte, salles de départ, carte sans grappin, morceau « Citadelle ». `MAXB` revient à 256 ; environ 36 Mo de
+  mémoire statique en moins (le décor maillé réservait 750 000 sommets).
+- **3 ZONES, DRAPEAU et BOUCLIER sur les cinq cartes néon** (ARENE, LE PUITS, LE CANYON, LA BOUCLE, LE DOJO) : une
+  zone centrale et une zone près de chaque camp, un drapeau au fond de chaque camp (à plus de 40 m l'un de l'autre),
+  le bouclier des BLEUS sur une position haute ou couverte attaquable de plusieurs côtés, et des départs par équipe
+  près de leur drapeau. Coordonnées et raisons : §3.22 de `docs/CODE.md`.
+- **Un peu de géométrie** pour que ça tienne : un plateau central néon dans le gouffre du CANYON (zone B, deux pads
+  vers les falaises : sans grappin, on peut enfin traverser) et deux balcons à mi-hauteur au centre du PUITS (zones
+  A et C, bouclier). Sur les petites cartes, les zones sont plus petites (PUITS × 0,6, DOJO × 0,8 : `MapDef.objScale`).
+- **LA TOILE devient une carte CHALLENGE** : plus dans la ligne CARTE, ni en partie (hébergée, rapide, classée), ni
+  dans la ROTATION, ni en solo ; on y va par le bouton **CHALLENGE** (anciennement COURSE) du menu principal.
+- **ROTATION corrigée** : elle passe à la carte suivante qui accueille le mode en cours (avant, une partie 3 ZONES
+  pouvait tourner vers une carte sans zones, ou vers LA TOILE).
+- **Bots** : le graphe de navigation sait maintenant « courir jusqu'au bord puis tomber » vers un sol plus bas (le
+  sommet du Puits vers un balcon) ; un test vérifie un chemin de chaque camp vers chaque objectif.
+- `NET_VER` 17. Captures : `--shot objectifs_zones.bmp --map N` (aussi `_drapeau`, `_bouclier`). Tests : « carte
+  CHALLENGE », « rotation », « objectifs » (sol, boîtes, vide, bords, disques, pads, distances, côtés, symétrie,
+  chemins avec et sans grappin).
 
 ---
 

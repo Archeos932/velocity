@@ -501,7 +501,7 @@ static void bot_think(float dt) {
         int objective = mode_bot_goal(&og) && !(best >= 0 && see && bd < 22) && seek < 0;
         if (objective) {
             goal = og; hasGoal = 1;
-            float hr = rules.mode == MODE_ZONES ? ZONE_R * 0.6f : rules.mode == MODE_BOUCLIER ? SHIELD_ZONE_R * 0.5f : 0.8f;
+            float hr = rules.mode == MODE_ZONES ? zone_r() * 0.6f : rules.mode == MODE_BOUCLIER ? shield_r() * 0.5f : 0.8f;
             float od = hlen(vsub(og, P.pos));
             int shoot = best >= 0 && see && seeT > botReactT[botLevel] && P.fireCd <= 0 && P.switchT <= 0 && wp_has_ammo(P.weapon);
             if (od < hr && fabsf(og.y - P.pos.y) < 2.5f) {   /* sur l'objectif : on tient, on surveille */

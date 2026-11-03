@@ -98,7 +98,7 @@ static int cfg_load(void) {                               /* renvoie 1 si le ple
         else if (!strcmp(line, "loadout")) sscanf(v, "%d,%d", &wantLoadout[0], &wantLoadout[1]);
         else if (!strcmp(line, "melee")) wantMelee = atoi(v);
         else if (!strcmp(line, "skin")) wantSkin = atoi(v) < 0 || atoi(v) >= SKN_COUNT ? 0 : atoi(v);
-        else if (!strcmp(line, "map")) menuMap = atoi(v) >= 0 && atoi(v) < NMAPS ? atoi(v) : 0;
+        else if (!strcmp(line, "map")) menuMap = map_pvp(atoi(v)) ? atoi(v) : 0;   /* jamais une carte CHALLENGE */
         else if (!strcmp(line, "map_rotate")) mapRotate = atoi(v) != 0;
         else if (!strcmp(line, "regles")) {
             MatchRules r = wantRules;

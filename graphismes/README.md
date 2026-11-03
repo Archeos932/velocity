@@ -7,8 +7,6 @@ Tout l'aspect visuel du jeu se règle ici, **sans toucher au code ni recompiler*
 | `rendu.ini` | soleil, ombres, lumière du décor, brouillard, ciel, ville au loin, bloom, textures générées |
 | `sol.bmp` | texture du sol et des dessus de blocs (256 px) |
 | `mur.bmp` | texture des murs (256 px) |
-| `pierre.bmp` | pavés des sols de LA CITADELLE (256 px) |
-| `enduit.bmp` | enduit des murs de LA CITADELLE (256 px) |
 | `grain.bmp` | grain fin multiplié par-dessus le décor (64 px, gris clair à blanc) |
 | `ambiance_nuit.ini`, `ambiance_jour.ini`, `ambiance_orage.ini` | ambiances choisies dans PARAMETRES > CIEL : elles remplacent une partie de `rendu.ini` (crée la tienne en copiant une de ces lignes) |
 
@@ -28,13 +26,13 @@ avec des réglages différents peuvent jouer ensemble.
 
 ## Textures `.bmp`
 
-Les cinq `.bmp` livrés ici sont **les textures actuelles du jeu**, telles que le code les calcule : les ouvrir dans
+Les trois `.bmp` livrés ici sont **les textures actuelles du jeu**, telles que le code les calcule : les ouvrir dans
 un logiciel de dessin, les retoucher, enregistrer, puis **F5** en jeu. Tant qu'elles ne sont pas modifiées, le jeu
 est exactement le même qu'avec les textures générées.
 
 - BMP **24 bits** (ou 32), non compressé, **carré**, côté 16, 32, 64, 128, 256, 512 ou 1024 px.
 - Une image invalide est ignorée (la texture générée reste).
-- La taille de répétition se règle avec `texture_echelle` (et l'échelle de `pierre` / `enduit`) dans `rendu.ini` :
+- La taille de répétition se règle avec `texture_echelle` dans `rendu.ini` :
   elle marche avec ou sans `.bmp`.
 
 ### Attention : un `.bmp` présent fige sa texture
@@ -46,8 +44,6 @@ là, c'est lui qui est affiché et ces réglages **n'ont plus aucun effet** sur 
 |---|---|
 | `sol.bmp` | `sol_texture` (taille des dalles, luminosité) |
 | `mur.bmp` | `mur_texture` (taille des plaques, luminosité) |
-| `pierre.bmp` | les deux premières valeurs de `pierre` (taille des pavés, clarté) |
-| `enduit.bmp` | les deux premières valeurs de `enduit` (clarté, grain) |
 | `grain.bmp` | `grain_force` |
 
 - **Revenir à la texture générée et réglable** : supprimer (ou renommer) le `.bmp`, puis F5.

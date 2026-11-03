@@ -367,51 +367,38 @@ static int host_handle(const NetEvent *ev) {
 }
 
 static V3 pick_spawn(int who) {
-    static const float teamPts[][3] = {                  /* Arene en equipes : chaque camp a sa moitie (bleus au nord, z < 0) */
-        { 0, 0, -24 }, { -30, 0, -30 }, { 30, 0, -30 }, { 0, 7, -36 }, { -14, 0, -46 }, { 14, 0, -46 },
-        { -24, 0, -10 }, { 24, 0, -10 }, { -46, 0, -14 }, { 46, 0, -14 },
-    };
     const MapDef *md = &maps[curMap];                    /* points de depart de la carte (coordonnees du monde) */
     int team = teamSize > 0 && who >= 0 && who < MAXP;
-    if (team && md->teamSpawn) {                          /* carte a salles de depart : celles de son equipe */
+    if (team && md->teamSpawn && md->nTeamSpawn > 0) {    /* equipes : les departs de son camp (MapDef.teamSpawn) */
         int t = NP[who].team & 1, best = 0;
         float bd = -1;
         for (int k = 0; k < md->nTeamSpawn; k++) {
             const float *q = md->teamSpawn[t * md->nTeamSpawn + k];
             V3 p = v3(q[0], q[1], q[2]);
             if (!pos_free(p, H_STAND)) continue;
-            float d = 100;
-            for (int i = 0; i < MAXP; i++) if (i != who && NP[i].active && NP[i].alive) d = fminf(d, vlen(vsub(np_feet(i), p)));
+            float d = 200;                                /* le plus loin possible des ennemis */
+            for (int i = 0; i < MAXP; i++) {
+                if (i == who || !NP[i].active || !NP[i].alive || same_team(i, who)) continue;
+                d = fminf(d, vlen(vsub(i == myId ? P.pos : NP[i].disp, p)));
+            }
             d += frange(0, 3);
             if (d > bd) { bd = d; best = k; }
         }
         const float *q = md->teamSpawn[t * md->nTeamSpawn + best];
         return v3(q[0], q[1], q[2]);
     }
-    int areneTeam = team && curMap == 0;
-    int n = areneTeam ? (int)(sizeof teamPts / sizeof teamPts[0]) : md->nspawns;
-    float zs = team && NP[who].team == 1 ? -1.0f : 1.0f;
-    /* autres cartes en equipes : chaque camp prend les departs de son cote (axe le plus long de la carte) */
-    float ex = 0, ez = 0;
-    for (int k = 0; k < md->nspawns; k++) { ex = fmaxf(ex, fabsf(md->spawns[k][0])); ez = fmaxf(ez, fabsf(md->spawns[k][2])); }
-    int axis = ex > ez ? 0 : 2, sideN = 0;
-    if (team && !areneTeam)
-        for (int k = 0; k < md->nspawns; k++) sideN += md->spawns[k][axis] * -zs > 0.5f;
     float best = -1;
-    V3 bp = areneTeam ? v3(0, 0, ms(-24 * zs)) : md->start;
-    for (int k = 0; k < n; k++) {
-        V3 p = areneTeam ? v3(ms(teamPts[k][0]), teamPts[k][1], ms(teamPts[k][2] * zs))
-                         : v3(md->spawns[k][0], md->spawns[k][1], md->spawns[k][2]);
-        if (team && !areneTeam && sideN > 0 && md->spawns[k][axis] * -zs <= 0.5f) continue;   /* pas de son cote */
+    V3 bp = md->start;
+    for (int k = 0; k < md->nspawns; k++) {
+        V3 p = v3(md->spawns[k][0], md->spawns[k][1], md->spawns[k][2]);
         if (!pos_free(p, H_STAND)) continue;
-        float md = 200;                                   /* le plus loin possible des autres (des ennemis en equipes) */
+        float d = 200;                                    /* le plus loin possible des autres */
         for (int i = 0; i < MAXP; i++) {
-            if (i == who || !NP[i].active || !NP[i].alive || same_team(i, who)) continue;
-            V3 o = i == myId ? P.pos : NP[i].disp;
-            md = fminf(md, vlen(vsub(p, o)));
+            if (i == who || !NP[i].active || !NP[i].alive) continue;
+            d = fminf(d, vlen(vsub(p, i == myId ? P.pos : NP[i].disp)));
         }
-        md += frange(0, 6);
-        if (md > best) { best = md; bp = p; }
+        d += frange(0, 6);
+        if (d > best) { best = d; bp = p; }
     }
     return bp;
 }
@@ -437,13 +424,22 @@ static void host_balance_teams(void) {
     }
 }
 
+/* ROTATION : la carte suivante qui accueille le mode en cours (jamais une carte CHALLENGE) ; sinon la meme */
+static int map_rotate_next(int from, int mode) {
+    for (int k = 1; k <= NMAPS; k++) {
+        int m = (from + k) % NMAPS;
+        if (map_pvp(m) && mode_ok(mode, m)) return m;
+    }
+    return from;
+}
+
 static void host_start_match(void) {
     matchOver = 0; matchT = 0;
     mode_reset();
     host_balance_teams();
     for (int i = 0; i < MAXP; i++) NP[i].kills = NP[i].deaths = 0;
     NetEvent e = ev_new(EV_MATCH);
-    e.target = (unsigned char)(mapRotate ? (curMap + 1) % NMAPS : curMap);   /* ROTATION : carte suivante a chaque match */
+    e.target = (unsigned char)(mapRotate ? map_rotate_next(curMap, rules.mode) : curMap);   /* ROTATION : carte suivante a chaque match */
     if (ranked) e.target = (unsigned char)rk_map_pick(e.target);   /* classe : jamais une carte de course */
     net_emit(&e);
     apply_event(&e);

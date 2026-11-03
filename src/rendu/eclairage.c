@@ -15,12 +15,11 @@
 #define AO_RANGE    gxAoRange /* portee des rayons d'occlusion (m) */
 #define LMG_CELL    4.0f      /* grille d'acceleration des rayons courts (m) */
 #define LMG_N       44
-#define LMG_MAXB    96
+#define LMG_MAXB    48
 static V3 sun_dir(void) { return vnorm(v3(gxSunDir[0], gxSunDir[1], gxSunDir[2])); }   /* vers le soleil (ombres, lumiere, ciel) */
 typedef struct { GLuint tex; float su, sv; int on; } LMap;   /* su, sv : coordonnee de texture du bord oppose */
 static LMap lmaps[MAXB][6];
-static unsigned char lmgN[LMG_N][LMG_N];
-static unsigned short lmgB[LMG_N][LMG_N][LMG_MAXB];     /* indices de boites (MAXB > 256) */
+static unsigned char lmgN[LMG_N][LMG_N], lmgB[LMG_N][LMG_N][LMG_MAXB];   /* indices de boites (MAXB <= 256) */
 static double lmBakeMs;                                   /* duree du precalcul (journal, tests) */
 
 /* face f d'une boite (0 +x, 1 -x, 2 +y, 3 -y, 4 +z, 5 -z, comme FACE_*) : 4 coins dans l'ordre de box_faces_m */
@@ -49,7 +48,6 @@ static int point_in_box(V3 p) {
 static int face_hidden(int bi, int f) {
     Box *b = &boxes[bi];
     V3 n = face_normal(f), c[4];
-    if (b->kind == B_HIDDEN) return 1;                    /* collision d'un decor maille : jamais dessinee */
     if (f == 3 && b->mn.y <= 0.001f) return 1;
     face_corners(b->mn, b->mx, f, c);
     float W = ms(56) + 0.5f;
@@ -80,7 +78,7 @@ static void lm_grid_build(void) {                         /* boites proches de c
                 Box *b = &boxes[i];
                 if (b->mx.x + AO_RANGE < x0 || b->mn.x - AO_RANGE > x0 + LMG_CELL ||
                     b->mx.z + AO_RANGE < z0 || b->mn.z - AO_RANGE > z0 + LMG_CELL) continue;
-                lmgB[gx][gz][lmgN[gx][gz]++] = (unsigned short)i;
+                lmgB[gx][gz][lmgN[gx][gz]++] = (unsigned char)i;
             }
         }
 }
@@ -300,26 +298,6 @@ static void world_faces(int mask, float scale) {
     glEnd();
 }
 
-/* decor maille : chaque sommet recoit la meme lumiere qu'un texel de lightmap (soleil et ombres, ciel et occlusion,
- * rebond, neons), un peu au-dessus de sa surface ; les sommets identiques ne sont calcules qu'une fois */
-static double decBakeMs;
-static void decor_bake(void) {
-    LARGE_INTEGER f0, t0, t1;
-    QueryPerformanceFrequency(&f0); QueryPerformanceCounter(&t0);
-    float rays = gxAoRays;
-    gxAoRays = fminf(gxAoRays, gxDecorAo);                /* moins de rayons : un sommet couvre peu de surface */
-    for (int i = 0; i < ndv; i++) {
-        if (i > 0 && vlen(vsub(DV[i].p, DV[i - 1].p)) < 1e-4f && vdot(DV[i].n, DV[i - 1].n) > 0.999f) {
-            DVL[i][0] = DVL[i - 1][0]; DVL[i][1] = DVL[i - 1][1]; DVL[i][2] = DVL[i - 1][2];
-            continue;
-        }
-        lm_light(vadd(DV[i].p, vmul(DV[i].n, 0.08f)), DV[i].n, (unsigned)i * 2654435761u, DVL[i]);
-    }
-    gxAoRays = rays;
-    QueryPerformanceCounter(&t1);
-    decBakeMs = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)f0.QuadPart;
-}
-
 static GLuint skylineList;
 static void build_skyline_list(void);
 static void gfx_reload(void);
@@ -336,11 +314,10 @@ static void build_world_list(void) {
     glPolygonOffset(1, 1);
     glDisable(GL_LIGHTING);                                   /* l'eclairage vient des lightmaps (passe 3) */
     glEnable(GL_TEXTURE_2D);
-    int stone = maps[curMap].style == 1;                      /* pierre et enduit (LA CITADELLE) ou metal */
-    glBindTexture(GL_TEXTURE_2D, stone ? texStone : texGrid);   /* passe 1 : sol/plafond (faces horizontales) */
-    world_faces(FACE_UD, stone ? gxStoneTex[2] : gxTexScale[0]);
-    glBindTexture(GL_TEXTURE_2D, stone ? texPlaster : texWall); /* passe 2 : murs (faces verticales) */
-    world_faces(FACE_SIDES, stone ? gxPlasterTex[2] : gxTexScale[1]);
+    glBindTexture(GL_TEXTURE_2D, texGrid);                    /* passe 1 : sol/plafond (faces horizontales) */
+    world_faces(FACE_UD, gxTexScale[0]);
+    glBindTexture(GL_TEXTURE_2D, texWall);                    /* passe 2 : murs (faces verticales) */
+    world_faces(FACE_SIDES, gxTexScale[1]);
     glDepthFunc(GL_LEQUAL);                                   /* passes suivantes : meme profondeur que 1/2 */
     glEnable(GL_BLEND);
     glBlendFunc(GL_DST_COLOR, GL_SRC_COLOR);                  /* passe 3 : lightmaps, x2 (0,5 = inchange) */
@@ -376,25 +353,14 @@ static void build_world_list(void) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glLineWidth(1.5f);
     for (int i = 1; i < nb; i++) {
-        if (boxes[i].kind == B_HIDDEN) continue;
         if (boxes[i].kind == B_PAD) glColor4f(0.6f, 1.0f, 1.0f, 0.9f);
         else if (boxes[i].kind == B_SPEED) glColor4f(1.0f, 0.5f, 0.9f, 0.9f);
-        else if (stone) continue;                         /* pierre : pas de liseres sombres, les aretes viennent de la lumiere */
         else if (gxEdges > 0.001f) glColor4f(0.05f, 0.05f, 0.1f, gxEdges);
         else continue;
         box_edges(boxes[i].mn, boxes[i].mx);
     }
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);                                  /* n'affecte que ce display list, pas le reste du rendu */
-    decor_bake();                                             /* decor maille : eclairage par sommet, puis triangles */
-    if (ndv > 0) {
-        glBegin(GL_TRIANGLES);
-        for (int i = 0; i < ndv; i++) {
-            glColor3f(clampf(DV[i].c.x * DVL[i][0], 0, 1), clampf(DV[i].c.y * DVL[i][1], 0, 1), clampf(DV[i].c.z * DVL[i][2], 0, 1));
-            glVertex3f(DV[i].p.x, DV[i].p.y, DV[i].p.z);
-        }
-        glEnd();
-    }
     glEndList();
     build_skyline_list();
 }
@@ -406,7 +372,6 @@ static void load_map(int m) {
     for (int i = 0; i <= MAXP; i++) saw_remove_owner(i);  /* Scie : rendue a chacun */
     curMap = m;
     build_level(m);
-    map_light_apply();                                    /* eclairage propre a la carte (ou celui de rendu.ini) */
     if (glReady) {
         if (worldList) glDeleteLists(worldList, 1);
         if (skylineList) glDeleteLists(skylineList, 1);

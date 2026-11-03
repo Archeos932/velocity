@@ -503,13 +503,29 @@ static int velocity_main(const char *cmd) {
         save_bmp(shotPath);
         return 0;
     }
+    if (shotMode && strstr(shotPath, "objectifs")) {      /* objectifs d'un mode sur la carte --map N : objectifs_zones,
+                                                             objectifs_drapeau, objectifs_bouclier (vue : --pos, --yaw) */
+        const MapDef *md = &maps[curMap];
+        int mode = strstr(shotPath, "drapeau") ? MODE_DRAPEAU : strstr(shotPath, "bouclier") ? MODE_BOUCLIER : MODE_ZONES;
+        appState = APP_GAME; dmMode = 1; netMode = NET_HOST; myId = 0; teamSize = 2;
+        NP[0].active = NP[0].alive = 1; NP[0].team = 0;
+        rules = (MatchRules){ mode, 1, AMMO_NORMAL, 0, 0, 10 }; mode_reset();
+        if (mode == MODE_ZONES) { obj.z[0].owner = 0; obj.z[2].owner = 1; obj.z[1].capTeam = 1; obj.z[1].prog = 120; obj.pts[0] = 31; obj.pts[1] = 27; }
+        P.pos = md->menuCam; P.pitch = md->menuPitch; P.yaw = shotYaw;
+        if (shotPosSet) { P.pos = shotPos; if (shotPitch > -999) P.pitch = shotPitch; }
+        P.prevPos = P.pos; P.vel = v3(0, 0, 0);
+        matchT = 40; gameTime = 1.3f;
+        render(1, TICK);
+        save_bmp(shotPath);
+        return 0;
+    }
     if (shotMode && (strstr(shotPath, "boutique") || strstr(shotPath, "armedepart"))) {   /* boutique a la mort, choix de l'arme */
-        for (int m = 0; m < NMAPS; m++) if (maps[m].spawnRooms) { load_map(m); break; }
+        load_map(0);                                      /* l'Arene en 3 ZONES */
         reset_game(); appState = APP_GAME; dmMode = 1; netMode = NET_HOST; myId = 0; teamSize = 2;
         NP[0].active = NP[0].alive = 1; NP[0].team = 0;
         rules = (MatchRules){ MODE_ZONES, 0, AMMO_NORMAL, 1, 1, 10 }; mode_reset(); eco_reset();
         obj.z[0].owner = 0; obj.z[2].owner = 1; obj.z[1].capTeam = 1; obj.z[1].prog = 150; obj.pts[0] = 64; obj.pts[1] = 41; matchT = 140;
-        P.pos = P.prevPos = v3(0, 0, -50); P.yaw = PI; P.pitch = -0.05f;
+        P.pos = P.prevPos = v3(0, 0, -30); P.yaw = 0; P.pitch = 0.05f;
         if (strstr(shotPath, "boutique")) {
             eco_pick_starter(WP_SHOTGUN); credits = 1150; eco_buy(WP_ROCKET); credits = 850;
             P.dead = 1; NP[0].alive = 0;

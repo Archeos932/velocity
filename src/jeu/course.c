@@ -21,8 +21,8 @@ static int ghostCurN, ghostBestN;
 static void race_save(void);
 static void race_load(void);
 
-static int race_map(void) {                               /* premiere carte qui a des portes */
-    for (int m = 0; m < NMAPS; m++) if (maps[m].ngates > 0) return m;
+static int race_map(void) {                               /* premiere carte CHALLENGE (a portes) : LA TOILE */
+    for (int m = 0; m < NMAPS; m++) if (maps[m].challenge && maps[m].ngates > 0) return m;
     return 0;
 }
 static V3 race_gate(int i) { const float *g = maps[curMap].gates[i]; return v3(g[0], g[1], g[2]); }

@@ -11,8 +11,9 @@
 /* HIT. Les evenements sont renvoyes 3 fois et dedoublonnes par id.    */
 /* ------------------------------------------------------------------ */
 #define NET_MAGIC 0x564C4F43u
-#define NET_VER   16      /* 15 : regles (mode, grappin, munitions, boutique, specs) et objectifs dans PkSnap, EV_OBJ, spec dans NetPState ;
-                             16 = fusion du fork + mode classe (PkJoin, PkRoster, PkAnnounce.ranked, PkWelcome pad[1]) */
+#define NET_VER   17      /* 15 : regles (mode, grappin, munitions, boutique, specs) et objectifs dans PkSnap, EV_OBJ, spec dans NetPState ;
+                             16 = fusion du fork + mode classe (PkJoin, PkRoster, PkAnnounce.ranked, PkWelcome pad[1]) ;
+                             17 = cartes CITADELLE et OASIS retirees, objectifs sur les cartes neon */
 enum { PK_QUERY = 1, PK_ANNOUNCE, PK_JOIN, PK_WELCOME, PK_STATE, PK_SNAP, PK_ROSTER, PK_EVENT, PK_LEAVE,
        PK_PUNCH, PK_KEEP };   /* PUNCH : ouvre le NAT vers un client ; KEEP : un spectateur dit qu'il est la */
 enum { EV_RAIL = 1, EV_ROCKET, EV_ROCKET_END, EV_PARRY, EV_HIT, EV_MELEE, EV_KILL, EV_RESPAWN, EV_MATCH, EV_INFO, EV_PICKUP,

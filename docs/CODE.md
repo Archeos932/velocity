@@ -98,8 +98,8 @@ velocity/
 │   ├── noyau/        entete.c (includes), maths.c (V3, aleatoire)
 │   ├── reglages/     equilibrage.c : TOUS les #define (mouvement, armes, parry, PvP, points)
 │   ├── son/          audio.c (mixeur, sons synthetises), music.h (morceaux et sequenceur)
-│   ├── monde/        carte.c (boites AABB, cartes MapDef, collisions, rayons), decor.c (decor maille),
-│   │                 citadelle.c (LA CITADELLE), oasis.c (L'OASIS), entites.c (Player P, Enemy, Proj...)
+│   ├── monde/        carte.c (boites AABB, cartes MapDef et leurs objectifs, collisions, rayons),
+│   │                 entites.c (Player P, Enemy, Proj...)
 │   ├── entrees/      actions.c (touches, A_*, bindDefault)
 │   ├── effets/       combat_fx.c (impact frames, input_poll), particules.c, camera_mort.c, monde_fx.c (neons, meteo)
 │   ├── joueur/       mouvement.c (player_tick, grappin)
@@ -133,7 +133,7 @@ velocity/
 | `noyau/maths.c` | vecteurs 3D et aléatoire | `V3`, `v3`, `vadd`, `vsub`, `vmul`, `vdot`, `vcross`, `vlen`, `vnorm`, `vlerp`, `clampf`, `hlen`, `rng`, `frand`, `frange`, `rand_dir` |
 | `reglages/equilibrage.c` | presque tous les `#define` d'équilibrage (voir §5) | mouvement, grappin, armes (une sous-partie par arme), parry, PvP, points, molette |
 | `son/audio.c` | mixeur + synthèse | `S_*`, `Sound`, `Voice`, `play`, `audio_fill`, `audio_update`, `make_sounds`, `audio_init` ; inclut `music.h` |
-| `monde/carte.c` | cartes, collisions, rayons | `Box`, `boxes`, `addbox`, `addpad`, `addpad_to`, `addspeed`, `addanchor`, `Pickup`, `build_map_*`, `MapDef`, `maps[]`, `curMap`, `build_level(m)`, `mapBox`, `ray_world`, `los`, `sphere_pushout` |
+| `monde/carte.c` | cartes, objectifs des modes, collisions, rayons | `Box`, `boxes`, `addbox`, `addpad`, `addpad_to`, `addspeed`, `addanchor`, `Pickup`, `build_map_*`, `MapDef`, `maps[]`, `*Zones`, `*Flags`, `*Shield`, `*Team`, `curMap`, `map_pvp`, `map_step`, `map_obj_scale`, `build_level(m)`, `mapBox`, `ray_world`, `los`, `sphere_pushout` |
 | `monde/entites.c` | structures de jeu et état solo | `Player` (`P`), `Enemy` (`E`), `Coin` (`CO`), `Proj` (`PR`), `Part`, `Beam`, `hitstop`, `msg` |
 | `reseau/etat_partage.c` | ce que le jeu doit connaître du réseau avant le réseau | `MAXP`, `NetPState`, `NetPlayer` (`NP`), `myId`, équipes, déclarations anticipées `net_hit`, `net_fx_*` |
 | `entrees/actions.c` | touches physiques et actions | `SC_*`, `K_*`, `keys`, `latch`, `A_*`, `actId`, `actLabel`, `bindDefault`, `binds`, `act`, `actP` |
@@ -149,7 +149,7 @@ velocity/
 | `armes/*.c` | une arme par fichier (logique ; fiche de conception dans `docs/armes/`) | `slam_*`, `lance_*`, `flail_*`, `fist_*`, `shield_*`, `kin_*`, `sg_*`, `tesla_*`, `saw_*`, `mine_*` |
 | `solo/ennemis_vagues.c` | mode solo | `spawn_enemy`, `enemy_tick`, `wave_tick`, `reset_game` |
 | `reseau/protocole.c` | paquets et événements | `NET_VER`, `PK_*`, `EV_*`, `net_emit`, `net_hit`, `net_fx_*`, `apply_event` |
-| `reseau/hote.c` | autorité de l'hôte | `host_handle`, `host_kill`, `host_tick`, `pick_spawn` |
+| `reseau/hote.c` | autorité de l'hôte | `host_handle`, `host_kill`, `host_tick`, `pick_spawn`, `map_rotate_next`, `host_start_match` |
 | `reseau/client.c` | client | `on_welcome`, `apply_snap`, `client_recv`, `net_update`, `net_connect` |
 | `reseau/en_ligne.c` | lobby et STUN (voir §4) | `stun_*`, `lb_*`, `join_found`, `quick_play`, `ranked_play` |
 | `reseau/classe.c` | mode classé (§4 « Mode classé ») : état, formule Elo, paliers, identité, cartes et règles imposées | `rank_delta`, `rank_tier`, `rank_div`, `rank_label`, `rank_col`, `rk_identity`, `rk_new_match`, `rk_map_ok`, `rk_map_pick`, `rk_counts` |
@@ -172,10 +172,7 @@ velocity/
 | `interface/menus.c` | menus et paramètres | `button`, `slider`, `draw_settings`, `draw_loadout`, `draw_skin_menu`, `draw_main_menu` (dont PARTIE CLASSEE), `draw_rank_box` (encadré CLASSEMENT / TOP 3), `draw_pause` |
 | `interface/scores.c` | scores, killfeed, pseudos | `draw_scoreboard` (colonne CLASSE), `draw_rank_result`, `draw_killfeed`, `project`, `draw_name_tags` |
 | `rendu/joueurs.c` | joueurs distants | `np_anim`, `draw_trails`, `draw_outlines`, `draw_remote_players` |
-| `monde/decor.c` | décor maillé (§3.22) | `dc_tri`, `dc_quad`, `dc_cone`, `dc_sphere`, `dc_bevel`, `dc_arch`, `dc_arch_fill`, `dc_roof`, `dc_window`, `dc_awning`, `dc_cypress`, `dc_palm`, `dc_railing`, `dc_lantern`, `dc_column`, `DV`, `ndv` |
-| `monde/citadelle.c` | LA CITADELLE (§3.22) | `build_map_citadelle`, `ct_house`, `ct_arcade`, `ct_belltower`, `ct_fountain`, `ct_rampart`, `ct_landscape` |
-| `monde/oasis.c` | L'OASIS (§3.23) | `build_map_oasis`, `oa_half`, `oa_tent`, `oa_watchtower`, `oa_pool` |
-| `reseau/modes.c` | modes de jeu (§3.23) | `mode_tick`, `mode_reset`, `mode_on_death`, `mode_time_winner`, `mode_bot_goal`, `mode_ok`, `obj_event` |
+| `reseau/modes.c` | modes de jeu (§3.23) | `mode_tick`, `mode_reset`, `mode_on_death`, `mode_time_winner`, `mode_bot_goal`, `mode_ok`, `zone_r`, `shield_r`, `obj_event` |
 | `jeu/economie.c` | boutique (§3.23) | `credits`, `eco_reset`, `eco_gain`, `eco_buy`, `eco_pick_starter`, `eco_loadout`, `ammo_rule_mul` |
 | `interface/modes_hud.c` | modes : affichage (§3.23) | `draw_modes_world`, `draw_modes_hud`, `draw_shop` |
 | `jeu/style.c` | jauge de style (§3.20) | `style_add`, `style_kill`, `style_parry`, `style_tick`, `style_mult` |
@@ -622,10 +619,10 @@ F2/F3 (sensibilité), F11 (plein écran), R (recommencer en solo, `latch[SC_R]`)
   dans **`gfxKeys`** (nom de clé → variable, nombre de valeurs). Ajouter un réglage = une variable + une ligne de
   `gfxKeys` + sa ligne commentée dans `rendu.ini`. `gfx_clamp` borne les valeurs ; `gfx_defaults` remet les défauts
   avant chaque relecture. Les tests (`--test`) n'ouvrent pas ce fichier (valeurs par défaut).
-- **Textures** : `sol.bmp`, `mur.bmp`, `pierre.bmp`, `enduit.bmp`, `grain.bmp` du même dossier (`tex_override`,
-  `load_bmp_square`) remplacent `texGrid`, `texWall`, `texStone`, `texPlaster`, `texGrime`. Sans `.bmp`, la texture est
+- **Textures** : `sol.bmp`, `mur.bmp`, `grain.bmp` du même dossier (`tex_override`,
+  `load_bmp_square`) remplacent `texGrid`, `texWall`, `texGrime`. Sans `.bmp`, la texture est
   calculée sur le processeur par `tex_generate(TEXG_*)` (une image RGB, puis `upload_rgb_mip`) à partir de
-  `sol_texture`, `mur_texture`, `pierre`, `enduit`, `grain_force` : ces réglages n'ont donc **plus d'effet** quand le
+  `sol_texture`, `mur_texture`, `grain_force` : ces réglages n'ont donc **plus d'effet** quand le
   `.bmp` existe. Le dépôt livre ces `.bmp` (exception `!graphismes/*.bmp` du `.gitignore`), produits par
   **`velocity.exe --export-textures graphismes`** (`export_textures` : `tex_generate` puis `save_bmp_rgb`, BMP 24 bits de
   bas en haut en BGR, ce que relit `load_bmp_square` : même image octet pour octet, mêmes mipmaps). L'export lit
@@ -745,21 +742,29 @@ Fichier `src/interface/mise_a_jour.c`, inclus juste avant `interface/config.c`.
 
 ### 3.18 Cartes (`MapDef`) et kill zone
 
-Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de construction, section « Monde ») :
+Six cartes, décrites par la table `maps[]` (juste après les fonctions de construction, section « Monde ») : cinq
+cartes de partie et une carte **CHALLENGE** (LA TOILE, mode COURSE seulement, §3.21). Objectifs des modes : §3.22.
 
 | # | Nom | Fonction | `killY` | Solo | Idée |
 |---|---|---|---|---|---|
 | 0 | ARENE | `build_map_arene` | −1000 (fermée) | oui | la carte d'origine, **inchangée** (`run_tests` dépend du couloir x = −20 et des pads) |
-| 1 | LE PUITS | `build_map_puits` | −30 | non | puits de 40 × 40 m, spirale de 8 plateformes reliées par des pads (y 0 → 42), sommet à 50 (grandes cellules), 12 ancres au centre, 2 îlots de secours au fond (pads vers la spirale) |
-| 2 | LE CANYON | `build_map_canyon` | −15 | non | deux falaises (y 20) et un gouffre de 70 m ; pads au bord → îlots extérieurs → îlots centraux ; tour de tir de 10 m par falaise ; 6 ancres espacées de 20 m au plus |
+| 1 | LE PUITS | `build_map_puits` | −30 | non | puits de 40 × 40 m, spirale de 8 plateformes reliées par des pads (y 0 → 42), sommet à 50 (grandes cellules), deux balcons au centre à y 25, 12 ancres au centre, 2 îlots de secours au fond (pads vers la spirale) |
+| 2 | LE CANYON | `build_map_canyon` | −15 | non | deux falaises (y 20) et un gouffre de 70 m ; pads au bord → îlots extérieurs → îlots centraux ; plateau central à y 10 (pads vers chaque falaise) ; tour de tir de 10 m par falaise ; 6 ancres espacées de 20 m au plus |
 | 3 | LA BOUCLE | `build_map_boucle` | −1000 | oui | anneau de 120 × 60 m, deux voies par ligne droite avec bandes d'accélération à contresens, séparateurs bas, bloc central coupé au milieu, passerelles et toit à 10 m, pads de coin et pads vers le toit |
 | 4 | LE DOJO | `build_map_dojo` | −1000 | oui | salle de 36 × 36 m, plafond à 7 m, 16 piliers, ring surélevé de 0,5 m, **aucune cellule** |
+| 5 | LA TOILE | `build_map_toile` | −10 | non | **CHALLENGE** (`challenge` = 1) : course au grappin entre gratte-ciel (§3.21), jamais en partie |
 
 - **`MapDef`** : `name` (sans accents), `build`, `spawns`/`nspawns` (coordonnées du monde ; l'Arène garde ses
   anciens points via la macro `MS()` = `ms()` à la compilation), `start` (départ solo et position d'attente en LAN),
   `killY`, zone des drones du solo (`enemyMinY/MaxY`, `enemyRMin/RMax` autour du centre, plancher `enemyFloor`),
   caméra du menu (`menuCam`, `menuPitch` ; le spectateur est `specUp` mètres plus haut), `solo`, `music`, couleurs
-  `sky` (haut du ciel) et `fog` (horizon et brouillard, utilisées par `draw_sky` et `render`).
+  `sky` (haut du ciel) et `fog` (horizon et brouillard, utilisées par `draw_sky` et `render`), portes de course
+  (`gates`, `ngates`, `startYaw`), `challenge` (1 : carte du mode COURSE seulement), `objScale`, objectifs `zones`,
+  `flags`, `shield`, départs par équipe `teamSpawn` / `nTeamSpawn` (§3.22).
+- **Cartes CHALLENGE** (`challenge` = 1, LA TOILE) : jamais dans la ligne CARTE du menu (`map_step` les saute), ni dans
+  la ROTATION, ni en partie hébergée / rapide / classée (`map_pvp`, `rk_map_ok`, `host_setup_rules` reprend l'Arène),
+  ni en solo par vagues (`solo` = 0), et `mode_ok` refuse tous les modes ; on n'y va que par le bouton CHALLENGE
+  (`race_map`). `map=` de `velocity.ini` qui désigne une carte CHALLENGE (ou une carte retirée) revient à 0.
 - **Chargement** : `build_level(m)` remet `nb = npu = 0` et appelle `maps[m].build()`. `load_map(m)` fait
   `build_level`, reconstruit la liste d'affichage (`glDeleteLists` + `build_world_list`, seulement si `glReady` :
   `--test` n'a pas de contexte OpenGL), vide projectiles, pièces, drones, particules, rayons, rend les scies, remet
@@ -775,7 +780,8 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
   au sol dessus : aucune friction, et `+SPEED_ACCEL` m/s² dans son sens jusqu'à `SPEED_MAX` (28 m/s). Rendu :
   arêtes roses dans la liste d'affichage, chevrons qui défilent dans `draw_map_fx` (hors liste).
 - **Choix** : menu principal, ligne « CARTE : < NOM > » sous le pseudo (flèches cliquables) + bouton ROTATION
-  (l'hôte passe à la carte suivante à chaque nouveau match). SOLO utilise la carte choisie si elle est `solo`,
+  (l'hôte passe à chaque nouveau match à la carte suivante **qui a le mode en cours** et n'est pas une carte
+  CHALLENGE : `map_rotate_next`, appelée par `host_start_match`). SOLO utilise la carte choisie si elle est `solo`,
   sinon l'Arène (le bouton l'indique). Options `--map N` (bots, captures).
 - **Réseau** (`NET_VER` 13) : l'id de carte voyage dans `PkWelcome.pad[0]` (le client fait `load_map` avant
   `on_welcome`), `PkAnnounce.map` (affiché dans REJOINDRE : « [LAN LIBRE] Hote - LE PUITS ») et `EV_MATCH`
@@ -783,8 +789,8 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
   transmet pas la carte (on la reçoit à la connexion).
 
 - **Avec le reste de `dev`** (fusion du dépôt original, `NET_VER` 14) :
-  - **Équipes** : sur l'Arène, `pick_spawn` garde les moitiés nord/sud de `dev` ; sur les autres cartes, chaque camp
-    prend les départs de son côté de l'axe le plus long de la carte (bleus côté négatif, rouges côté positif).
+  - **Équipes** : `pick_spawn` prend les départs de son camp (`MapDef.teamSpawn`, §3.22 : bleus côté négatif de
+    l'axe des équipes, rouges côté positif), le plus loin des ennemis ; sans `teamSpawn`, les départs de la carte.
   - **Annonce LAN** : `PkAnnounce` porte `teams` **et** `map` (REJOINDRE : « [LAN 2V2] Hote - LE PUITS »).
   - **Menu** : la ligne CARTE est dans le menu principal **et** dans HEBERGER UNE PARTIE (`draw_map_row`).
   - **Rendu** : les nouvelles cartes passent par les lightmaps, ombres et bloom de `dev` (`load_map` reconstruit la
@@ -844,9 +850,10 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
 
 ### 3.21 Mode COURSE (`src/jeu/course.c`, `src/interface/course_hud.c`)
 
-- Bouton **COURSE** du menu principal (`ACT_RACE`) : carte à portes (`MapDef.gates` x y z rayon, `ngates`,
-  `startYaw` ; la première est **LA TOILE**, `build_map_toile` : quatre avenues de gratte-ciel au-dessus du vide,
-  13 portes jusqu'au toit d'arrivée). Pas d'ennemis, pas de vagues.
+- Bouton **CHALLENGE** du menu principal (`ACT_RACE`, anciennement COURSE) : la première carte CHALLENGE à portes
+  (`MapDef.challenge`, `gates` x y z rayon, `ngates`, `startYaw` ; **LA TOILE**, `build_map_toile` : quatre avenues
+  de gratte-ciel au-dessus du vide, 13 portes jusqu'au toit d'arrivée). Pas d'ennemis, pas de vagues. LA TOILE n'est
+  jouable que là (§3.18, « Cartes CHALLENGE »).
 - `race_start` : décompte `RACE_COUNTDOWN` immobile, puis chrono ; une porte compte quand le segment
   `prevPos → pos` (centre du corps) traverse sa sphère, dans l'ordre. Chute sous `killY` : `race_respawn` à la
   dernière porte passée (le chrono continue, compteur de chutes). **R** ou RECOMMENCER : `race_start`.
@@ -867,58 +874,70 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
   **course jouée par un pilote simple** (regarde la porte, grappin dès que l'aimant trouve un point, lâche dans la
   remontée) : il doit arriver en moins de 120 s (41 s, 1 chute). `RACEDBG=1` trace son trajet dans le fichier de test.
 
-### 3.22 Décor maillé et LA CITADELLE (`src/monde/decor.c`, `src/monde/citadelle.c`)
+### 3.22 Objectifs des modes sur les cartes néon
 
-- **Principe** : le monde jouable reste en boîtes (collisions, rayons, lightmaps) ; le **décor maillé** ajoute des
-  triangles par-dessus (≈ 180 000 sur LA CITADELLE, limite `DEC_MAXV`). Chaque sommet a sa couleur de base ; au
-  chargement, `decor_bake` (dans `rendu/eclairage.c`) lui donne la même lumière qu'un texel de lightmap (`lm_light` :
-  soleil et ombres portées par les boîtes, ciel et occlusion, rebond, néons ; `decor_occlusion` rayons au lieu de
-  `AO_RAYS`), puis les triangles sont ajoutés à la liste d'affichage du monde (aucun coût de rendu en plus d'un
-  `glCallList`). Primitives : tronc de cône / cylindre, sphère et coupole, boîte chanfreinée, arche (et arche aux
-  écoinçons remplis), toit à deux pans en rangées de tuiles avec faîtière et pignons, fenêtre (verre en retrait,
-  demi-lune, cadre, appui, volets à lames), auvent rayé qui fait le creux, cyprès, palmier, rambarde à balustres,
-  lanterne, colonne à base et chapiteau.
-- **`B_HIDDEN`** : boîte de collision invisible (jamais dessinée, pas de lightmap, pas de liseré) qui porte la
-  collision et l'ombre d'un élément de décor (colonne, caisse, fontaine, gradins sous les pans de toit pour pouvoir
-  y marcher). Le reste du code la traite comme un obstacle ordinaire (`ray_world`, `pos_free`, navigation).
-- **`MAXB` 768** (au lieu de 256) ; la grille des rayons courts stocke des indices sur 16 bits (`lmgB`), 96 boîtes
-  par case. `load_map` libère maintenant les lightmaps de la carte précédente (elles fuyaient).
-- **Par carte** (`MapDef`) : `style` 1 = textures **pierre** (pavés en appareil décalé) et **enduit** (`texStone`,
-  `texPlaster`, réglages `pierre`, `enduit` dans `rendu.ini`, ou `pierre.bmp` / `enduit.bmp`) au lieu du métal, sans
-  liserés sombres ; `light` = éclairage propre (`MAPL_*` : direction et couleur du soleil, force, ciel, rebond,
-  ambiance des objets), appliqué par `map_light_apply` (dans `load_map` et après chaque relecture de `rendu.ini`) et
-  retiré en revenant sur une autre carte.
-- **LA CITADELLE** (carte 6, solo et multi, musique « Citadelle ») : ville fortifiée au soleil, nord = −z. Spawns
-  au sud (porte de la ville) et au nord ; couloir A à l'ouest (rue longue), centre (place du clocher : horloges,
-  beffroi à arches, cloche, coupole turquoise à nervures dorées, bannières), couloir B à l'est. **Site A** : cour de
-  la fontaine (bassin, vasque, filets d'eau) bordée d'une arcade à 5 arches sous un toit de tuiles. **Site B** :
-  marché couvert à 12 colonnes, poutres, grand toit, étals de fruits. 16 maisons en enduit (fenêtres à volets,
-  portes sous arc, lanternes, corniches) avec toits de tuiles ou terrasses (rambardes, amphores, cheminées) ; pads
-  de la place vers deux terrasses ; remparts crénelés avec chemin de ronde à 10 m et escaliers ; 4 tours rondes à
-  toit conique ; muret, caisses, bacs à fleurs, palmiers, cyprès. Hors les murs (décor seul) : collines, mer au
-  sud, oliviers et cyprès, montagnes. Ce n'est la copie d'aucune carte existante.
-- Captures : `--shot X.bmp --map 6 --pos x,y,z[,inclinaison] --yaw A` (`--pos` marche sur toutes les cartes autres
-  que l'Arène). Test : « decor (LA CITADELLE) : N triangles ».
+LA CITADELLE et L'OASIS (cartes 6 et 7, pierre et enduit au soleil, décor maillé de ~180 000 triangles, salles de
+départ, carte sans grappin) ont été **retirées** : elles sortaient de l'esthétique néon. Avec elles sont partis le
+décor maillé (`src/monde/decor.c`, `dc_*`, `DEC_MAXV`, `decor_bake`), les boîtes invisibles `B_HIDDEN`, les textures
+pierre / enduit (`texStone`, `texPlaster`, clés `pierre`, `enduit`, `decor_occlusion`, `pierre.bmp`, `enduit.bmp`),
+l'éclairage par carte (`MapDef.style`, `MapDef.light`, `MAPL_*`, `map_light_apply`), les salles de départ
+(`MapDef.spawnRooms`, `SPAWN_ROOM_DPS`), `MapDef.noHook` et le morceau « Citadelle ». `MAXB` est revenu à 256 (la plus
+grosse carte, LA TOILE, a 134 boîtes) et la grille des rayons courts de l'éclairage à des indices sur 8 bits
+(`LMG_MAXB` 48). `NET_VER` 17.
 
-### 3.23 Règles de partie, modes, boutique, spécialisations, L'OASIS
+Les modes **3 ZONES**, **DRAPEAU** et **BOUCLIER** (§3.23) se jouent maintenant sur les **cinq cartes néon** (pas sur
+LA TOILE, carte CHALLENGE, §3.21). Objectifs dans `src/monde/carte.c` (`areneZones`, `puitsFlags`…), branchés dans
+`MapDef` : `zones` (A côté BLEU, B au centre, C côté ROUGE), `flags` (BLEU puis ROUGE), `shield` (bouclier des
+BLEUS), `teamSpawn` / `nTeamSpawn` (départs par équipe, BLEUS puis ROUGES), `objScale` (échelle des rayons
+`ZONE_R` et `SHIELD_ZONE_R` sur la carte : `zone_r()`, `shield_r()` dans `modes.c`). BLEUS du côté négatif de l'axe
+des équipes.
+
+| Carte | Axe (BLEUS) | Zones A / B / C | Drapeaux | Bouclier | Départs | Échelle |
+|---|---|---|---|---|---|---|
+| ARENE | z < 0 (nord) | plateformes hautes nord / sud (0, 7, ∓50,4), B au sol à l'est (32, 0, 0) entre le pad et la plateforme haute est | (0, 0, ∓70), fond de chaque moitié | plateforme haute nord | 9 par camp, à l'écart des blocs | 1 |
+| LE PUITS | x < 0 (ouest) | balcons (∓7, 25, 0), B au sommet (0, 50, 0) | 3e et 7e plateformes de la spirale, du côté opposé au pad (∓16, 12 / 36, ±17,8) | balcon ouest | 4 par camp, coins des plateformes | 0,6 |
+| LE CANYON | x < 0 (ouest) | falaises entre les deux abris sud (∓58, 20, −20), B sur le plateau central (0, 10, 0) | (∓70, 20, 0), derrière la tour de tir | falaise ouest, entre les abris | 6 par camp | 1 |
+| LA BOUCLE | x < 0 (ouest) | toit du bloc central (∓32, 10, 0), B dans le passage sous le toit de la coupe (0, 0, 0) | (∓57, 0, 0), bout de l'anneau entre le pad du toit et le mur | toit ouest | 6 par camp | 1 |
+| LE DOJO | z < 0 (nord) | (0, 0, ∓9) entre le ring et le mur, B sur le ring | coins opposés (∓16, 0, ∓16), deux couloirs d'accès | (0, 0, −9) | 5 par camp | 0,8 |
+
+- **Géométrie ajoutée** : LE CANYON a un **plateau central** de 20 × 16 m à y 10 (dessus néon cyan) sous les îlots
+  centraux, avec deux pads vers le bord de chaque falaise (sans grappin, on peut enfin traverser : îlot central →
+  plateau → pad) ; LE PUITS a deux **balcons** de 12 × 12 m à y 25 au centre du puits (zones A et C, bouclier), à la
+  même hauteur des deux côtés ; on y monte au grappin ou en se laissant tomber du sommet.
+- **Symétrie** : miroir sur l'axe des équipes (Arène, Canyon, Boucle, Dojo ; drapeaux du Dojo en demi-tour) ; la
+  spirale du Puits ne peut pas être symétrique : ses paires sont symétriques par demi-tour autour de l'axe du puits et
+  les départs des deux camps ont la même hauteur moyenne (19,5 m).
+- **Règles vérifiées** (test « objectifs ») : chaque point au-dessus d'un sol à moins de 1,5 m (pas un pad), hors des
+  boîtes, au-dessus de `killY` ; sur les cartes ouvertes, du sol à 3 m tout autour ; disque des zones et du bouclier
+  entièrement sur un sol plat et libre, aucun pad dedans ; zones à plus de deux rayons l'une de l'autre, drapeaux à
+  plus de 40 m ; chaque objectif du côté de son camp ; symétrie ; au moins 4 départs par camp ; chemin des bots
+  (`nav_path`) de chaque camp vers chaque objectif, avec et sans grappin.
+- **Navigation** : une arête SAUT vers un sol plus bas n'exigeait que la ligne droite ; quand elle traverse son propre
+  sol (descendre du sommet du Puits vers un balcon), le graphe essaie maintenant « courir jusqu'au bord puis tomber »
+  (`nav_edge_exit`).
+- Captures : `--shot objectifs_zones.bmp --map N` (aussi `_drapeau`, `_bouclier` ; `--pos x,y,z[,inclinaison]`,
+  `--yaw A`) dessine les objectifs du mode sur la carte.
+
+### 3.23 Règles de partie, modes, boutique, spécialisations
 
 - **Règles** (`MatchRules rules` ; `wantRules` = choix du panneau RÈGLES de HEBERGER, `regles=` dans `velocity.ini`,
-  `--regles mode,grappin,munitions,boutique,specs,minutes` pour les bots) : mode, grappin oui/non (`hook_allowed()` :
-  aussi `MapDef.noHook`), munitions normales / ×2 / infinies (`ammo_rule_mul`, `game_tick`), boutique, spécialisations,
+  `--regles mode,grappin,munitions,boutique,specs,minutes` pour les bots) : mode, grappin oui/non (`hook_allowed()`),
+  munitions normales / ×2 / infinies (`ammo_rule_mul`, `game_tick`), boutique, spécialisations,
   durée (3 à 15 min). L'hôte les copie au démarrage (`net_host_start` : mode indisponible sur la carte → FRAGS,
   mode d'équipe sans équipes → 2 contre 2) et les envoie dans chaque `PkSnap` (`rMode`, `rFlags`, `rMinutes`, `rAmmo`).
 - **Modes** (`src/reseau/modes.c`, l'hôte fait autorité, état `ObjState obj` dans `PkSnap`, messages `EV_OBJ`) :
-  FRAGS (comme avant) ; CHRONO (pas de limite de frags, le plus de kills au temps) ; **3 ZONES** (`MapDef.zones` :
+  FRAGS (comme avant) ; CHRONO (pas de limite de frags, le plus de kills au temps) ; **3 ZONES** (`MapDef.zones`, rayon
+  `zone_r()` = `ZONE_R` × `objScale` :
   une seule équipe dedans prend la zone en `ZONE_CAP_T`, plus vite à plusieurs, contestée = bloquée ; chaque zone
   tenue rapporte 1 point par seconde, `ZONE_SCORE` pour gagner) ; **DRAPEAU** (`MapDef.flags` : l'adversaire le
   prend en le touchant, le porteur qui meurt le laisse tomber sur place (`mode_on_death`), un coéquipier du porteur
   peut le reprendre ; un défenseur qui reste à côté `FLAG_RETURN_T` sans être touché le rend (une touche remet le
   retour à zéro) ; capture = le porteur touche son propre drapeau resté à la base ; `FLAG_CAPS` pour gagner ;
-  oublié `FLAG_AUTO_RETURN` = rendu) ; **BOUCLIER** (`MapDef.shield` : les ROUGES le surchargent en restant dessus
+  oublié `FLAG_AUTO_RETURN` = rendu) ; **BOUCLIER** (`MapDef.shield`, rayon `shield_r()` : les ROUGES le surchargent en restant dessus
   sans BLEU présent, les BLEUS gagnent si le temps s'écoule). L'hôte garde les progressions en décimal
   (`zoneProg`, `flagRet`) : l'octet de `ObjState` ne sert qu'à l'envoi.
-- **Salles de départ** (`MapDef.spawnRooms`, `teamSpawn`) : chaque équipe réapparaît dans la sienne ; un adversaire
-  qui y entre perd `SPAWN_ROOM_DPS` PV par seconde (voile coloré, message à l'écran).
+- **Cartes** : les cinq cartes néon ont les trois objectifs et des départs par équipe (§3.22) ; LA TOILE (CHALLENGE)
+  n'a aucun mode (`mode_ok` = 0).
 - **Bots** : vont à l'objectif (`mode_bot_goal` : zone pas à eux, drapeau à voler / rendre / ramener, bouclier),
   le tiennent sur place, se battent si un ennemi est vu de près. **Dans HEBERGER, pas de bots en 3 ZONES, DRAPEAU
   et BOUCLIER** (modes entre joueurs pour l'instant) ; FRAGS et CHRONO les gardent.
@@ -931,12 +950,9 @@ Cinq cartes, décrites par la table `maps[]` (juste après les fonctions de cons
   REMPART (−20 % de dégâts subis, hôte ; un peu plus lent), ÉCLAIREUR (+12 % de vitesse, 3 charges de dash),
   SOUTIEN (régénère hors combat, soigne les alliés proches, hôte), ARTIFICIER (jauges +50 %). Actives en solo, et en
   multi si l'hôte les autorise.
-- **L'OASIS** (carte 7, `noHook`) : symétrique, BLEUS au nord. Salle de départ fermée (toit, 3 sorties), cour avec
-  drapeau (et bouclier des BLEUS), maisons à terrasse qui séparent 3 couloirs : A à l'ouest (ruines à colonnade,
-  bassins), B au centre (place surélevée d'un temple, autel), C à l'est (bazar sous les tentes). Deux tours de guet
-  par escalier. LA CITADELLE a aussi ses zones, drapeaux, bouclier et départs par équipe (sans salles fermées).
-- `NET_VER` 15 (16 depuis le mode classé, §4). Captures : `--shot boutique.bmp`, `--shot armedepart.bmp`. Tests : zones, drapeau, bouclier,
-  spécialisations, SOUTIEN, salle de départ, grappin interdit, boutique.
+- `NET_VER` 15 (16 depuis le mode classé, 17 depuis le retrait de LA CITADELLE et L'OASIS, §4). Captures :
+  `--shot boutique.bmp`, `--shot armedepart.bmp` (Arène en 3 ZONES), `objectifs_*` (§3.22). Tests : zones, drapeau,
+  bouclier (sur l'Arène), spécialisations, SOUTIEN, boutique, objectifs des cartes, cartes CHALLENGE, rotation.
 
 ---
 
@@ -1173,7 +1189,7 @@ identique)** :
    `wantTeams`), avec les **règles par défaut** (`MatchRules` : FRAGS, grappin autorisé, munitions normales, sans
    boutique ni spécialisations, 10 min ; `wantRules` est ignoré), limite `FRAG_LIMIT`, `MATCH_TIME`, et **sans
    bots** (ni `vsBot`, ni `hostBots`) ; les spectateurs ne comptent pas. La carte doit avoir un vrai match à mort :
-   `rk_map_pick` saute les cartes à portes de course (LA TOILE). Un match ne compte que si `rk_counts()` (classée,
+   `rk_map_pick` saute les cartes CHALLENGE (`rk_map_ok` = `map_pvp` : LA TOILE). Un match ne compte que si `rk_counts()` (classée,
    chacun pour soi, mode FRAGS). L'hôte refuse (`PkWelcome.refused = 2`) un joueur sans identité de classement.
    Le premier adversaire qui arrive relance le match (`host_start_match`) ; si tous les adversaires partent, l'hôte
    gagne (`host_end_match`).
@@ -1217,7 +1233,8 @@ Historique récent : 12 équipes ; 13 skin dans `NetPState` (dev) / carte et `W_
 deux ; 15 règles de partie et objectifs (`PkSnap` : `rMode`…, `obj` ; `EV_OBJ` ; spécialisation dans `NetPState`) ;
 **16** fusion avec le mode classé du dépôt original (qui avait pris 14 de son côté) : `PkJoin` (`rid`, `mmr`,
 `rplay`), `PkRoster` (cotes, identifiants, `ranked`, `mid`, partis), `PkAnnounce.ranked`, `PkWelcome.pad[1]` et
-`refused = 2`. La valeur fait foi dans `src/reseau/protocole.c`.
+`refused = 2` ; **17** cartes LA CITADELLE et L'OASIS retirées (ordre de `maps[]`), objectifs sur les cartes néon
+(plateau du Canyon, balcons du Puits). La valeur fait foi dans `src/reseau/protocole.c`.
 
 ---
 
@@ -1343,7 +1360,7 @@ deux ; 15 règles de partie et objectifs (`PkSnap` : `rMode`…, `obj` ; `EV_OBJ
 
 | Nom | Valeur | Effet |
 |---|---|---|
-| `MAXB` | 768 | boîtes de la carte (`boxes`) |
+| `MAXB` | 256 | boîtes de la carte (`boxes`) ; indices sur 8 bits dans la grille de l'éclairage |
 | `MAP_S` | 1,4 | échelle horizontale de la carte (`ms()`) ; les hauteurs ne changent pas |
 | `MAXPICK` | 16 | cellules de recharge (limité aussi par les 16 bits de `pickMask`) |
 | `SPEED_ACCEL` / `SPEED_MAX` | 30 m/s² / 28 m/s | bande d'accélération `B_SPEED` (La Boucle) |
@@ -1369,7 +1386,7 @@ deux ; 15 règles de partie et objectifs (`PkSnap` : `rMode`…, `obj` ; `EV_OBJ
 | `PVP_SCALE` | 0,7 | dégâts contre les joueurs = 70 % des dégâts contre les monstres |
 | `KILL_HEAL` | 30 PV | soin du tueur |
 | `NET_MAGIC` | `0x564C4F43` | signature des paquets (« VLOC ») |
-| `NET_VER` | 16 | version du protocole (historique : §4, « `NET_VER` ») ; 15 = règles et objectifs, 16 = mode classé |
+| `NET_VER` | 17 | version du protocole (historique : §4, « `NET_VER` ») ; 15 = règles et objectifs, 16 = mode classé, 17 = cartes néon seulement |
 | `RANK_*` | voir §4 | mode classé : `RANK_START` 1000, bornes 100 à 3000, `RANK_K` 32, `RANK_K_PLACE` 64 sur `RANK_PLACEMENT` 10 matchs, paliers, `RANK_END_WAIT`, `RANK_RETRY`, `RANK_TRIES` |
 | `MAXSPEC` | 4 | spectateurs en direct sur l'hôte |
 | `MAXFOUND` | 12 | parties mémorisées (LAN + en ligne ; 7 affichées) |
@@ -1450,11 +1467,13 @@ Ouvre la fenêtre sans l'activer, prépare une scène, la dessine une fois (`ren
 Autres noms reconnus (voir `src/plateforme/demarrage.c`, chercher `strstr(shotPath`) : `loadout` (`_charge`),
 `update`, `skinmenu`, `skins` (`_course`), `small` (fenêtre 1024 × 640), `carte` / `carte3d` (second écran, avec
 `_dm`, `_equipes`, `_fin`), `arene_nuit` / `_jour` / `_orage`, `dm_mort`, `dm_<arme>` (`enclume`, `lance`, `fleau`,
-`poings`, `egide`, `eventail`, `tesla`), `skills`, `bench_dm` (mesure), `boutique`, `armedepart`, `course`
+`poings`, `egide`, `eventail`, `tesla`), `skills`, `bench_dm` (mesure), `boutique`, `armedepart`, `objectifs_zones` /
+`objectifs_drapeau` / `objectifs_bouclier` (objectifs du mode sur la carte `--map N`, §3.22), `course`
 (`_depart`, `_fin`, `_aimant`), et dans la scène solo : `changearme`, `vie`, `style`, `elan`, `enclume`, `lance`,
 `fleau` (`_vide`), `poings` (`_upper`), `egide` (`_bas`), `scie` (`_main`), `tesla`, `eventail`.
 
-Options après le nom : `--map N` (carte, §3.18) et `--yaw A` (orientation). Sur une carte autre que l'Arène
+Options après le nom : `--map N` (carte, §3.18), `--yaw A` (orientation) et `--pos x,y,z[,inclinaison]` (point de vue,
+cartes autres que l'Arène et `objectifs_*`). Sur une carte autre que l'Arène
 (hors `menu`/`settings`/`dm`), la scène est une vue de la carte depuis la caméra du menu ; le nom peut contenir
 `spawn` (depuis le premier point de départ), `chute` (3 m au-dessus de `killY` en tombant : plan rouge et
 vignette) ou `solo` (avec 8 drones). Exemple : `velocity.exe --shot puits.bmp --map 1 --yaw 0.8`.
@@ -1468,8 +1487,8 @@ Pas de son, `velocity.ini` n'est ni lu ni écrit.
 ```
 
 Sans fenêtre ni OpenGL : lit `graphismes/rendu.ini` (`gfx_load_all`), calcule chaque texture générée
-(`tex_generate`) et l'écrit dans le dossier (créé s'il manque) : `sol.bmp`, `mur.bmp`, `pierre.bmp`,
-`enduit.bmp` (256 px) et `grain.bmp` (64 px), BMP 24 bits non compressés. Code de sortie 0 si les cinq sont écrits.
+(`tex_generate`) et l'écrit dans le dossier (créé s'il manque) : `sol.bmp`, `mur.bmp` (256 px) et `grain.bmp`
+(64 px), BMP 24 bits non compressés. Code de sortie 0 si les trois sont écrits.
 Le dossier peut contenir des espaces (tout le reste de la ligne). `velocity.ini` n'est ni lu ni écrit.
 
 ### Mode bot : `--bot host|join`

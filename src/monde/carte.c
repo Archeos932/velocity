@@ -4,10 +4,9 @@
 /* ------------------------------------------------------------------ */
 /* Monde : une liste d'AABB                                            */
 /* ------------------------------------------------------------------ */
-enum { B_SOLID, B_PAD, B_SPEED, B_HIDDEN };              /* B_SPEED : bande d'acceleration (launch = sens x vitesse max) ;
-                                                            B_HIDDEN : collision et ombre d'un decor maille, jamais dessinee */
+enum { B_SOLID, B_PAD, B_SPEED };                        /* B_SPEED : bande d'acceleration (launch = sens x vitesse max) */
 typedef struct { V3 mn, mx, col, launch; int kind; } Box;
-#define MAXB 768
+#define MAXB 256
 static Box boxes[MAXB];
 static int nb;
 
@@ -169,6 +168,10 @@ static void build_map_puits(void) {
     addbox(-6, 49, -6, 6, 50, 6, 0.55f, 0.62f, 0.88f);       /* sommet */
     addbox(-1, 50, 3.5f, 1, 51.2f, 4.5f, 0.42f, 0.48f, 0.72f); /* couvertures du sommet */
     addbox(-1, 50, -4.5f, 1, 51.2f, -3.5f, 0.42f, 0.48f, 0.72f);
+    /* balcons d'objectif (zones A et C, bouclier) : a mi-hauteur au centre, meme hauteur des deux cotes ; on y monte au
+     * grappin ou en se laissant tomber du sommet, on en descend sur la plateforme ouest (y 18) ou sur les ilots du fond */
+    addbox(-13, 24, -6, -1, 25, 6, 0.30f, 0.62f, 0.70f);
+    addbox(1, 24, -6, 13, 25, 6, 0.30f, 0.62f, 0.70f);
     for (int i = 0; i < 8; i++) {                         /* pads : chaque plateforme lance vers la suivante (la 8e vers le sommet) */
         const float *p = puitsPlat[i];
         V3 next = i < 7 ? v3(puitsPlat[i + 1][0], puitsPlat[i + 1][2], puitsPlat[i + 1][1]) : v3(0, 50, 0);
@@ -219,6 +222,12 @@ static void build_map_canyon(void) {
     }
     addbox(-3, -40, -15, 3, 18, -9, 0.58f, 0.38f, 0.23f);  /* ilots centraux */
     addbox(-3, -40, 9, 3, 18, 15, 0.58f, 0.38f, 0.23f);
+    /* plateau central (zone B des 3 ZONES) : 20 x 16 m a y 10, sous les ilots centraux ; on y descend des ilots
+     * (ou au grappin), deux pads le relient au bord de chaque falaise */
+    addbox(-10, -40, -8, 10, 9.7f, 8, 0.56f, 0.37f, 0.22f);
+    addbox(-10, 9.7f, -8, 10, 10, 8, 0.30f, 0.62f, 0.64f);   /* dessus neon */
+    addpad_to(-8.5f, 10, 0, v3(-47, 20, 0), 26);
+    addpad_to(8.5f, 10, 0, v3(47, 20, 0), 26);
     addanchor(-28, 30, 0); addanchor(28, 30, 0);           /* ancres : on traverse toujours en 3 accroches */
     addanchor(-10, 31, 0); addanchor(10, 31, 0);
     addanchor(0, 33, -20); addanchor(0, 33, 20);
@@ -369,7 +378,9 @@ static const float areneSpawns[][3] = {
 };
 
 /* Description d'une carte. killY : plan de mort (-1000 = carte fermee). Les drones du solo apparaissent entre
- * enemyRMin et enemyRMax du centre, entre enemyMinY et enemyMaxY, et ne descendent jamais sous enemyFloor. */
+ * enemyRMin et enemyRMax du centre, entre enemyMinY et enemyMaxY, et ne descendent jamais sous enemyFloor.
+ * challenge = 1 : carte du mode COURSE seulement (LA TOILE) ; jamais en partie (HEBERGER, rotation, partie rapide,
+ * classee) ni en solo par vagues. */
 typedef struct {
     const char *name;                                     /* sans accents */
     void (*build)(void);
@@ -382,82 +393,107 @@ typedef struct {
     float sky[3], fog[3];                                 /* haut du ciel ; horizon et brouillard */
     const float (*gates)[4]; int ngates;                  /* course (mode COURSE) : portes x y z rayon, la derniere = arrivee */
     float startYaw;                                       /* orientation au depart de la course */
-    int style;                                            /* textures : 0 = metal (sol a dalles boulonnees), 1 = pierre et enduit */
-    const float *light;                                   /* eclairage propre (MAPL_*) ; NULL = graphismes/rendu.ini */
-    /* objectifs des modes (src/reseau/modes.c) ; NULL = mode indisponible sur cette carte */
+    int challenge;                                        /* 1 : carte CHALLENGE (mode COURSE seulement) */
+    float objScale;                                       /* echelle des zones et du bouclier (ZONE_R, SHIELD_ZONE_R) ; 0 = 1 */
+    /* objectifs des modes (src/reseau/modes.c) ; NULL = mode indisponible sur cette carte. BLEUS du cote negatif de
+     * l'axe des equipes, ROUGES du cote positif ; zones dans l'ordre A (cote BLEU), B (centre), C (cote ROUGE) */
     const float (*zones)[3];                              /* 3 zones (MODE_ZONES) */
     const float (*flags)[3];                              /* drapeau BLEU puis ROUGE, chez eux (MODE_DRAPEAU) */
     const float *shield;                                  /* bouclier des BLEUS (MODE_BOUCLIER) */
     const float (*teamSpawn)[3]; int nTeamSpawn;          /* departs par equipe : nTeamSpawn BLEUS puis nTeamSpawn ROUGES */
-    const float (*spawnRooms)[6];                         /* salle de depart BLEUE puis ROUGE (x0 y0 z0 x1 y1 z1) : l'adversaire y brule */
-    int noHook;                                           /* 1 : pas de grappin sur cette carte */
 } MapDef;
 #define NSP(a) (int)(sizeof a / sizeof a[0])
-/* eclairage propre a une carte : direction du soleil (3), couleur (3), force (1), lumiere du ciel (3), rebond (3),
- * ambiance des objets (3) ; remplace ces valeurs de rendu.ini tant que la carte est chargee */
-enum { MAPL_SUNDIR = 0, MAPL_SUNCOL = 3, MAPL_SUNPOW = 6, MAPL_SKY = 7, MAPL_BOUNCE = 10, MAPL_OBJAMB = 13, MAPL_N = 16 };
-static void build_map_citadelle(void);                    /* src/monde/citadelle.c */
-static const float citadelleSpawns[][3] = {
-    { -10, 0, 62 }, { 10, 0, 62 }, { 0, 0, 56 }, { -20, 0, 60 }, { 20, 0, 60 },
-    { -10, 0, -60 }, { 10, 0, -60 }, { 0, 0, -55 }, { -4, 0, -66 }, { 4, 0, -66 },
-    { -60, 0, 10 }, { 60, 0, 10 }, { -6, 0, 20 }, { 6, 0, 20 },
+/* --- objectifs des cartes neon (docs/CODE.md 3.23) --- */
+/* ARENE : BLEUS au nord (z < 0). A et C sur les plateformes hautes nord et sud (pad depuis le centre, grappin),
+ * B au sol a l'est entre le pad et la plateforme haute est ; drapeaux au fond de chaque moitie ; bouclier sur la
+ * plateforme haute nord. Departs : la moitie de chaque camp, a l'ecart des blocs de couverture. */
+static const float areneZones[3][3] = { { 0, 7, MS(-36) }, { 32, 0, 0 }, { 0, 7, MS(36) } };
+static const float areneFlags[2][3] = { { 0, 0, -70 }, { 0, 0, 70 } };
+static const float areneShield[3] = { 0, 7, MS(-36) };
+static const float areneTeam[][3] = {
+    { 0, 0, -36 }, { -42, 0, -42 }, { 42, 0, -42 }, { -24, 0, -66 }, { 24, 0, -66 }, { -30, 0, -16 }, { 30, 0, -16 },
+    { MS(-46), 0, MS(-14) }, { MS(46), 0, MS(-14) },
+    { 0, 0, 36 }, { -42, 0, 42 }, { 42, 0, 42 }, { -24, 0, 66 }, { 24, 0, 66 }, { -30, 0, 16 }, { 30, 0, 16 },
+    { MS(-46), 0, MS(14) }, { MS(46), 0, MS(14) },
 };
-static const float citadelleLight[MAPL_N] = { 0.5f, 0.78f, 0.38f,  1.0f, 0.9f, 0.74f,  1.25f,  0.5f, 0.6f, 0.82f,
-                                              0.3f, 0.24f, 0.17f,  0.55f, 0.56f, 0.62f };
-/* LA CITADELLE : objectifs et departs par equipe (BLEUS au nord) */
-static const float citadelleZones[3][3] = { { -36, 0, -24 }, { 38, 0, -34 }, { 0, 0, 26 } };
-static const float citadelleFlags[2][3] = { { 0, 0, -58 }, { 0, 0, 58 } };
-static const float citadelleShield[3] = { 0, 0, -50 };
-static const float citadelleTeam[][3] = {
-    { -10, 0, -60 }, { 10, 0, -60 }, { 0, 0, -55 }, { -4, 0, -66 }, { 4, 0, -66 },
-    { -10, 0, 62 }, { 10, 0, 62 }, { 0, 0, 56 }, { -20, 0, 60 }, { 20, 0, 60 },
+/* LE PUITS : BLEUS a l'ouest (x < 0 : plateformes 2, 3, 4), ROUGES a l'est (6, 7, 0). Spirale : symetrie impossible,
+ * les paires sont symetriques par rapport a l'axe du puits (x, z -> -x, -z) et les departs ont la meme hauteur
+ * moyenne. A et C sur les balcons (y 25), B au sommet ; drapeaux sur les plateformes 2 et 6, du cote oppose au pad ;
+ * bouclier sur le balcon ouest. Plateformes de 8 m : zones et bouclier a l'echelle 0,6. */
+static const float puitsZones[3][3] = { { -7, 25, 0 }, { 0, 50, 0 }, { 7, 25, 0 } };
+static const float puitsFlags[2][3] = { { -16, 12, 17.8f }, { 16, 36, -17.8f } };
+static const float puitsShield[3] = { -7, 25, 0 };
+static const float puitsTeam[][3] = {
+    { -18.8f, 12, 19 }, { -18.8f, 18, 0.6f }, { -17.8f, 24, -17.8f }, { -18.5f, 24, -15.2f },
+    { 18.8f, 36, -19 }, { 18.8f, 42, -0.6f }, { 17.8f, 0, 17.8f }, { 18.5f, 0, 15.2f },
 };
-/* L'OASIS (src/monde/oasis.c) */
-static void build_map_oasis(void);
-static const float oasisSpawns[][3] = {
-    { -8, 0, -68 }, { 0, 0, -68 }, { 8, 0, -68 }, { -8, 0, -64 }, { 8, 0, -64 }, { 0, 0, -64 },
-    { -8, 0, 68 }, { 0, 0, 68 }, { 8, 0, 68 }, { -8, 0, 64 }, { 8, 0, 64 }, { 0, 0, 64 },
+/* LE CANYON : BLEUS a l'ouest. A et C sur chaque falaise entre les deux abris sud, B sur le plateau central (y 10) ;
+ * drapeaux derriere la tour de tir, devant le mur du fond ; bouclier sur la falaise ouest, entre les abris. */
+static const float canyonZones[3][3] = { { -58, 20, -20 }, { 0, 10, 0 }, { 58, 20, -20 } };
+static const float canyonFlags[2][3] = { { -70, 20, 0 }, { 70, 20, 0 } };
+static const float canyonShield[3] = { -58, 20, -20 };
+static const float canyonTeam[][3] = {
+    { -60, 20, 10 }, { -60, 20, -10 }, { -47, 20, 0 }, { -67, 20, 8 }, { -67, 20, -8 }, { -50, 20, 24 },
+    { 60, 20, 10 }, { 60, 20, -10 }, { 47, 20, 0 }, { 67, 20, 8 }, { 67, 20, -8 }, { 50, 20, 24 },
 };
-static const float oasisZones[3][3] = { { -42, 0, 0 }, { 0, 1.2f, 0 }, { 40, 0, 0 } };
-static const float oasisFlags[2][3] = { { 0, 0, -53 }, { 0, 0, 53 } };
-static const float oasisShield[3] = { 0, 0, -44 };
-static const float oasisRooms[2][6] = { { -14, 0, -74, 14, 7, -60 }, { -14, 0, 60, 14, 7, 74 } };
-static const float oasisLight[MAPL_N] = { 0.45f, 0.8f, -0.4f,  1.0f, 0.86f, 0.66f,  1.1f,  0.5f, 0.56f, 0.72f,
-                                          0.3f, 0.23f, 0.15f,  0.6f, 0.58f, 0.6f };
-
+/* LA BOUCLE : BLEUS a l'ouest. A et C sur le toit du bloc central, B dans le passage sous le toit de la coupe ;
+ * drapeaux au bout de l'anneau, entre le pad du toit et le mur ; bouclier sur le toit ouest. */
+static const float boucleZones[3][3] = { { -32, 10, 0 }, { 0, 0, 0 }, { 32, 10, 0 } };
+static const float boucleFlags[2][3] = { { -57, 0, 0 }, { 57, 0, 0 } };
+static const float boucleShield[3] = { -32, 10, 0 };
+static const float boucleTeam[][3] = {
+    { -56, 0, -6 }, { -56, 0, 6 }, { -48, 0, -10 }, { -48, 0, 10 }, { -48, 0, -24 }, { -48, 0, 24 },
+    { 56, 0, -6 }, { 56, 0, 6 }, { 48, 0, -10 }, { 48, 0, 10 }, { 48, 0, -24 }, { 48, 0, 24 },
+};
+/* LE DOJO : BLEUS au nord (z < 0). B sur le ring, A et C entre le ring et le mur du fond ; drapeaux dans deux coins
+ * opposes (deux couloirs d'acces chacun) ; bouclier devant le ring, cote nord. Salle de 36 m : echelle 0,8. */
+static const float dojoZones[3][3] = { { 0, 0, -9 }, { 0, 0.5f, 0 }, { 0, 0, 9 } };
+static const float dojoFlags[2][3] = { { -16, 0, -16 }, { 16, 0, 16 } };
+static const float dojoShield[3] = { 0, 0, -9 };
+static const float dojoTeam[][3] = {
+    { 0, 0, -16 }, { -9, 0, -16 }, { 9, 0, -16 }, { -16, 0, -9 }, { 16, 0, -9 },
+    { 0, 0, 16 }, { -9, 0, 16 }, { 9, 0, 16 }, { -16, 0, 9 }, { 16, 0, 9 },
+};
 static const MapDef maps[] = {
     { "ARENE", build_map_arene, areneSpawns, NSP(areneSpawns), { 0, 0, 24 }, -1000,
-      9, 18, MS(28), MS(48), 1.0f, { 0, 7, MS(36) }, -0.12f, 5, 1, 0, { 0.04f, 0.05f, 0.12f }, { 0.34f, 0.30f, 0.44f } },
+      9, 18, MS(28), MS(48), 1.0f, { 0, 7, MS(36) }, -0.12f, 5, 1, 0, { 0.04f, 0.05f, 0.12f }, { 0.34f, 0.30f, 0.44f },
+      NULL, 0, 0, 0, 1.0f, areneZones, areneFlags, areneShield, areneTeam, NSP(areneTeam) / 2 },
     { "LE PUITS", build_map_puits, puitsSpawns, NSP(puitsSpawns), { 17.8f, 0, 17.8f }, -30,
-      10, 40, 4, 14, -8, { 0, 25, 0 }, -0.3f, 5, 0, 1, { 0.01f, 0.02f, 0.07f }, { 0.07f, 0.11f, 0.24f } },
+      10, 40, 4, 14, -8, { 0, 25, 0 }, -0.3f, 5, 0, 1, { 0.01f, 0.02f, 0.07f }, { 0.07f, 0.11f, 0.24f },
+      NULL, 0, 0, 0, 0.6f, puitsZones, puitsFlags, puitsShield, puitsTeam, NSP(puitsTeam) / 2 },
     { "LE CANYON", build_map_canyon, canyonSpawns, NSP(canyonSpawns), { -60, 20, 10 }, -15,
-      24, 34, 10, 50, 18, { 0, 30, 0 }, -0.25f, 5, 0, 2, { 0.18f, 0.11f, 0.09f }, { 0.72f, 0.46f, 0.30f } },
+      24, 34, 10, 50, 18, { 0, 30, 0 }, -0.25f, 5, 0, 2, { 0.18f, 0.11f, 0.09f }, { 0.72f, 0.46f, 0.30f },
+      NULL, 0, 0, 0, 1.0f, canyonZones, canyonFlags, canyonShield, canyonTeam, NSP(canyonTeam) / 2 },
     { "LA BOUCLE", build_map_boucle, boucleSpawns, NSP(boucleSpawns), { 10, 0, 26 }, -1000,
-      12, 18, 20, 50, 1.0f, { 0, 24, 0 }, -0.5f, 4, 1, 3, { 0.03f, 0.0f, 0.08f }, { 0.30f, 0.08f, 0.40f } },
+      12, 18, 20, 50, 1.0f, { 0, 24, 0 }, -0.5f, 4, 1, 3, { 0.03f, 0.0f, 0.08f }, { 0.30f, 0.08f, 0.40f },
+      NULL, 0, 0, 0, 1.0f, boucleZones, boucleFlags, boucleShield, boucleTeam, NSP(boucleTeam) / 2 },
     { "LE DOJO", build_map_dojo, dojoSpawns, NSP(dojoSpawns), { 0, 0.5f, 4 }, -1000,
-      2.5f, 5.5f, 6, 15, 1.0f, { 0, 5, 15 }, -0.15f, 0, 1, 4, { 0.10f, 0.07f, 0.05f }, { 0.24f, 0.17f, 0.11f } },
+      2.5f, 5.5f, 6, 15, 1.0f, { 0, 5, 15 }, -0.15f, 0, 1, 4, { 0.10f, 0.07f, 0.05f }, { 0.24f, 0.17f, 0.11f },
+      NULL, 0, 0, 0, 0.8f, dojoZones, dojoFlags, dojoShield, dojoTeam, NSP(dojoTeam) / 2 },
     { "LA TOILE", build_map_toile, toileSpawns, NSP(toileSpawns), { -60, 30, 64 }, -10,
       30, 50, 20, 60, 5, { -60, 40, 78 }, -0.12f, 6, 0, 5, { 0.02f, 0.02f, 0.09f }, { 0.28f, 0.13f, 0.36f },
-      toileGates, NSP(toileGates), 0 },
-    { "LA CITADELLE", build_map_citadelle, citadelleSpawns, NSP(citadelleSpawns), { 0, 0, 56 }, -1000,
-      9, 16, 20, 55, 1.0f, { 0, 14, 66 }, -0.18f, 6, 1, 6, { 0.22f, 0.45f, 0.86f }, { 0.86f, 0.84f, 0.8f },
-      NULL, 0, 0, 1, citadelleLight, citadelleZones, citadelleFlags, citadelleShield, citadelleTeam, 5, NULL, 0 },
-    { "L'OASIS", build_map_oasis, oasisSpawns, NSP(oasisSpawns), { 0, 0, -66 }, -1000,
-      8, 14, 20, 45, 1.0f, { 0, 16, -70 }, -0.25f, 6, 1, 2, { 0.3f, 0.55f, 0.9f }, { 0.92f, 0.84f, 0.7f },
-      NULL, 0, 0, 1, oasisLight, oasisZones, oasisFlags, oasisShield, oasisSpawns, 6, oasisRooms, 1 },
+      toileGates, NSP(toileGates), 0, 1 },                /* CHALLENGE : course seulement */
 };
 #define NMAPS NSP(maps)
 static int curMap;                                        /* carte chargee */
 static int menuMap, mapRotate;                            /* choix du menu (velocity.ini : map=, map_rotate=) */
 static float map_lost_y(void) { return maps[curMap].killY > -999 ? maps[curMap].killY : SAW_LOST_Y; }
+/* carte jouable en partie (HEBERGER, rotation, partie rapide, classee, duel) : pas une carte CHALLENGE */
+static int map_pvp(int m) { return m >= 0 && m < NMAPS && !maps[m].challenge; }
+static float map_obj_scale(int m) { return maps[m].objScale > 0 ? maps[m].objScale : 1.0f; }
+static int map_step(int m, int d) {                       /* menu : carte jouable suivante (d = 1) ou precedente (d = -1) */
+    for (int k = 0; k < NMAPS; k++) {
+        m = (m + d + NMAPS) % NMAPS;
+        if (map_pvp(m)) return m;
+    }
+    return 0;
+}
 
 /* emprise de la carte (vue de dessus) : boite englobante horizontale ; mapFirst = 1 si boxes[0] est le sol qui la couvre */
 static Box mapBox;
 static int mapFirst;
-static void decor_reset(void);                            /* src/monde/decor.c */
 static void build_level(int m) {
     nb = 0; npu = 0;
-    decor_reset();
     maps[m >= 0 && m < NMAPS ? m : 0].build();
     mapBox.mn = boxes[0].mn; mapBox.mx = boxes[0].mx;
     for (int i = 1; i < nb; i++) {

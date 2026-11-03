@@ -2981,10 +2981,13 @@ static void run_tests(const char *path) {
         fprintf(f, "kill zone LAN (hote) : mort %d, morts de Moi %d, suicides %d (attendu 1 1 3)\n", P.dead, NP[0].deaths, voidSuicides - s0);
         netMode = NET_OFF; connected = 0; dmMode = 0; memset(NP, 0, sizeof NP); memset(outq, 0, sizeof outq);
 
-        {   /* bots : depuis la 8e plateforme, un saut vers le vide est detecte, un saut sur place non */
-            V3 s = v3(18.5f, 42, 0);
-            fprintf(f, "bot prudent (%s) : saut sur place retombe %d, saut a 15 m/s vers le centre retombe %d (attendu 1 0)\n", maps[1].name,
-                    bot_lands(s, v3(0, JUMP_V, 0), maps[1].killY), bot_lands(s, v3(-15, JUMP_V, 0), maps[1].killY));
+        {   /* bots : depuis la 1re plateforme (y 0), un saut vers le vide est detecte, un saut sur place non (depuis la 8e,
+             * le saut vers le centre retombe maintenant sur un balcon) */
+            V3 s = v3(17.8f, 0, 17.8f), s8 = v3(18.5f, 42, 0);
+            fprintf(f, "bot prudent (%s) : saut sur place retombe %d, saut a 15 m/s vers l'ouest retombe %d, depuis la 8e vers le "
+                       "centre (balcon) %d (attendu 1 0 1)\n", maps[1].name,
+                    bot_lands(s, v3(0, JUMP_V, 0), maps[1].killY), bot_lands(s, v3(-15, JUMP_V, 0), maps[1].killY),
+                    bot_lands(s8, v3(-15, JUMP_V, 0), maps[1].killY));
         }
 
         {   /* --- Course (LA TOILE) : portes libres, passage dans l'ordre, chute = retour a la porte, arrivee, record --- */
@@ -3065,19 +3068,8 @@ static void run_tests(const char *path) {
             raceOn = 0; appState = APP_MENU;
             load_map(0); reset_game();
         }
-        {   /* --- Decor maille : LA CITADELLE construit bien son decor (et reste sous la limite de sommets) --- */
-            int cm = -1;
-            for (int m = 0; m < NMAPS; m++) if (!strcmp(maps[m].name, "LA CITADELLE")) cm = m;
-            load_map(cm);
-            int hid = 0;
-            for (int i = 0; i < nb; i++) hid += boxes[i].kind == B_HIDDEN;
-            fprintf(f, "decor (%s) : %d triangles (max %d), %d boites dont %d collisions de decor (attendu > 20000, < max)\n",
-                    maps[cm].name, ndv / 3, DEC_MAXV / 3, nb, hid);
-            load_map(0); reset_game();
-        }
-        {   /* --- Modes, specialisations, boutique (l'hote arbitre ; 4 joueurs : 0 et 2 BLEUS, 1 et 3 ROUGES) --- */
-            int cm = -1, om = -1;
-            for (int m = 0; m < NMAPS; m++) { if (!strcmp(maps[m].name, "LA CITADELLE")) cm = m; if (maps[m].spawnRooms) om = m; }
+        {   /* --- Modes, specialisations, boutique (l'hote arbitre ; 4 joueurs : 0 et 2 BLEUS, 1 et 3 ROUGES ; l'Arene) --- */
+            int cm = 0;
             load_map(cm); reset_game();
             int nm0 = netMode, dm0 = dmMode, id0 = myId, ts0 = teamSize;
             MatchRules r0 = rules;
@@ -3138,15 +3130,6 @@ static void run_tests(const char *path) {
             TICKS(3);
             fprintf(f, "SOUTIEN : touche il y a 2 s -> %.0f PV (pas de regen), allie proche %.0f -> soigne ; 3 s plus tard %.0f (attendu 50, > 50, > 60)\n",
                     hpS1, hpAlly, NP[2].hp);
-            if (om >= 0) {                                /* salle de depart adverse */
-                load_map(om);
-                const float *rb = maps[om].spawnRooms[0];
-                NP[1].hp = 100; NP[1].alive = 1; NP[1].st.spare[0] = 0; NP[1].disp = v3((rb[0] + rb[3]) * 0.5f, 0.1f, (rb[2] + rb[5]) * 0.5f);
-                TICKS(1.01f);
-                fprintf(f, "salle de depart (%s) : un ROUGE 1 s chez les BLEUS -> %.0f PV (attendu %.0f)\n", maps[om].name, NP[1].hp, 100 - SPAWN_ROOM_DPS);
-                fprintf(f, "%s : grappin %d (attendu 0)\n", maps[om].name, hook_allowed());
-                load_map(cm);
-            }
             rules.shop = 1; eco_reset();                  /* boutique */
             int c0 = credits, need = ecoNeedStarter;
             eco_pick_starter(WP_SHOTGUN);
@@ -3160,6 +3143,147 @@ static void run_tests(const char *path) {
             botLog = logSave;
             rules = r0; netMode = nm0; dmMode = dm0; myId = id0; teamSize = ts0; matchOver = 0;
             memset(NP, 0, sizeof NP); memset(&obj, 0, sizeof obj); ecoNeedStarter = 0;
+            load_map(0); reset_game();
+        }
+        {   /* --- Cartes CHALLENGE : LA TOILE n'est que la carte du mode COURSE (ni menu des cartes, ni rotation, ni partie
+             * rapide / classee / hebergee, ni solo par vagues) ; ROTATION : seulement les cartes qui ont le mode en cours --- */
+            int rm = race_map(), inMenu = 0, inRot = 0, rotBad = 0, rotN = 0, chalModes = 0, pvpN = 0;
+            for (int m = 0, k = 0; k < 2 * NMAPS; k++) { m = map_step(m, k & 1 ? -1 : 1); inMenu += m == rm; }
+            for (int m = 0, k = 0; k < NMAPS; k++) { m = map_step(m, 1); inMenu += m == rm; }
+            for (int m = 0; m < NMAPS; m++) pvpN += map_pvp(m);
+            for (int md = 0; md < MODE_COUNT; md++) {
+                chalModes += mode_ok(md, rm);
+                for (int m = 0; m < NMAPS; m++) {
+                    if (!map_pvp(m)) continue;
+                    int nx = map_rotate_next(m, md);
+                    rotN++; inRot += nx == rm; rotBad += !mode_ok(md, nx) || nx == m;
+                }
+            }
+            int sMenu = menuMap, sQuick = hostQuick, sFfa = hostFfa, sTeams = wantTeams, sFrag = fragLimit, sTs = teamSize;
+            MatchRules sWant = wantRules, sRules = rules;
+            menuMap = rm; hostQuick = 0; hostFfa = 0; ranked = 0; wantTeams = 0; wantRules.mode = MODE_FRAGS;
+            int hostMap = host_setup_rules();             /* HEBERGER avec LA TOILE choisie (--map 5) : une carte de partie */
+            hostQuick = 1;
+            int quickMap = host_setup_rules();
+            menuMap = sMenu; hostQuick = sQuick; hostFfa = sFfa; wantTeams = sTeams; wantRules = sWant; rules = sRules;
+            fragLimit = sFrag; teamSize = sTs;
+            fprintf(f, "carte CHALLENGE %s : challenge %d, cartes de partie %d, dans le menu des cartes %d, rotation %d/%d, "
+                       "modes acceptes %d, classee %d, solo %d, heberger -> %s, partie rapide -> %s, COURSE -> %s "
+                       "(attendu 1, %d, 0, 0/%d, 0, 0, 0, pas LA TOILE x2, %s)\n",
+                    maps[rm].name, maps[rm].challenge, pvpN, inMenu, inRot, rotN, chalModes, rk_map_ok(rm), maps[rm].solo,
+                    maps[hostMap].name, maps[quickMap].name, maps[race_map()].name, NMAPS - 1, rotN, maps[rm].name);
+            fprintf(f, "rotation : %d passages carte -> carte suivante sans le mode en cours ou sans changer (attendu 0) ; "
+                       "3 ZONES depuis %s -> %s, FRAGS depuis %s -> %s (attendu %s, %s)\n", rotBad,
+                    maps[NMAPS - 2].name, maps[map_rotate_next(NMAPS - 2, MODE_ZONES)].name,
+                    maps[NMAPS - 2].name, maps[map_rotate_next(NMAPS - 2, MODE_FRAGS)].name, maps[0].name, maps[0].name);
+        }
+        {   /* --- Objectifs des cartes neon (3 ZONES, DRAPEAU, BOUCLIER, departs par equipe) : chaque point au-dessus d'un sol
+             * (rayon vers le bas < 1,5 m, pas un pad), hors des boites, au-dessus du plan de mort ; cartes ouvertes : du sol a
+             * 3 m tout autour ; disque des zones et du bouclier entierement sur le sol, a l'ecart des pads ; zones a plus de
+             * 2 rayons, drapeaux a plus de 40 m, symetrie (miroir ou demi-tour) ; chemins des bots vers chaque objectif --- */
+            char ob[2048]; int on = 0, modesOk = 0, mapsN = 0;
+            for (int m = 0; m < NMAPS; m++) {
+                if (!map_pvp(m)) continue;
+                const MapDef *md = &maps[m];
+                load_map(m); reset_game();
+                mapsN++;
+                for (int md2 = MODE_ZONES; md2 <= MODE_BOUCLIER; md2++) modesOk += mode_ok(md2, m);
+                float zr = zone_r(), sr = shield_r();
+                int open = md->killY > -999, nTs = md->nTeamSpawn;
+                V3 pts[48]; float prad[48]; int npt = 0;       /* points a verifier : 3 zones, 2 drapeaux, bouclier, departs */
+                for (int z = 0; z < NZONES; z++) { pts[npt] = zone_pos(z); prad[npt++] = zr; }
+                for (int t = 0; t < 2; t++) { pts[npt] = flag_home(t); prad[npt++] = FLAG_TOUCH_R; }
+                pts[npt] = shield_pos(); prad[npt++] = sr;
+                for (int k = 0; k < 2 * nTs && npt < 48; k++) { pts[npt] = v3(md->teamSpawn[k][0], md->teamSpawn[k][1], md->teamSpawn[k][2]); prad[npt++] = 0; }
+                int ground = 0, inside = 0, above = 0, edge = 0, disc = 0, discN = 0, padNear = 0;
+                for (int i = 0; i < npt; i++) {
+                    V3 p = pts[i];
+                    float t = ray_world(v3(p.x, p.y + 0.5f, p.z), v3(0, -1, 0), 2.0f, 0);
+                    ground += t < 2.0f && rayBox >= 0 && boxes[rayBox].kind != B_PAD;
+                    inside += i < 6 ? !pos_free(v3(p.x, p.y + 0.05f, p.z), H_STAND) : !pos_free(p, H_STAND);
+                    above += p.y > md->killY + 1;
+                    int e = 1;                            /* carte ouverte : du sol a 3 m dans 8 directions */
+                    for (int a = 0; a < 8 && open; a++) {
+                        V3 q = v3(p.x + cosf(a * PI / 4) * 3, p.y + 0.5f, p.z + sinf(a * PI / 4) * 3);
+                        e &= ray_world(q, v3(0, -1, 0), 2.0f, 0) < 2.0f;
+                    }
+                    edge += e;
+                    for (int b = 0; b < nb; b++) {        /* a l'ecart des pads : pas un pad dans le rayon de l'objectif */
+                        if (boxes[b].kind != B_PAD || fabsf(boxes[b].mx.y - p.y) > 3) continue;
+                        float dx = fmaxf(0, fmaxf(boxes[b].mn.x - p.x, p.x - boxes[b].mx.x)), dz = fmaxf(0, fmaxf(boxes[b].mn.z - p.z, p.z - boxes[b].mx.z));
+                        if (sqrtf(dx * dx + dz * dz) < fmaxf(prad[i], 1.0f) - 0.01f) padNear++;
+                    }
+                    if (i < 6 && i != 3 && i != 4) {      /* zones et bouclier : le disque entier sur un sol plat, libre */
+                        for (int s = 0; s < 24; s++) {
+                            float r = prad[i] * (s < 16 ? 0.95f : 0.5f), a = s * 2 * PI / (s < 16 ? 16 : 8);
+                            V3 q = v3(p.x + cosf(a) * r, p.y + 0.3f, p.z + sinf(a) * r);
+                            float tq = ray_world(v3(q.x, p.y + 1.6f, q.z), v3(0, -1, 0), 3.2f, 0);
+                            int ok = tq < 3.2f && fabsf(1.6f - tq) < 1.5f && boxes[rayBox].kind != B_PAD;
+                            q.y = p.y + 1.6f - tq + 0.3f;     /* 30 cm au-dessus du sol trouve (le ring du Dojo est une marche) */
+                            for (int b = 0; b < nb && ok; b++)
+                                if (q.x > boxes[b].mn.x && q.x < boxes[b].mx.x && q.y > boxes[b].mn.y && q.y < boxes[b].mx.y &&
+                                    q.z > boxes[b].mn.z && q.z < boxes[b].mx.z) ok = 0;
+                            disc += ok; discN++;
+                        }
+                    }
+                }
+                float dz01 = vlen(vsub(zone_pos(0), zone_pos(1))), dz12 = vlen(vsub(zone_pos(1), zone_pos(2))), dz02 = vlen(vsub(zone_pos(0), zone_pos(2)));
+                float dzMin = fminf(dz01, fminf(dz12, dz02)), dFlag = vlen(vsub(flag_home(0), flag_home(1)));
+                V3 mb = v3(0, 0, 0), mr = v3(0, 0, 0);        /* axe des equipes : ecart moyen des departs BLEUS et ROUGES */
+                for (int k = 0; k < nTs; k++) {
+                    mb = vadd(mb, v3(md->teamSpawn[k][0], 0, md->teamSpawn[k][2]));
+                    mr = vadd(mr, v3(md->teamSpawn[nTs + k][0], 0, md->teamSpawn[nTs + k][2]));
+                }
+                int ax = fabsf(mr.x - mb.x) > fabsf(mr.z - mb.z) ? 0 : 2, side = 0, sideN = 0;
+                #define AXC(v) ((ax) == 0 ? (v).x : (v).z)
+                side += AXC(zone_pos(0)) < -1; side += AXC(zone_pos(2)) > 1; side += AXC(flag_home(0)) < -1; side += AXC(flag_home(1)) > 1;
+                side += AXC(shield_pos()) < -1; sideN = 5;
+                for (int k = 0; k < nTs; k++) { side += md->teamSpawn[k][ax] < -1; side += md->teamSpawn[nTs + k][ax] > 1; sideN += 2; }
+                #undef AXC
+                /* symetrie horizontale : miroir sur l'axe des equipes, ou demi-tour autour du centre (LE PUITS) */
+                #define SYM(a, b) ((fabsf((a).x + (b).x) < 0.1f || (ax == 2 && fabsf((a).x - (b).x) < 0.1f)) && \
+                                   (fabsf((a).z + (b).z) < 0.1f || (ax == 0 && fabsf((a).z - (b).z) < 0.1f)))
+                int sym = SYM(zone_pos(0), zone_pos(2)) + SYM(flag_home(0), flag_home(1)), symN = 2;
+                for (int k = 0; k < nTs; k++, symN++)
+                    sym += SYM(v3(md->teamSpawn[k][0], 0, md->teamSpawn[k][2]), v3(md->teamSpawn[nTs + k][0], 0, md->teamSpawn[nTs + k][2]));
+                #undef SYM
+                int navOk = 0, navN = 0, navOkNh = 0, ruleHook0 = rules.hook, dm0 = dmMode;   /* chemins : grappin permis, puis interdit */
+                for (int pass = 0; pass < 2; pass++) {
+                    dmMode = pass; rules.hook = 0;        /* pass 1 : partie sans grappin (hook_allowed() = 0) */
+                    navMap = -1; nav_build();
+                    for (int t = 0; t < 2; t++)
+                        for (int k = 0; k < 6; k++) {
+                            V3 from = v3(md->teamSpawn[t * nTs][0], md->teamSpawn[t * nTs][1], md->teamSpawn[t * nTs][2]);
+                            V3 to = k < 3 ? zone_pos(k) : k < 5 ? flag_home(k - 3) : shield_pos();
+                            int a = nav_nearest(from, 0), b = nav_nearest(to, 0), path[24];
+                            float tg = ray_world(v3(to.x, to.y + 0.5f, to.z), v3(0, -1, 0), 2.0f, 0);   /* sol de l'objectif */
+                            int gb = tg < 2.0f ? rayBox : -1;
+                            int ok = a >= 0 && b >= 0 && (a == b || nav_path(a, b, path, 24) > 0) &&
+                                     (NV[b].box == gb || hlen(vsub(NV[b].p, to)) < fmaxf(6, prad[k] + 2)) && fabsf(NV[b].p.y - to.y) < 2.5f;
+                            if (pass == 0) { navOk += ok; navN++; } else navOkNh += ok;
+                            if (!ok && getenv("OBJDBG"))  /* OBJDBG=1 : detail des chemins manques dans le fichier de test */
+                                fprintf(f, "  [%s grappin %d] equipe %d -> objectif %d : noeuds %d -> %d, au but %.1f m (dy %.1f)\n", md->name, !pass,
+                                        t, k, a, b, b >= 0 ? hlen(vsub(NV[b].p, to)) : -1.0f, b >= 0 ? NV[b].p.y - to.y : 0.0f);
+                        }
+                }
+                for (int i = 0; i < nnav && getenv("OBJDBG"); i++)   /* OBJDBG : ou retombe chaque pad (sans grappin) */
+                    for (int e = 0; e < NV[i].ne; e++)
+                        if (NV[i].type[e] == NE_PAD)
+                            fprintf(f, "  [%s] pad %d (%.1f %.1f %.1f) -> noeud %d (%.1f %.1f %.1f)\n", md->name, i, NV[i].p.x, NV[i].p.y,
+                                    NV[i].p.z, NV[i].to[e], NV[NV[i].to[e]].p.x, NV[NV[i].to[e]].p.y, NV[NV[i].to[e]].p.z);
+                dmMode = dm0; rules.hook = ruleHook0; navMap = -1;
+                on += snprintf(ob + on, sizeof ob - on, "%s%s : sol %d/%d, dans une boite %d, au-dessus du vide %d/%d, bords %d/%d, "
+                               "disques %d/%d, pads %d, zones a %.0f m (> %.0f), drapeaux a %.0f m, cotes %d/%d, symetrie %d/%d, "
+                               "%d+%d departs, chemins %d/%d (sans grappin %d/%d)", mapsN > 1 ? " ; " : "", md->name, ground, npt, inside,
+                               above, npt, edge, npt, disc, discN, padNear, dzMin, 2 * zr, dFlag, side, sideN, sym, symN, nTs, nTs,
+                               navOk, navN, navOkNh, navN);
+                if (ground != npt || inside || above != npt || edge != npt || disc != discN || padNear || dzMin <= 2 * zr || dFlag <= 40 ||
+                    side != sideN || sym != symN || nTs < 4 || navOk != navN || navOkNh != navN)
+                    on += snprintf(ob + on, sizeof ob - on, " [ECHEC]");
+            }
+            fprintf(f, "objectifs : %s (attendu partout : tout le sol, 0 boite, tout au-dessus, bords tous, disques tous, 0 pad, zones > 2 rayons, "
+                       "drapeaux > 40 m, cotes tous, symetrie toute, >= 4 departs, chemins tous, pas de [ECHEC])\n", ob);
+            fprintf(f, "objectifs : modes a objectif acceptes %d sur %d cartes neon (attendu %d)\n", modesOk, mapsN, 3 * mapsN);
             load_map(0); reset_game();
         }
         {   /* --- Jauge de style : kill aerien a pleine vitesse, puis un deuxieme enchaine, un coup recu, et l'oubli --- */
@@ -3181,13 +3305,15 @@ static void run_tests(const char *path) {
             reset_game();
         }
         {   /* --- Navigation des bots : depart -> but sur chaque carte, avec le graphe et les vraies commandes --- */
-            static const float nv[6][7] = {               /* carte, depart x y z, but x y z */
+            static const float nv[8][7] = {               /* carte, depart x y z, but x y z */
                 { 0, -66, 0, 66, 66, 0, -66 }, { 1, 17.8f, 0, 17.8f, -3, 50, 0 }, { 2, -60, 20, 10, 60, 20, -10 },
                 { 2, -60, 20, 0, 0, 18, 12 }, { 3, 10, 0, 26, 32, 10, 0 }, { 4, 16, 0, 16, -16, 0, -16 },
+                { 1, -3, 50, 0, -7, 25, 0 },                  /* objectifs : du sommet du Puits au balcon (on tombe du bord) */
+                { 2, -60, 20, 10, 0, 10, 0 },                 /* de la falaise ouest au plateau central du Canyon (zone B) */
             };
-            char nb2[512]; int nn = 0;
+            char nb2[768]; int nn = 0;
             FILE *logSave = botLog; botLog = NULL;        /* pas de journal des bots dans le fichier de test */
-            for (int k = 0; k < 6; k++) {
+            for (int k = 0; k < 8; k++) {
                 load_map((int)nv[k][0]); reset_game(); hitstop = 0; appState = APP_GAME;
                 memset(act, 0, sizeof act); memset(botHeld, 0, sizeof botHeld); memset(botPress, 0, sizeof botPress);
                 P.pos = P.prevPos = v3(nv[k][1], nv[k][2], nv[k][3]);
@@ -3566,7 +3692,7 @@ static void run_tests(const char *path) {
     {   /* fusion : 2e ecran opt-in ; protocole */
         fprintf(f, "second ecran : actif par defaut %d (attendu 0)\n", secondScreen);
         PkAnnounce pa;
-        fprintf(f, "protocole : NET_VER %d, PkAnnounce %d octets avec ranked a l'octet %d (attendu 16, %d, %d)\n", NET_VER,
+        fprintf(f, "protocole : NET_VER %d, PkAnnounce %d octets avec ranked a l'octet %d (attendu 17, %d, %d)\n", NET_VER,
                 (int)sizeof(PkAnnounce), (int)((unsigned char *)&pa.ranked - (unsigned char *)&pa), (int)sizeof(PkHead) + 16 + 8, (int)sizeof(PkHead) + 20);
     }
 

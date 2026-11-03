@@ -244,7 +244,7 @@ static void draw_death_loadout(float cx, float y) {
 }
 
 static void map_cycle(int d) {                            /* menu : carte suivante / precedente, montree en fond */
-    menuMap = (menuMap + d + NMAPS) % NMAPS;
+    menuMap = map_step(menuMap, d);                       /* les cartes CHALLENGE (LA TOILE) n'y sont pas : bouton CHALLENGE */
     if (appState == APP_MENU) menu_backdrop();
     cfg_save();
 }
@@ -320,19 +320,20 @@ static void draw_rules_panel(float x, float y, float w) {
     text(1, x, y, "REGLES", 1.0f, 0.8f, 0.3f, 1);
     y += 22;
     float aw = 46;
-    if (button(x, y, aw, 46, "<")) { do wantRules.mode = (wantRules.mode + MODE_COUNT - 1) % MODE_COUNT; while (!mode_ok(wantRules.mode, menuMap)); }
+    if (button(x, y, aw, 46, "<"))                        /* mode precedent disponible sur la carte (FRAGS l'est toujours) */
+        for (int k = 0; k < MODE_COUNT; k++) { wantRules.mode = (wantRules.mode + MODE_COUNT - 1) % MODE_COUNT; if (mode_ok(wantRules.mode, menuMap)) break; }
     rect(x + aw + 4, y, w - 2 * aw - 8, 46, 0.05f, 0.06f, 0.1f, 0.9f);
     snprintf(buf, sizeof buf, "MODE : %s", modeNames[wantRules.mode]);
     text_c(1, x + w * 0.5f, y + 23 + fontH[1] * 0.3f, buf, 1, 0.9f, 0.6f, 1);
-    if (button(x + w - aw, y, aw, 46, ">")) { do wantRules.mode = (wantRules.mode + 1) % MODE_COUNT; while (!mode_ok(wantRules.mode, menuMap)); }
+    if (button(x + w - aw, y, aw, 46, ">"))
+        for (int k = 0; k < MODE_COUNT; k++) { wantRules.mode = (wantRules.mode + 1) % MODE_COUNT; if (mode_ok(wantRules.mode, menuMap)) break; }
     if (!mode_ok(wantRules.mode, menuMap)) wantRules.mode = MODE_FRAGS;   /* changement de carte */
     y += 56;
     text(0, x, y + 6, modeHelp[wantRules.mode], 0.8f, 0.82f, 0.9f, 1);
     if (mode_team(wantRules.mode) && wantTeams == 0) { y += 20; text(0, x, y + 6, "mode d'equipe : 2 contre 2 au moins", 1, 0.6f, 0.4f, 1); }
     y += 34;
     float hw = (w - 10) * 0.5f;
-    if (sel_button(x, y, hw, 44, maps[menuMap].noHook ? "GRAPPIN : PAS ICI" : wantRules.hook ? "GRAPPIN : OUI" : "GRAPPIN : NON",
-                   wantRules.hook && !maps[menuMap].noHook, !maps[menuMap].noHook, v3(1, 0.85f, 0.4f))) wantRules.hook ^= 1;
+    if (sel_button(x, y, hw, 44, wantRules.hook ? "GRAPPIN : OUI" : "GRAPPIN : NON", wantRules.hook, 1, v3(1, 0.85f, 0.4f))) wantRules.hook ^= 1;
     snprintf(buf, sizeof buf, "MUNITIONS : %s", ammoRuleNames[wantRules.ammo]);
     if (sel_button(x + hw + 10, y, hw, 44, buf, wantRules.ammo != AMMO_NORMAL, 1, v3(1, 0.85f, 0.4f))) wantRules.ammo = (wantRules.ammo + 1) % AMMO_COUNT;
     y += 54;
@@ -490,7 +491,7 @@ static void draw_main_menu(float cx, float cy) {
     char soloLbl[48];
     snprintf(soloLbl, sizeof soloLbl, maps[menuMap].solo ? "SOLO - VAGUES" : "SOLO (%s)", maps[0].name);
     if (button(bx, y, bw * 0.62f - 4, 52, soloLbl)) pendingAction = ACT_SOLO;
-    if (button(bx + bw * 0.62f + 4, y, bw * 0.38f - 4, 52, "COURSE")) pendingAction = ACT_RACE;   /* course au grappin */
+    if (button(bx + bw * 0.62f + 4, y, bw * 0.38f - 4, 52, "CHALLENGE")) pendingAction = ACT_RACE;   /* course au grappin (LA TOILE) */
     y += 52 + 24;                                         /* le libelle sous le bouton, sans toucher son liseret */
     text(0, bx, y, "JOUEUR CONTRE BOT  (duel)", 0.7f, 0.75f, 0.85f, 1);
     y += 8;

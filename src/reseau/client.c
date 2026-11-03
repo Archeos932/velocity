@@ -300,7 +300,7 @@ static void net_update(float dt) {
  * sans boutique ni specialisations, duree par defaut). Fixe teamSize, rules et fragLimit ; renvoie la carte a charger
  * (classee : une carte qui a un deathmatch FRAGS, pas une carte de course) */
 static int host_setup_rules(void) {
-    int dflt = hostQuick || hostFfa || ranked, m = ranked ? rk_map_pick(menuMap) : menuMap;
+    int dflt = hostQuick || hostFfa || ranked, m = ranked ? rk_map_pick(menuMap) : map_pvp(menuMap) ? menuMap : 0;   /* jamais une carte CHALLENGE */
     teamSize = dflt ? 0 : wantTeams;                      /* partie rapide, duel du menu, classee : chacun pour soi */
     rules = dflt ? (MatchRules){ MODE_FRAGS, 1, AMMO_NORMAL, 0, 0, 10 } : wantRules;   /* regles de HEBERGER */
     if (!mode_ok(rules.mode, m)) rules.mode = MODE_FRAGS;        /* objectifs absents de cette carte */

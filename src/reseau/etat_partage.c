@@ -103,7 +103,8 @@ static const float specCol[SPEC_COUNT][3] = {
 };
 static int wantSpec = SPEC_AUCUNE;                         /* choisie dans LOADOUT (velocity.ini : spec=) */
 static int my_spec(void) { return rules.specs || netMode == NET_OFF ? wantSpec : SPEC_AUCUNE; }
-static int hook_allowed(void) { return !maps[curMap].noHook && (!dmMode || rules.hook); }   /* grappin : carte et regles */
+static int hook_allowed(void) { return !dmMode || rules.hook; }   /* grappin : regles de la partie */
+static int mode_ok(int m, int map);                       /* src/reseau/modes.c : la carte a-t-elle les objectifs du mode ? */
 /* etat des objectifs (l'hote le tient, PkSnap le transporte) */
 #define NZONES 3
 typedef struct { unsigned char owner, capTeam, prog, pad; } ZoneSt;                    /* owner / capTeam : 0, 1, 2 = personne */

@@ -31,7 +31,7 @@ static void draw_flag3(V3 p, const float *c, float t) {
     glEnd();
 }
 
-/* --- monde : zones, drapeaux, bouclier, barrieres des salles de depart --- */
+/* --- monde : zones, drapeaux, bouclier --- */
 static void draw_modes_world(void) {
     if (!dmMode) return;
     const MapDef *md = &maps[curMap];
@@ -39,34 +39,22 @@ static void draw_modes_world(void) {
     glDisable(GL_LIGHTING); glDisable(GL_TEXTURE_2D);
     glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
-    if (md->spawnRooms && teamSize > 0)                   /* salles de depart : voile de la couleur de l'equipe */
-        for (int r = 0; r < 2; r++) {
-            const float *b = md->spawnRooms[r], *c = teamCol[r];
-            float a = 0.10f + 0.04f * sinf(t * 2 + r);
-            glColor4f(c[0], c[1], c[2], a);
-            glBegin(GL_QUADS);
-            float y0 = b[1], y1 = b[1] + 4.5f;
-            glVertex3f(b[0], y0, b[2]); glVertex3f(b[3], y0, b[2]); glVertex3f(b[3], y1, b[2]); glVertex3f(b[0], y1, b[2]);
-            glVertex3f(b[0], y0, b[5]); glVertex3f(b[0], y1, b[5]); glVertex3f(b[3], y1, b[5]); glVertex3f(b[3], y0, b[5]);
-            glVertex3f(b[0], y0, b[2]); glVertex3f(b[0], y1, b[2]); glVertex3f(b[0], y1, b[5]); glVertex3f(b[0], y0, b[5]);
-            glVertex3f(b[3], y0, b[2]); glVertex3f(b[3], y0, b[5]); glVertex3f(b[3], y1, b[5]); glVertex3f(b[3], y1, b[2]);
-            glEnd();
-        }
     if (rules.mode == MODE_ZONES && md->zones) {
         for (int z = 0; z < NZONES; z++) {
             V3 c = zone_pos(z);
+            float zr = zone_r();
             const float *oc = obj_team_col(obj.z[z].owner);
             float pulse = 0.6f + 0.4f * sinf(t * 3 + z);
             glColor4f(oc[0], oc[1], oc[2], 0.16f);
-            disc3(c, ZONE_R, c.y + 0.04f, 0, 2 * PI, 40);
+            disc3(c, zr, c.y + 0.04f, 0, 2 * PI, 40);
             if (obj.z[z].prog > 0 && obj.z[z].capTeam < 2) {   /* progression : secteur de la couleur qui prend */
                 const float *cc = teamCol[obj.z[z].capTeam];
                 glColor4f(cc[0], cc[1], cc[2], 0.45f);
-                disc3(c, ZONE_R * 0.98f, c.y + 0.06f, -PI / 2, -PI / 2 + 2 * PI * obj.z[z].prog / 255.0f, 40);
+                disc3(c, zr * 0.98f, c.y + 0.06f, -PI / 2, -PI / 2 + 2 * PI * obj.z[z].prog / 255.0f, 40);
             }
             glLineWidth(4);
             glColor4f(oc[0], oc[1], oc[2], 0.6f + 0.35f * pulse);
-            ring3(c, ZONE_R, c.y + 0.08f, 48);
+            ring3(c, zr, c.y + 0.08f, 48);
             glLineWidth(2);
             glBegin(GL_LINES);                            /* colonne de lumiere */
             glColor4f(oc[0], oc[1], oc[2], 0.5f); glVertex3f(c.x, c.y, c.z);
@@ -104,7 +92,7 @@ static void draw_modes_world(void) {
         float col[3] = { 0.35f + 0.65f * (1 - k), 0.65f * k + 0.2f, 1.0f * k + 0.2f };
         glColor4f(col[0], col[1], col[2], 0.14f + 0.06f * sinf(t * 4));
         for (int j = 0; j < 6; j++) {
-            float a0 = PI * 0.5f * j / 6, a1 = PI * 0.5f * (j + 1) / 6, R = SHIELD_ZONE_R;
+            float a0 = PI * 0.5f * j / 6, a1 = PI * 0.5f * (j + 1) / 6, R = shield_r();
             glBegin(GL_QUAD_STRIP);
             for (int s = 0; s <= 24; s++) {
                 float b = 2 * PI * s / 24;
@@ -115,7 +103,7 @@ static void draw_modes_world(void) {
         }
         glLineWidth(4);
         glColor4f(col[0], col[1], col[2], 0.85f);
-        ring3(c, SHIELD_ZONE_R, c.y + 0.08f, 48);
+        ring3(c, shield_r(), c.y + 0.08f, 48);
         glColor4f(col[0], col[1], col[2], 0.9f);         /* coeur */
         glBegin(GL_QUADS);
         for (int f = 0; f < 4; f++) {
@@ -188,8 +176,6 @@ static void draw_modes_hud(void) {
         text_c(0, cx, y + 36, buf, 0.9f, 0.9f, 1, 1);
         obj_marker(shield_pos(), "BOUCLIER", teamCol[0]);
     }
-    if (md->spawnRooms && teamSize > 0 && myId < MAXP && !P.dead && in_room(P.pos, md->spawnRooms[1 - me]))
-        text_c(1, cx, winH * 0.5f + 60, "SALLE ADVERSE : TU BRULES", 1, 0.3f, 0.25f, 0.6f + 0.4f * sinf((float)nowT * 10));
     if (eco_on()) {                                       /* pieces */
         snprintf(buf, sizeof buf, "%d PIECES", credits);
         text(1, winW - 30.0f - fontW[1] * (float)strlen(buf), 70, buf, 1, 0.85f, 0.3f, 1);

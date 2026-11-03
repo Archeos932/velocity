@@ -178,7 +178,6 @@ enum { SK_COIN, SK_MARK, SK_CHARGE, SK_RICOCHET, SK_ALLIN, SK_DECOY, SK_AIM, SK_
 #define FLAG_CAPS        3        /* DRAPEAU : captures pour gagner */
 #define SHIELD_ZONE_R    6.0f     /* BOUCLIER : rayon de la zone du generateur */
 #define SHIELD_DRAIN     1.6f     /* BOUCLIER : % par seconde avec un attaquant seul dessus (+35 % par attaquant en plus) */
-#define SPAWN_ROOM_DPS   40.0f    /* salle de depart adverse : degats par seconde */
 
 /* Specialisations */
 #define SPEC_ASSAUT_MUL  1.15f

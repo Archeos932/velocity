@@ -20,19 +20,20 @@ Le propriétaire est francophone : réponses, commentaires et docs **en françai
   Le serveur fait foi : la cote est calculée et stockée par le worker (Durable Object `Ratings`,
   `worker/src/ratings.js`) ; côté jeu, `src/reseau/classe.c` (Elo, paliers, identité), `src/reseau/classe_match.c` (rapports de fin de match),
   `src/reseau/classe_serveur.c` (requêtes au serveur) et `src/plateforme/http.c` (HTTP : WinHTTP / curl). Une partie classée est toujours en chacun pour soi, aux
-  règles par défaut, sans bots, hors cartes de course.
+  règles par défaut, sans bots, hors cartes CHALLENGE (LA TOILE).
 - Mode équipes 1v1 à 4v4 (implémenté) : **§3.11 de `docs/CODE.md`** ; éclairage, ombres, bloom : **§3.12**
-- Cartes (`MapDef`, 8 cartes de ARENE à L'OASIS, kill zone) : **§3.18** ; compétences (PIECE, MARQUE, CHARGE…) :
+- Cartes (`MapDef`, 5 cartes néon de ARENE à LE DOJO + LA TOILE en CHALLENGE, kill zone) : **§3.18** ; compétences (PIECE, MARQUE, CHARGE…) :
   `src/combat/competences.c` et `docs/COMPETENCES_MARKSMAN.md`
-- Navigation des bots (graphe auto) : **§3.19** ; jauge de style : **§3.20** ; mode COURSE (LA TOILE, fantôme) : **§3.21**
-- Décor maillé (triangles éclairés par sommet, boîtes `B_HIDDEN`) et LA CITADELLE : **§3.22** ; nouvelle carte détaillée :
-  géométrie jouable en boîtes + décor `dc_*`, `MapDef.style` / `light` pour textures et soleil propres
-- Règles de partie, modes (CHRONO, 3 ZONES, DRAPEAU, BOUCLIER), boutique, spécialisations, L'OASIS : **§3.23** ;
+- Navigation des bots (graphe auto) : **§3.19** ; jauge de style : **§3.20** ; mode COURSE (bouton CHALLENGE, LA TOILE,
+  fantôme) : **§3.21** ; une carte `challenge = 1` n'est jamais en partie (`map_pvp`, `mode_ok`, rotation, classé, menus)
+- Objectifs des modes sur les cartes néon (zones, drapeaux, bouclier, départs par équipe, `objScale`) : **§3.22**
+  (LA CITADELLE et L'OASIS, décor maillé, textures pierre / enduit ont été retirés : esthétique néon seulement)
+- Règles de partie, modes (CHRONO, 3 ZONES, DRAPEAU, BOUCLIER), boutique, spécialisations : **§3.23** ;
   l'hôte arbitre les objectifs (`mode_tick`), les clients reçoivent `rules` et `obj` dans `PkSnap`
 - Réglages graphiques modifiables sans recompiler : **`graphismes/rendu.ini`** (+ textures `.bmp`, F5 en jeu) ;
   code : §3.13 de `docs/CODE.md`. Toute nouvelle valeur d'aspect doit y être exposée (`gfxKeys`).
   `velocity.exe --export-textures <dossier>` écrit les textures générées par le code en `.bmp` (`sol`, `mur`,
-  `grain`, `pierre`, `enduit`) : c'est ce que contient `graphismes/`.
+  `grain`) : c'est ce que contient `graphismes/`.
 
 ## Branches
 
@@ -68,7 +69,8 @@ Sur Mac : `./build_mac.sh`, puis `Velocity.app/Contents/MacOS/velocity --test te
      `eventail`, `tesla`), `skills`, `ranked` (fin de match classée), `boutique`, `armedepart` ;
    - solo (scène par défaut) : `rail`, `impact`, `fx`, `changearme`, `vie`, `style`, et une arme (`elan`, `scie`…) ;
    - carte : `arene` (`arene_nuit`…), `course` (`_depart`, `_fin`, `_aimant`), `carte` / `carte3d` (second écran),
-     `skins` ; autres cartes avec `--map N` (`spawn`, `chute`, `solo`, `--pos x,y,z`, `--yaw A`) ;
+     `skins` ; autres cartes avec `--map N` (`spawn`, `chute`, `solo`, `--pos x,y,z`, `--yaw A`) ; objectifs d'un mode
+     sur une carte : `objectifs_zones`, `objectifs_drapeau`, `objectifs_bouclier` (avec `--map N`, `--pos`, `--yaw`) ;
    - à combiner : `sansbloom`, `sansombre`, `small` (fenêtre 1024 × 640) ; `bench_dm` mesure le temps de rendu.
    Convertir en PNG avec System.Drawing pour la lire.
 3. **Match bot contre bot** (réseau réel sur la machine) :

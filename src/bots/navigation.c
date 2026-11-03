@@ -16,7 +16,7 @@
 #define NAV_MAX      900
 #define NAV_EMAX     16        /* aretes sortantes par noeud */
 #define NAV_GRID     8.0f      /* pas de la grille sur les grands sols */
-#define NAV_WALK     11.0f     /* longueur max d'une arete MARCHE */
+#define NAV_WALK     12.0f     /* longueur max d'une arete MARCHE (> 11,2 : les 2 x 2 noeuds d'une plateforme de 22,4 m) */
 #define NAV_JUMP     8.5f      /* trou franchissable en sautant (bhop + double saut) */
 #define NAV_JUMP_UP  2.4f      /* marche franchissable en double saut */
 #define NAV_HOOK     46.0f     /* portee utile du grappin (un peu sous GRAPPLE_RANGE) */
@@ -75,6 +75,19 @@ static int nav_ray_ok(V3 a, V3 q) {                       /* le crochet tire de 
     float l = vlen(d);
     if (l < 2 || l > NAV_HOOK) return 0;
     return ray_world(a, vmul(d, 1 / l), l + 0.6f, 0) > l - 0.7f;
+}
+
+/* descente : point juste apres le bord du sol de A, sur la ligne horizontale A -> B (on y court, puis on tombe) */
+static V3 nav_edge_exit(const NavNode *A, V3 b) {
+    const Box *x = &boxes[A->box];
+    V3 d = v3(b.x - A->p.x, 0, b.z - A->p.z);
+    float l = hlen(d), t = 1e9f;
+    if (l < 1e-3f) return A->p;
+    d = vmul(d, 1 / l);
+    if (fabsf(d.x) > 1e-4f) t = fminf(t, ((d.x > 0 ? x->mx.x : x->mn.x) - A->p.x) / d.x);
+    if (fabsf(d.z) > 1e-4f) t = fminf(t, ((d.z > 0 ? x->mx.z : x->mn.z) - A->p.z) / d.z);
+    t = clampf(t, 0, l);
+    return vadd(A->p, vmul(d, t + 0.6f));
 }
 
 static void nav_build(void) {
@@ -138,8 +151,15 @@ static void nav_build(void) {
                     for (float t = 1.2f; t < h && cont; t += 1.2f) cont = nav_ground_below(vadd(A->p, vmul(d, t / h)), 1.2f);
                     if (cont) { nav_edge(a, b, NE_WALK, h); continue; }
                 }
-                if (h <= NAV_JUMP + (dy < -1 ? -dy * 0.8f : 0) && dy <= NAV_JUMP_UP && h > 0.5f && los(a1, b1) &&
-                    los(vadd(A->p, v3(0, 2.6f, 0)), vadd(B->p, v3(0, 2.6f, 0)))) { nav_edge(a, b, NE_JUMP, h * 1.15f + 1); continue; }
+                if (h <= NAV_JUMP + (dy < -1 ? -dy * 0.8f : 0) && dy <= NAV_JUMP_UP && h > 0.5f) {
+                    int ok = los(a1, b1) && los(vadd(A->p, v3(0, 2.6f, 0)), vadd(B->p, v3(0, 2.6f, 0)));
+                    if (!ok && dy < -1.5f) {              /* plus bas, mais la ligne droite traverse son propre sol : on court
+                                                           * jusqu'au bord, puis on se laisse tomber */
+                        V3 e = nav_edge_exit(A, B->p), e1 = v3(e.x, A->p.y + 1.0f, e.z);
+                        ok = los(a1, e1) && los(e1, b1) && los(vadd(e1, v3(0, 1.6f, 0)), vadd(b1, v3(0, 1.6f, 0)));
+                    }
+                    if (ok) { nav_edge(a, b, NE_JUMP, h * 1.15f + 1); continue; }
+                }
                 if (!navHookOk) continue;                     /* pas de grappin : seulement marcher, sauter, pads */
                 if (dy > 1.5f && l <= NAV_HOOK && B->kind == NN_SURF) {   /* grappin vers un dessus plus haut */
                     V3 q = nav_hook_point(ea, B->box);

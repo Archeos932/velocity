@@ -58,7 +58,7 @@ static void upload_rgb_mip(GLuint *tex, unsigned char *img, int N) {
     }
 }
 
-/* texture remplacee par une image du dossier graphismes (sol.bmp, mur.bmp, pierre.bmp, enduit.bmp, grain.bmp) ? */
+/* texture remplacee par une image du dossier graphismes (sol.bmp, mur.bmp, grain.bmp) ? */
 static int tex_override(GLuint *tex, const char *name) {
     char p[600];
     int n = 0;
@@ -73,7 +73,7 @@ static int tex_override(GLuint *tex, const char *name) {
 
 /* ---- textures generees ----------------------------------------------------------------------------------
  * Chaque generateur calcule une image RGB (de haut en bas, malloc) sur le processeur, sans OpenGL, a partir
- * des reglages de rendu.ini (sol_texture, mur_texture, pierre, enduit, grain_force) ; make_textures l'envoie
+ * des reglages de rendu.ini (sol_texture, mur_texture, grain_force) ; make_textures l'envoie
  * telle quelle (upload_rgb_mip), --export-textures l'ecrit en .bmp sous le nom que tex_override cherche.
  * Rien ne depend de la carte, de l'ambiance ni de la qualite : une seule image par texture. */
 /* --- sol/plafond : dalles biseautees, boulons, taches d'usure ---------------------- */
@@ -158,55 +158,6 @@ static unsigned char *tex_gen_mur(int *size) {
     return img;
 }
 
-/* --- pierre (LA CITADELLE) : paves en appareil decale, joints creuses, teinte par pave, usure ----------- */
-static unsigned char *tex_gen_pierre(int *size) {
-    unsigned int s;
-    int N = 256, P = (int)gxStoneTex[0];
-    if (P < 8) P = 8;
-    unsigned char *img = (unsigned char *)malloc(N * N * 3);
-    s = 0x570Eu;
-    for (int y = 0; y < N; y++)
-        for (int x = 0; x < N; x++) {
-            int row = y / P, ox = (row & 1) ? P / 2 : 0;
-            int px = (x + ox) % P, py = y % P, col = ((x + ox) / P) % (N / P);
-            unsigned int h = (unsigned int)(row * 131 + col * 977 + 17);
-            h = h * 1664525u + 1013904223u;
-            float tint = ((float)(h >> 8) * (1.0f / 16777216.0f) * 2 - 1);
-            float dx = (float)(px < P - px ? px : P - px), dy = (float)(py < P - py ? py : P - py), dm = fminf(dx, dy);
-            float v = gxStoneTex[1] + tint * 0.07f;
-            v += sinf(x * 0.09f + y * 0.05f + tint * 3) * 0.025f + (tnoise(&s) * 2 - 1) * 0.03f;
-            v -= 0.32f * expf(-dm * dm / 2.0f);                                  /* joint de mortier */
-            v += 0.05f * expf(-(dm - 3) * (dm - 3) / 2.0f);                      /* bord du pave use, plus clair */
-            float warm = 0.03f + tint * 0.02f;
-            img[(y * N + x) * 3 + 0] = (unsigned char)(clampf(v + warm, 0, 1) * 255);
-            img[(y * N + x) * 3 + 1] = (unsigned char)(clampf(v + warm * 0.3f, 0, 1) * 255);
-            img[(y * N + x) * 3 + 2] = (unsigned char)(clampf(v - warm, 0, 1) * 255);
-        }
-    *size = N;
-    return img;
-}
-
-/* --- enduit : taches douces, passes de truelle, grain fin ------------------------------------------------ */
-static unsigned char *tex_gen_enduit(int *size) {
-    unsigned int s;
-    int N = 256;
-    unsigned char *img = (unsigned char *)malloc(N * N * 3);
-    s = 0x91A5u;
-    for (int y = 0; y < N; y++)
-        for (int x = 0; x < N; x++) {
-            float fx = x * 2 * PI / N, fy = y * 2 * PI / N;            /* frequences entieres : repetition sans couture */
-            float v = gxPlasterTex[0];
-            v += (sinf(fx * 2 + 1.3f) * cosf(fy * 3 + 0.4f) + sinf(fx * 5 + fy * 2) * 0.5f) * 0.025f;   /* taches */
-            v += sinf(fx * 9 + sinf(fy * 4) * 2.5f) * 0.012f;                                           /* truelle */
-            v += (tnoise(&s) * 2 - 1) * gxPlasterTex[1];
-            img[(y * N + x) * 3 + 0] = (unsigned char)(clampf(v + 0.02f, 0, 1) * 255);
-            img[(y * N + x) * 3 + 1] = (unsigned char)(clampf(v + 0.005f, 0, 1) * 255);
-            img[(y * N + x) * 3 + 2] = (unsigned char)(clampf(v - 0.02f, 0, 1) * 255);
-        }
-    *size = N;
-    return img;
-}
-
 /* --- grain fin, 2e passe multiplicative pour casser la repetition vue de pres --------- */
 static unsigned char *tex_gen_grain(int *size) {
     unsigned int s;
@@ -227,15 +178,13 @@ static unsigned char *tex_gen_grain(int *size) {
     return img;
 }
 
-enum { TEXG_SOL, TEXG_MUR, TEXG_PIERRE, TEXG_ENDUIT, TEXG_GRAIN, TEXG_N };
-static const char *const texGenFile[TEXG_N] = { "sol.bmp", "mur.bmp", "pierre.bmp", "enduit.bmp", "grain.bmp" };
+enum { TEXG_SOL, TEXG_MUR, TEXG_GRAIN, TEXG_N };
+static const char *const texGenFile[TEXG_N] = { "sol.bmp", "mur.bmp", "grain.bmp" };
 
 static unsigned char *tex_generate(int k, int *size) {
     switch (k) {
     case TEXG_SOL:    return tex_gen_sol(size);
     case TEXG_MUR:    return tex_gen_mur(size);
-    case TEXG_PIERRE: return tex_gen_pierre(size);
-    case TEXG_ENDUIT: return tex_gen_enduit(size);
     case TEXG_GRAIN:  return tex_gen_grain(size);
     }
     *size = 0;
@@ -292,7 +241,7 @@ static int export_textures(const char *dir) {
 }
 
 static void make_textures(void) {
-    GLuint *dst[TEXG_N] = { &texGrid, &texWall, &texStone, &texPlaster, &texGrime };
+    GLuint *dst[TEXG_N] = { &texGrid, &texWall, &texGrime };
     for (int k = 0; k < TEXG_N; k++) {                   /* un .bmp du dossier graphismes, sinon la texture generee */
         int n = 0;
         if (tex_override(dst[k], texGenFile[k])) continue;
